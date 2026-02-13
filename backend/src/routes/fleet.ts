@@ -1,6 +1,7 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
+import { Prisma } from '@prisma/client'
 
 const router = Router()
 
@@ -26,8 +27,10 @@ const hasInvalidDocuments = (documents: any): boolean => {
   )
 }
 
-const deriveOperationalStatus = (requested: string, documents: any) =>
-  hasInvalidDocuments(documents) ? 'OUT_OF_SERVICE' : requested
+const deriveOperationalStatus = (
+  requested: Prisma.FleetOperationalStatus,
+  documents: any,
+): Prisma.FleetOperationalStatus => (hasInvalidDocuments(documents) ? 'OUT_OF_SERVICE' : requested)
 
 const fleetSchema = z.object({
   qrId: z.string().min(1),
@@ -93,7 +96,10 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const operationalStatus = deriveOperationalStatus(parsed.data.operationalStatus, parsed.data.documents)
+    const operationalStatus = deriveOperationalStatus(
+      parsed.data.operationalStatus as Prisma.FleetOperationalStatus,
+      parsed.data.documents,
+    )
     const unit = await prisma.fleetUnit.create({ data: { ...parsed.data, operationalStatus } })
     return res.status(201).json(unit)
   } catch (error: any) {
@@ -117,7 +123,7 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
     const nextDocuments = parsed.data.documents ?? current.documents
-    const requestedStatus = parsed.data.operationalStatus ?? current.operationalStatus
+    const requestedStatus = (parsed.data.operationalStatus ?? current.operationalStatus) as Prisma.FleetOperationalStatus
     const operationalStatus = deriveOperationalStatus(requestedStatus, nextDocuments)
     const unit = await prisma.fleetUnit.update({
       where: { id: req.params.id },

@@ -1,6 +1,7 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
+import { Prisma } from '@prisma/client'
 
 const router = Router()
 
@@ -15,7 +16,7 @@ const maintenanceSchema = z.object({
   filters: z.array(z.string()).optional().default([]),
   notes: z.string().optional().default(''),
   status: z.enum(['OVERDUE', 'OK', 'DUE_SOON']),
-  serviceSchedule: z.record(z.any()).optional().default({}),
+  serviceSchedule: z.record(z.string(), z.any()).optional().default({}),
 })
 
 router.get('/', async (_req, res) => {
@@ -30,7 +31,12 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const plan = await prisma.maintenancePlan.create({ data: parsed.data })
+    const plan = await prisma.maintenancePlan.create({
+      data: {
+        ...parsed.data,
+        serviceSchedule: parsed.data.serviceSchedule as Prisma.InputJsonValue,
+      },
+    })
     return res.status(201).json(plan)
   } catch (error: any) {
     if (error?.code === 'P2002') {
