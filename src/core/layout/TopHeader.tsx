@@ -1,0 +1,297 @@
+﻿import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import enertransLogoUrl from '../../assets/enertrans-logo.png'
+import { setAuthToken } from '../../services/api/apiClient'
+import { clearQueue } from '../../services/offline/queue'
+import { useAppContext } from '../hooks/useAppContext'
+import { ROUTE_PATHS } from '../routing/routePaths'
+
+interface TopHeaderProps {
+  onToggleSidebar: () => void
+  syncStatus: {
+    isOnline: boolean
+    pendingCount: number
+    isSyncing: boolean
+  }
+  notifications: AppNotification[]
+}
+
+type AppNotification = {
+  id: string
+  title: string
+  description: string
+  severity: 'info' | 'warning' | 'danger'
+  target?: string
+}
+
+const NOTIFICATIONS_READ_KEY = 'enertrans.notifications.read'
+
+const readStoredNotifications = (): string[] => {
+  if (typeof window === 'undefined') {
+    return []
+  }
+  try {
+    const raw = window.localStorage.getItem(NOTIFICATIONS_READ_KEY)
+    if (!raw) {
+      return []
+    }
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+const persistReadNotifications = (ids: string[]) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(ids))
+  } catch {
+    // ignore
+  }
+}
+
+export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHeaderProps) => {
+  const navigate = useNavigate()
+  const {
+    state: { currentUser },
+    actions: { setCurrentUser, setAppError },
+  } = useAppContext()
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [showAllNotifications, setShowAllNotifications] = useState(false)
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(readStoredNotifications)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+
+  useEffect(() => {
+    persistReadNotifications(readNotificationIds)
+  }, [readNotificationIds])
+
+  const statusLabel = syncStatus.isOnline ? 'Online' : 'Offline'
+  const statusClass = syncStatus.isOnline
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-rose-200 bg-rose-50 text-rose-700'
+
+  const unreadNotifications = useMemo(
+    () => notifications.filter((item) => !readNotificationIds.includes(item.id)),
+    [notifications, readNotificationIds],
+  )
+  const visibleNotifications = showAllNotifications ? notifications : unreadNotifications
+  const unreadCount = unreadNotifications.length
+
+  const notificationBadgeClass = (severity: AppNotification['severity']) => {
+    if (severity === 'danger') {
+      return 'border-rose-200 bg-rose-50 text-rose-700'
+    }
+    if (severity === 'warning') {
+      return 'border-amber-200 bg-amber-50 text-amber-700'
+    }
+    return 'border-slate-200 bg-slate-100 text-slate-600'
+  }
+
+  const initials = useMemo(() => {
+    const name = currentUser?.fullName?.trim() || currentUser?.username || ''
+    const parts = name.split(' ').filter(Boolean)
+    const letters = parts.slice(0, 2).map((part) => part[0])
+    return letters.join('').toUpperCase() || 'U'
+  }, [currentUser])
+
+  return (
+    <header className="flex h-20 items-center justify-between border-b border-amber-300/80 bg-amber-300 px-6 shadow-sm md:px-8">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="rounded-lg border border-slate-900/20 bg-white/60 p-2 text-slate-700 transition hover:bg-white"
+          aria-label="Abrir menu"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <img src={enertransLogoUrl} alt="Enertrans" className="h-10 w-auto" />
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-700">ENERTRANS</p>
+          <p className="text-lg font-bold text-slate-900">Sistema Integral de Gestion de Flota</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass}`}>
+          {statusLabel}
+          {syncStatus.isSyncing ? ' • Sincronizando' : ''}
+          {syncStatus.pendingCount > 0 ? ` • Pendientes: ${syncStatus.pendingCount}` : ''}
+        </div>
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsNotificationsOpen((prev) => !prev)}
+            className="relative rounded-lg border border-slate-900/20 bg-white/70 p-2 text-slate-700 transition hover:bg-white"
+            aria-label="Notificaciones"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5" />
+              <path d="M9 17a3 3 0 0 0 6 0" />
+            </svg>
+            {unreadCount > 0 ? (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-semibold text-white">
+                {unreadCount}
+              </span>
+            ) : null}
+          </button>
+
+          {isNotificationsOpen ? (
+            <div className="absolute right-0 mt-3 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-slate-900">Notificaciones</p>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setReadNotificationIds((prev) =>
+                          Array.from(new Set([...prev, ...notifications.map((item) => item.id)])),
+                        )
+                      }
+                      className="text-xs font-semibold text-amber-600 hover:text-amber-700"
+                    >
+                      Marcar todo leido
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setIsNotificationsOpen(false)}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {visibleNotifications.length === 0 ? (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                    No hay alertas pendientes.
+                  </p>
+                ) : (
+                  visibleNotifications.slice(0, 8).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setReadNotificationIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]))
+                        if (item.target) {
+                          navigate(item.target)
+                          setIsNotificationsOpen(false)
+                        }
+                      }}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-amber-300 hover:bg-amber-50"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900">{item.title}</p>
+                          <p className="text-xs text-slate-600">{item.description}</p>
+                        </div>
+                        <span
+                          className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${notificationBadgeClass(
+                            item.severity,
+                          )}`}
+                        >
+                          {item.severity === 'danger' ? 'Urgente' : item.severity === 'warning' ? 'Atencion' : 'Info'}
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+              {notifications.length > 0 ? (
+                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                  <p>
+                    Mostrando {Math.min(8, visibleNotifications.length)} de{' '}
+                    {showAllNotifications ? notifications.length : unreadNotifications.length}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllNotifications((prev) => !prev)}
+                    className="font-semibold text-amber-600 hover:text-amber-700"
+                  >
+                    {showAllNotifications ? 'Ver no leidas' : 'Ver todas'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsUserMenuOpen((prev) => !prev)}
+            className="flex items-center gap-3 rounded-lg border border-slate-900/10 bg-white/50 px-3 py-2 text-left backdrop-blur"
+          >
+            {currentUser?.avatarUrl ? (
+              <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="h-10 w-10 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-sm font-bold text-amber-700">
+                {initials}
+              </div>
+            )}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Usuario</p>
+              <p className="text-sm font-bold text-slate-900">{currentUser?.fullName ?? 'Sin usuario'}</p>
+              <p className="text-xs font-semibold text-slate-600">{currentUser?.role ?? ''}</p>
+            </div>
+            <svg className="h-4 w-4 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 0 1 1.08 1.04l-4.25 4.38a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+
+          {isUserMenuOpen ? (
+            <div className="absolute right-0 mt-3 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(ROUTE_PATHS.profile)
+                  setIsUserMenuOpen(false)
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Perfil
+              </button>
+              {currentUser?.role === 'DEV' ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await clearQueue()
+                    setAppError('Cola offline limpiada.')
+                    setIsUserMenuOpen(false)
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Limpiar cola offline
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthToken(null)
+                  setCurrentUser(null)
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50"
+              >
+                Cerrar sesion
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </header>
+  )
+}

@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  DEV
+  GERENTE
+  COORDINADOR
+  AUDITOR
+  MECANICO
+}
+
+enum FleetOperationalStatus {
+  OPERATIONAL
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum FleetUnitType {
+  CHASSIS
+  CHASSIS_WITH_HYDROCRANE
+  TRACTOR
+  TRACTOR_WITH_HYDROCRANE
+  SEMI_TRAILER
+  AUTOMOBILE
+  VAN
+}
+
+enum AuditResult {
+  APPROVED
+  REJECTED
+}
+
+enum WorkOrderStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum VisualStatus {
+  OVERDUE
+  OK
+  DUE_SOON
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  username            String   @unique
+  fullName            String
+  role                UserRole
+  passwordHash        String
+  avatarUrl           String   @default("")
+  permissions         Json?
+  permissionOverrides Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  audits              AuditRecord[]
+}
+
+model FleetUnit {
+  id                       String   @id @default(uuid())
+  qrId                     String   @unique
+  internalCode             String   @unique
+  brand                    String
+  model                    String
+  year                     Int      @default(0)
+  clientName               String   @default("")
+  location                 String   @default("")
+  ownerCompany             String
+  operationalStatus        FleetOperationalStatus
+  unitType                 FleetUnitType
+  configurationNotes       String
+  chassisNumber            String
+  engineNumber             String
+  tareWeightKg             Int
+  maxLoadKg                Int
+  hasHydroCrane            Boolean
+  hydroCraneBrand          String
+  hydroCraneModel          String
+  hydroCraneSerialNumber   String
+  hasSemiTrailer           Boolean
+  semiTrailerUnitId        String?
+  semiTrailerLicensePlate  String
+  semiTrailerBrand         String
+  semiTrailerModel         String
+  semiTrailerYear          Int
+  semiTrailerChassisNumber String
+  tractorHistoryIds        Json
+  currentKilometers        Int      @default(0)
+  currentEngineHours       Int      @default(0)
+  currentHydroHours        Int      @default(0)
+  lubricants               Json
+  filters                  Json
+  documents                Json
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  semiTrailer              FleetUnit?  @relation("SemiTrailer", fields: [semiTrailerUnitId], references: [id])
+  tractors                 FleetUnit[] @relation("SemiTrailer")
+
+  maintenancePlans         MaintenancePlan[]
+  audits                   AuditRecord[]
+  workOrders               WorkOrder[]
+  repairs                  RepairRecord[]
+  externalRequests         ExternalRequest[]
+}
+
+model MaintenancePlan {
+  id                      String   @id @default(uuid())
+  unitId                  String
+  currentKilometers       Int
+  currentHours            Int
+  nextServiceByKilometers Int
+  nextServiceByHours      Int
+  oils                    Json
+  filters                 Json
+  notes                   String
+  status                  VisualStatus
+  serviceSchedule         Json
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  unit FleetUnit @relation(fields: [unitId], references: [id])
+}
+
+model AuditRecord {
+  id             String   @id @default(uuid())
+  code           String   @unique
+  auditKind      String   @default("AUDIT")
+  unitId         String
+  auditorUserId  String
+  auditorName    String
+  workOrderId    String?
+  performedAt    DateTime
+  result         AuditResult
+  observations   String
+  photoUrls      Json
+  checklist      Json
+  unitKilometers Int      @default(0)
+  engineHours    Int      @default(0)
+  hydroHours     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  unit    FleetUnit @relation(fields: [unitId], references: [id])
+  auditor User      @relation(fields: [auditorUserId], references: [id])
+}
+
+model WorkOrder {
+  id                     String   @id @default(uuid())
+  code                   String   @unique
+  pendingReaudit         Boolean  @default(false)
+  unitId                 String
+  status                 WorkOrderStatus
+  taskList               Json
+  spareParts             Json
+  laborDetail            String
+  linkedInventorySkuList Json
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  unit FleetUnit @relation(fields: [unitId], references: [id])
+}
+
+model RepairRecord {
+  id               String   @id @default(uuid())
+  unitId           String
+  workOrderId      String?
+  externalRequestId String? 
+  sourceType       String   @default("WORK_ORDER")
+  supplierName     String
+  realCost         Float
+  invoicedToClient Float
+  margin           Float
+  invoiceFileName  String   @default("")
+  invoiceFileBase64 String  @default("")
+  invoiceFileUrl   String   @default("")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  unit FleetUnit @relation(fields: [unitId], references: [id])
+}
+
+model InventoryItem {
+  id                 String   @id @default(uuid())
+  sku                String   @unique
+  productName        String
+  stock              Int
+  movementHistory    Json
+  linkedWorkOrderIds Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model ExternalRequest {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  unitId      String
+  companyName String
+  description String
+  tasks       Json
+  providerFileName String   @default("")
+  providerFileUrl  String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  unit FleetUnit @relation(fields: [unitId], references: [id])
+}
+
+model Sequence {
+  key   String @id
+  value Int
+}
