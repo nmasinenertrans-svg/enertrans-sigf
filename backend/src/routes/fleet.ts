@@ -1,7 +1,6 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
-import type { FleetOperationalStatus } from '@prisma/client'
 
 const router = Router()
 
@@ -26,6 +25,8 @@ const hasInvalidDocuments = (documents: any): boolean => {
     isMissingOrExpired(documents?.hoist?.expiresAt)
   )
 }
+
+type FleetOperationalStatus = 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'
 
 const deriveOperationalStatus = (requested: FleetOperationalStatus, documents: any): FleetOperationalStatus =>
   hasInvalidDocuments(documents) ? 'OUT_OF_SERVICE' : requested
