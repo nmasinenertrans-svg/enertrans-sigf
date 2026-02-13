@@ -1,7 +1,6 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
-import { Prisma } from '@prisma/client'
 
 const router = Router()
 
@@ -34,7 +33,7 @@ router.post('/', async (req, res) => {
     const plan = await prisma.maintenancePlan.create({
       data: {
         ...parsed.data,
-        serviceSchedule: parsed.data.serviceSchedule as Prisma.InputJsonValue,
+        serviceSchedule: parsed.data.serviceSchedule as any,
       },
     })
     return res.status(201).json(plan)
