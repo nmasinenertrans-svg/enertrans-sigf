@@ -21,12 +21,20 @@ export const maintenanceGuard = async (req: Request, res: Response, next: NextFu
     return next()
   }
 
-  const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
+  let settings: { maintenanceEnabled?: boolean; maintenanceMessage?: string } | null = null
+  try {
+    settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
+  } catch {
+    settings = null
+  }
+
   if (!settings?.maintenanceEnabled) {
     return next()
   }
 
-  const message = settings.maintenanceMessage || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.'
+  const message =
+    settings.maintenanceMessage ||
+    'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.'
 
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {

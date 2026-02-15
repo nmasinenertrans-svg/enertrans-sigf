@@ -29,11 +29,19 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ message: 'Usuario o contrasena incorrectos.' })
   }
 
-  const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
-  if (settings?.maintenanceEnabled && user.role !== 'DEV') {
-    return res
-      .status(503)
-      .json({ message: settings.maintenanceMessage || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.' })
+  try {
+    const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
+    if (settings?.maintenanceEnabled && user.role !== 'DEV') {
+      return res
+        .status(503)
+        .json({
+          message:
+            settings.maintenanceMessage ||
+            'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.',
+        })
+    }
+  } catch {
+    // If settings table is unavailable, allow login to avoid 500s.
   }
 
   const secret = process.env.JWT_SECRET

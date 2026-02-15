@@ -11,18 +11,22 @@ const maintenanceSchema = z.object({
 })
 
 const loadSettings = async () => {
-  return prisma.appSettings.upsert({
-    where: { id: 'app' },
-    update: {},
-    create: { id: 'app' },
-  })
+  try {
+    return await prisma.appSettings.upsert({
+      where: { id: 'app' },
+      update: {},
+      create: { id: 'app' },
+    })
+  } catch {
+    return null
+  }
 }
 
 router.get('/maintenance', async (_req, res) => {
   const settings = await loadSettings()
   return res.json({
-    enabled: settings.maintenanceEnabled,
-    message: settings.maintenanceMessage ?? '',
+    enabled: settings?.maintenanceEnabled ?? false,
+    message: settings?.maintenanceMessage ?? '',
   })
 })
 
@@ -41,23 +45,27 @@ router.put('/maintenance', async (req: AuthenticatedRequest, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
-  const next = await prisma.appSettings.upsert({
-    where: { id: 'app' },
-    update: {
-      maintenanceEnabled: parsed.data.enabled,
-      maintenanceMessage: parsed.data.message ?? '',
-    },
-    create: {
-      id: 'app',
-      maintenanceEnabled: parsed.data.enabled,
-      maintenanceMessage: parsed.data.message ?? '',
-    },
-  })
+  try {
+    const next = await prisma.appSettings.upsert({
+      where: { id: 'app' },
+      update: {
+        maintenanceEnabled: parsed.data.enabled,
+        maintenanceMessage: parsed.data.message ?? '',
+      },
+      create: {
+        id: 'app',
+        maintenanceEnabled: parsed.data.enabled,
+        maintenanceMessage: parsed.data.message ?? '',
+      },
+    })
 
-  return res.json({
-    enabled: next.maintenanceEnabled,
-    message: next.maintenanceMessage ?? '',
-  })
+    return res.json({
+      enabled: next.maintenanceEnabled,
+      message: next.maintenanceMessage ?? '',
+    })
+  } catch {
+    return res.status(503).json({ message: 'No se pudo actualizar mantenimiento.' })
+  }
 })
 
 export default router
