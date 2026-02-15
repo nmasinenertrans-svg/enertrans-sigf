@@ -170,7 +170,10 @@ export const ProfilePage = () => {
       setIsSavingMaintenance(false)
     }
   }
-\n  useEffect(() => {\n    void loadMaintenance()\n  }, [isDevUser])\n
+  useEffect(() => {
+    void loadMaintenance()
+  }, [isDevUser])
+
   return (
     <section className="space-y-6">
       <header className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -338,4 +341,7 @@ export const ProfilePage = () => {
     </section>
   )
 }
+
+
+
 
