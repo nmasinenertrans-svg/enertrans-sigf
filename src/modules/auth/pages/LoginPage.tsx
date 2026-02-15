@@ -22,7 +22,15 @@ export const LoginPage = () => {
     }
     try {
       const raw = window.localStorage.getItem('enertrans.sigf.last-user')
-      return raw ? (JSON.parse(raw) as any) : null
+      if (raw) {
+        return JSON.parse(raw) as any
+      }
+      const fallback = window.localStorage.getItem('enertrans.sigf.app-state.v1')
+      if (!fallback) {
+        return null
+      }
+      const parsed = JSON.parse(fallback) as { currentUser?: any }
+      return parsed?.currentUser ?? null
     } catch {
       return null
     }
@@ -171,10 +179,6 @@ export const LoginPage = () => {
           <button
             type="button"
             onClick={() => {
-              if (typeof navigator !== 'undefined' && navigator.onLine) {
-                setErrorMessage('Desconectá internet para usar el modo offline.')
-                return
-              }
               setAuthToken(null)
               setCurrentUser(lastUser)
               navigate(ROUTE_PATHS.dashboard, { replace: true })
