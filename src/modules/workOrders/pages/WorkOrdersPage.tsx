@@ -312,7 +312,15 @@ export const WorkOrdersPage = () => {
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       const updatedWorkOrder = updatedWorkOrders.find((order) => order.id === resolveTarget.workOrderId)
       if (updatedWorkOrder) {
-        apiRequest(`/work-orders/${resolveTarget.workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(() => null)
+        apiRequest(`/work-orders/${resolveTarget.workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(
+          async (error) => {
+            const message = String((error as Error)?.message ?? '')
+            if (message.startsWith('404')) {
+              await apiRequest('/work-orders', { method: 'POST', body: updatedWorkOrder })
+              return
+            }
+          },
+        )
       }
     }
 
@@ -348,7 +356,13 @@ export const WorkOrdersPage = () => {
     )
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest(`/work-orders/${workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(() => null)
+      apiRequest(`/work-orders/${workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(async (error) => {
+        const message = String((error as Error)?.message ?? '')
+        if (message.startsWith('404')) {
+          await apiRequest('/work-orders', { method: 'POST', body: updatedWorkOrder })
+          return
+        }
+      })
       const unitPayload = fleetUnits.find((unit) => unit.id === updatedWorkOrder.unitId)
       if (unitPayload) {
         apiRequest(`/fleet/${updatedWorkOrder.unitId}`, {

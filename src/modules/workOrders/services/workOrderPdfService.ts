@@ -22,6 +22,22 @@ const fetchImageAsDataUrl = async (url: string): Promise<string> => {
   })
 }
 
+const resolvePhotoDataUrl = async (value: string): Promise<string | null> => {
+  if (!value) {
+    return null
+  }
+  if (value.startsWith('data:image')) {
+    return value
+  }
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    try {
+      return await fetchImageAsDataUrl(value)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
 const applyOpacity = (pdf: jsPDF, opacity: number): (() => void) => {
   const anyPdf = pdf as unknown as { GState?: new (state: { opacity: number }) => unknown; setGState?: (state: unknown) => void }
   if (anyPdf.GState && typeof anyPdf.setGState === 'function') {
@@ -241,6 +257,55 @@ export const exportWorkOrderPdf = async ({ workOrder, unit }: WorkOrderPdfPayloa
   pdf.setFontSize(8)
   const textLines = pdf.splitTextToSize(workOrder.laborDetail || 'Sin detalles.', pageWidth - 28)
   pdf.text(textLines, 14, cursorY)
+
+  const photoCandidates = normalizeTaskList(workOrder.taskList)
+    .flatMap((task) => [task.resolutionPhotoUrl, task.resolutionPhotoBase64])
+    .filter(Boolean) as string[]
+
+  const photoDataUrls = (await Promise.all(photoCandidates.map((value) => resolvePhotoDataUrl(value)))).filter(
+    (value): value is string => Boolean(value),
+  )
+
+  if (photoDataUrls.length > 0) {
+    cursorY += 8
+    if (cursorY > pageHeight - 40) {
+      pdf.addPage()
+      addWatermark(pdf, logoDataUrl)
+      drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Orden de Trabajo')
+      cursorY = 26
+    }
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(17, 24, 39)
+    pdf.text('EVIDENCIAS DE REPARACION', 14, cursorY)
+    cursorY += 6
+
+    const maxWidth = pageWidth - 28
+    const columnWidth = (maxWidth - 6) / 2
+    const imageHeight = 45
+    let col = 0
+
+    for (let index = 0; index < photoDataUrls.length; index += 1) {
+      if (cursorY + imageHeight > pageHeight - 15) {
+        pdf.addPage()
+        addWatermark(pdf, logoDataUrl)
+        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Orden de Trabajo')
+        cursorY = 26
+        col = 0
+      }
+
+      const x = 14 + col * (columnWidth + 6)
+      pdf.addImage(photoDataUrls[index], 'JPEG', x, cursorY, columnWidth, imageHeight, undefined, 'FAST')
+
+      if (col === 1) {
+        cursorY += imageHeight + 6
+        col = 0
+      } else {
+        col = 1
+      }
+    }
+  }
 
   pdf.save(`OrdenTrabajo_${workOrder.code ?? workOrder.id}_${unit?.internalCode ?? 'unidad'}.pdf`)
 }

@@ -120,6 +120,16 @@ router.patch('/:id', async (req, res) => {
   try {
     const current = await prisma.fleetUnit.findUnique({ where: { id: req.params.id } })
     if (!current) {
+      if (parsed.data.id && parsed.data.qrId) {
+        const operationalStatus = deriveOperationalStatus(
+          (parsed.data.operationalStatus ?? 'OPERATIONAL') as FleetOperationalStatus,
+          parsed.data.documents ?? {},
+        )
+        const created = await prisma.fleetUnit.create({
+          data: { ...parsed.data, operationalStatus } as any,
+        })
+        return res.status(201).json(created)
+      }
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
     const nextDocuments = parsed.data.documents ?? current.documents

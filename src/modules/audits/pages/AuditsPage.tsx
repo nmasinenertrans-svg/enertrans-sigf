@@ -220,23 +220,34 @@ export const AuditsPage = () => {
 
     setFleetUnits(updatedFleetUnits)
 
-    if (typeof navigator !== 'undefined' && navigator.onLine && selectedUnit) {
+    const ensureRemoteUnit = async () => {
+      if (typeof navigator === 'undefined' || !navigator.onLine || !selectedUnit) {
+        return
+      }
+
       const unitPayload = {
         ...selectedUnit,
         currentKilometers: createdAudit.unitKilometers,
         currentEngineHours: createdAudit.engineHours,
         currentHydroHours: createdAudit.hydroHours,
       }
-      apiRequest(`/fleet/${createdAudit.unitId}`, {
-        method: 'PATCH',
-        body: unitPayload,
-      }).catch((error) => {
+
+      try {
+        await apiRequest(`/fleet/${createdAudit.unitId}`, {
+          method: 'PATCH',
+          body: unitPayload,
+        })
+      } catch (error) {
         const message = String((error as Error)?.message ?? '')
         if (message.startsWith('404')) {
-          apiRequest('/fleet', { method: 'POST', body: unitPayload }).catch(() => null)
+          await apiRequest('/fleet', { method: 'POST', body: unitPayload })
           return
         }
-      })
+      }
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      void ensureRemoteUnit()
     }
 
     if (createdAudit.result === 'REJECTED') {
