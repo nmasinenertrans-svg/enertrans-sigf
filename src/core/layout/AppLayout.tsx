@@ -18,6 +18,7 @@ import type {
 import { useAppContext } from '../hooks/useAppContext'
 import { useOfflineSync } from '../hooks/useOfflineSync'
 import { buildFleetDetailPath, ROUTE_PATHS } from '../routing/routePaths'
+import { canUser } from '../auth/permissions'
 import { Sidebar } from './Sidebar'
 import { TopHeader } from './TopHeader'
 
@@ -327,6 +328,9 @@ export const AppLayout = () => {
           return await apiRequest<T>(path)
         } catch (error) {
           const message = String((error as Error)?.message ?? '')
+          if (message.includes('403')) {
+            return null
+          }
           if (message.includes('permisos') || message.includes('Token') || message.includes('Unauthorized') || message.includes('401')) {
             if (!didInvalidateSession) {
               didInvalidateSession = true
@@ -343,6 +347,7 @@ export const AppLayout = () => {
 
       setGlobalLoading(true)
       try {
+        const canViewUsers = canUser(currentUser ?? null, 'USERS', 'view')
         const [
           usersResponse,
           fleetResponse,
@@ -353,7 +358,7 @@ export const AppLayout = () => {
           externalRequestsResponse,
           inventoryResponse,
         ] = await Promise.all([
-          safeRequest<AppUser[]>('/users'),
+          canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
           safeRequest<MaintenancePlan[]>('/maintenance'),
           safeRequest<any[]>('/audits'),
@@ -459,6 +464,10 @@ export const AppLayout = () => {
 
   useEffect(() => {
     if (!currentUser?.id || !syncStatus.isOnline) {
+      return
+    }
+
+    if (!canUser(currentUser ?? null, 'MAINTENANCE_MODE', 'view')) {
       return
     }
 
