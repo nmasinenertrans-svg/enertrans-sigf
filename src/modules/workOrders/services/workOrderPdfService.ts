@@ -190,7 +190,7 @@ export const exportWorkOrderPdf = async ({ workOrder, unit }: WorkOrderPdfPayloa
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8)
     pdf.setTextColor(17, 24, 39)
-    pdf.text(task.status === 'RESOLVED' ? 'OK' : '-', 16, cursorY + 4)
+    pdf.text(task.status === 'RESOLVED' ? 'OK' : 'MAL', 16, cursorY + 4)
     pdf.text(
       clampText(pdf, task.section || 'GENERAL', deviationsColumns[1].width - 4),
       14 + deviationsColumns[0].width + 2,
@@ -208,6 +208,69 @@ export const exportWorkOrderPdf = async ({ workOrder, unit }: WorkOrderPdfPayloa
     )
     cursorY += rowHeight
   })
+
+  cursorY += 8
+
+  const resolvedTasks = normalizedTasks.filter(
+    (task) => task.status === 'RESOLVED' && (task.resolutionNote || task.resolutionPhotoUrl || task.resolutionPhotoBase64),
+  )
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setTextColor(17, 24, 39)
+  pdf.text('Trabajos realizados:', 14, cursorY)
+  cursorY += 4
+
+  const resolutionColumns = [
+    { label: 'Seccion', width: 32 },
+    { label: 'Item', width: 60 },
+    { label: 'Detalle', width: pageWidth - 14 - 14 - 92 },
+  ]
+
+  drawTableHeader(pdf, resolutionColumns, 14, cursorY, 6)
+  cursorY += 6
+
+  if (resolvedTasks.length === 0) {
+    const rowHeight = 6
+    drawRowBorders(pdf, resolutionColumns, 14, cursorY, rowHeight)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.setTextColor(17, 24, 39)
+    pdf.text('Sin registros', 16, cursorY + 4)
+    cursorY += rowHeight
+  } else {
+    resolvedTasks.forEach((task) => {
+      if (cursorY > pageHeight - 20) {
+        pdf.addPage()
+        addWatermark(pdf, logoDataUrl)
+        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Orden de Trabajo')
+        cursorY = 26
+        drawTableHeader(pdf, resolutionColumns, 14, cursorY, 6)
+        cursorY += 6
+      }
+
+      const rowHeight = 6
+      drawRowBorders(pdf, resolutionColumns, 14, cursorY, rowHeight)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8)
+      pdf.setTextColor(17, 24, 39)
+      pdf.text(
+        clampText(pdf, task.section || 'GENERAL', resolutionColumns[0].width - 4),
+        16,
+        cursorY + 4,
+      )
+      pdf.text(
+        clampText(pdf, task.item, resolutionColumns[1].width - 4),
+        14 + resolutionColumns[0].width + 2,
+        cursorY + 4,
+      )
+      pdf.text(
+        clampText(pdf, task.resolutionNote || '-', resolutionColumns[2].width - 4),
+        14 + resolutionColumns[0].width + resolutionColumns[1].width + 2,
+        cursorY + 4,
+      )
+      cursorY += rowHeight
+    })
+  }
 
   cursorY += 8
 
