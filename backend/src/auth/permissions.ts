@@ -1,4 +1,4 @@
-﻿import type { User, UserRole } from '../../generated/prisma/client'
+﻿import type { User, UserRole } from '@prisma/client'
 
 export type PermissionModule =
   | 'FLEET'
@@ -131,3 +131,4 @@ export const canUser = (user: User | null, moduleKey: PermissionModule, action: 
   const permissions = resolveUserPermissions(user)
   return Boolean(permissions[moduleKey]?.[action])
 }
+
