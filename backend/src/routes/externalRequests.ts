@@ -19,8 +19,13 @@ const externalRequestSchema = z.object({
 const externalRequestUpdateSchema = externalRequestSchema.partial()
 
 router.get('/', async (_req, res) => {
-  const items = await prisma.externalRequest.findMany({ orderBy: { createdAt: 'desc' } })
-  return res.json(items)
+  try {
+    const items = await prisma.externalRequest.findMany({ orderBy: { createdAt: 'desc' } })
+    return res.json(items)
+  } catch (error: any) {
+    console.error('ExternalRequest GET error:', error)
+    return res.json([])
+  }
 })
 
 router.post('/', async (req, res) => {
@@ -49,13 +54,23 @@ router.patch('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
-  const item = await prisma.externalRequest.update({ where: { id: req.params.id }, data: parsed.data })
-  return res.json(item)
+  try {
+    const item = await prisma.externalRequest.update({ where: { id: req.params.id }, data: parsed.data })
+    return res.json(item)
+  } catch (error: any) {
+    console.error('ExternalRequest PATCH error:', error)
+    return res.status(500).json({ message: 'No se pudo actualizar la nota de pedido.' })
+  }
 })
 
 router.delete('/:id', async (req, res) => {
-  await prisma.externalRequest.delete({ where: { id: req.params.id } })
-  return res.status(204).send()
+  try {
+    await prisma.externalRequest.delete({ where: { id: req.params.id } })
+    return res.status(204).send()
+  } catch (error: any) {
+    console.error('ExternalRequest DELETE error:', error)
+    return res.status(500).json({ message: 'No se pudo eliminar la nota de pedido.' })
+  }
 })
 
 export default router
