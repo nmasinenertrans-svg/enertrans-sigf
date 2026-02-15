@@ -63,6 +63,11 @@ export interface AppUser {
   permissionOverrides?: PermissionOverride[]
 }
 
+export interface MaintenanceStatus {
+  enabled: boolean
+  message: string
+}
+
 export interface FleetUnit {
   id: string
   qrId: string
