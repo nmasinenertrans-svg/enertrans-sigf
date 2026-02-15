@@ -17,9 +17,9 @@ const auditSchema = z.object({
   observations: z.string().optional().default(''),
   photoUrls: z.array(z.string()).optional().default([]),
   checklist: z.record(z.string(), z.any()).optional().default({}),
-  unitKilometers: z.number().int().nonnegative().optional().default(0),
-  engineHours: z.number().int().nonnegative().optional().default(0),
-  hydroHours: z.number().int().nonnegative().optional().default(0),
+  unitKilometers: z.coerce.number().int().nonnegative().optional().default(0),
+  engineHours: z.coerce.number().int().nonnegative().optional().default(0),
+  hydroHours: z.coerce.number().int().nonnegative().optional().default(0),
   workOrderId: z.string().uuid().optional(),
   workOrderCode: z.string().optional(),
 })
@@ -90,6 +90,7 @@ router.get('/', async (_req, res) => {
 router.post('/', async (req, res) => {
   const parsed = auditSchema.safeParse(req.body)
   if (!parsed.success) {
+    console.error('Audit POST validation error:', parsed.error?.flatten?.() ?? parsed.error)
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 

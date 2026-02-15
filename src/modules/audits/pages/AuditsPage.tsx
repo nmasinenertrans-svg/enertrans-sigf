@@ -216,15 +216,23 @@ export const AuditsPage = () => {
 
     setFleetUnits(updatedFleetUnits)
 
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
+    if (typeof navigator !== 'undefined' && navigator.onLine && selectedUnit) {
+      const unitPayload = {
+        ...selectedUnit,
+        currentKilometers: createdAudit.unitKilometers,
+        currentEngineHours: createdAudit.engineHours,
+        currentHydroHours: createdAudit.hydroHours,
+      }
       apiRequest(`/fleet/${createdAudit.unitId}`, {
         method: 'PATCH',
-        body: {
-          currentKilometers: createdAudit.unitKilometers,
-          currentEngineHours: createdAudit.engineHours,
-          currentHydroHours: createdAudit.hydroHours,
-        },
-      }).catch(() => null)
+        body: unitPayload,
+      }).catch((error) => {
+        const message = String((error as Error)?.message ?? '')
+        if (message.startsWith('404')) {
+          apiRequest('/fleet', { method: 'POST', body: unitPayload }).catch(() => null)
+          return
+        }
+      })
     }
 
     if (createdAudit.result === 'REJECTED') {

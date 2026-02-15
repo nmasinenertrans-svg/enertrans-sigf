@@ -18,8 +18,25 @@ const fetchImageAsDataUrl = async (url: string): Promise<string> => {
     const reader = new FileReader()
     reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
     reader.onerror = () => reject(new Error('No se pudo leer el logo.'))
-    reader.readAsDataURL(blob)
+  reader.readAsDataURL(blob)
   })
+}
+
+const resolvePhotoDataUrl = async (value: string): Promise<string | null> => {
+  if (!value) {
+    return null
+  }
+  if (value.startsWith('data:image')) {
+    return value
+  }
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    try {
+      return await fetchImageAsDataUrl(value)
+    } catch {
+      return null
+    }
+  }
+  return null
 }
 
 const applyOpacity = (pdf: jsPDF, opacity: number): (() => void) => {
@@ -195,6 +212,51 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
 
     cursorY += 6
   })
+
+  const photoCandidates = Array.isArray(audit.photoBase64List) ? audit.photoBase64List : []
+  const photoDataUrls = (
+    await Promise.all(photoCandidates.map((value) => resolvePhotoDataUrl(value)))
+  ).filter((value): value is string => Boolean(value))
+
+  if (photoDataUrls.length > 0) {
+    if (cursorY > pageHeight - 40) {
+      pdf.addPage()
+      addWatermark(pdf, logoDataUrl)
+      drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Auditoria de Flota')
+      cursorY = 26
+    }
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(17, 24, 39)
+    pdf.text('EVIDENCIAS FOTOGRAFICAS', 14, cursorY)
+    cursorY += 6
+
+    const maxWidth = pageWidth - 28
+    const columnWidth = (maxWidth - 6) / 2
+    const imageHeight = 45
+    let col = 0
+
+    for (let index = 0; index < photoDataUrls.length; index += 1) {
+      if (cursorY + imageHeight > pageHeight - 15) {
+        pdf.addPage()
+        addWatermark(pdf, logoDataUrl)
+        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Auditoria de Flota')
+        cursorY = 26
+        col = 0
+      }
+
+      const x = 14 + col * (columnWidth + 6)
+      pdf.addImage(photoDataUrls[index], 'JPEG', x, cursorY, columnWidth, imageHeight, undefined, 'FAST')
+
+      if (col === 1) {
+        cursorY += imageHeight + 6
+        col = 0
+      } else {
+        col = 1
+      }
+    }
+  }
 
   pdf.save(`Auditoria_${audit.id}_${unit?.internalCode ?? 'unidad'}.pdf`)
 }
