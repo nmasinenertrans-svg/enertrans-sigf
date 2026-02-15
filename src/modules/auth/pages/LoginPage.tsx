@@ -16,6 +16,29 @@ export const LoginPage = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [lastUser, setLastUser] = useState(() => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem('enertrans.sigf.last-user')
+      return raw ? (JSON.parse(raw) as any) : null
+    } catch {
+      return null
+    }
+  })
+
+  const saveLastUser = (user: any) => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.setItem('enertrans.sigf.last-user', JSON.stringify(user))
+      setLastUser(user)
+    } catch {
+      // ignore
+    }
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -42,7 +65,7 @@ export const LoginPage = () => {
         })
 
         setAuthToken(response.token)
-        setCurrentUser({
+        const nextUser = {
           id: response.user.id,
           username: response.user.username,
           fullName: response.user.fullName,
@@ -51,7 +74,9 @@ export const LoginPage = () => {
           password,
           permissions: response.user.permissions,
           permissionOverrides: response.user.permissionOverrides,
-        })
+        }
+        setCurrentUser(nextUser)
+        saveLastUser(nextUser)
         navigate(ROUTE_PATHS.dashboard, { replace: true })
         return
       } catch (error) {
@@ -66,6 +91,7 @@ export const LoginPage = () => {
     }
 
     setCurrentUser(user)
+    saveLastUser(user)
     navigate(ROUTE_PATHS.dashboard, { replace: true })
   }
 
@@ -124,6 +150,20 @@ export const LoginPage = () => {
         >
           Ingresar
         </button>
+
+        {typeof navigator !== 'undefined' && !navigator.onLine && lastUser ? (
+          <button
+            type="button"
+            onClick={() => {
+              setAuthToken(null)
+              setCurrentUser(lastUser)
+              navigate(ROUTE_PATHS.dashboard, { replace: true })
+            }}
+            className="mt-3 w-full rounded-lg border border-amber-400/30 bg-transparent px-4 py-2 text-xs font-semibold text-amber-200 hover:border-amber-400 hover:text-amber-100"
+          >
+            Entrar en modo offline
+          </button>
+        ) : null}
 
         <p className="mt-4 text-center text-xs text-slate-500">Acceso privado Enertrans. Usa tu usuario asignado.</p>
 

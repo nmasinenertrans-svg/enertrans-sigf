@@ -947,7 +947,7 @@ export const FleetDetailPage = () => {
                 <p>Auditorias registradas: {unitAudits.length}</p>
                 {canCreateAudits ? (
                   <Link
-                    to={`${ROUTE_PATHS.audits}?unitId=${selectedUnit.id}`}
+                    to={`${ROUTE_PATHS.audits}?unitId=${selectedUnit.id}&create=1`}
                     className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
                   >
                     Nueva auditoria

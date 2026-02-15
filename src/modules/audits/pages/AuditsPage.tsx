@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -26,6 +26,7 @@ import { apiRequest } from '../../../services/api/apiClient'
 const allUnitsFilter = 'ALL_UNITS'
 
 export const AuditsPage = () => {
+  const navigate = useNavigate()
   const { can } = usePermissions()
   const [searchParams] = useSearchParams()
   const {
@@ -37,6 +38,7 @@ export const AuditsPage = () => {
   const canDelete = can('AUDITS', 'delete')
 
   const pendingReauditParam = searchParams.get('pendingReaudit')
+  const createParam = searchParams.get('create')
   const pendingReauditOrder = useMemo(() => workOrders.find((order) => order.pendingReaudit), [workOrders])
 
   const preferredUnitId = useMemo(() => {
@@ -71,6 +73,7 @@ export const AuditsPage = () => {
 
   const [formData, setFormData] = useState<AuditFormData>(() => createEmptyAuditFormData(preferredUnitId))
   const [errors, setErrors] = useState<AuditFormErrors>({})
+  const [isFormOpen, setIsFormOpen] = useState(false)
   const [unitFilter, setUnitFilter] = useState<string>(preferredUnitId || allUnitsFilter)
   const [searchTerm, setSearchTerm] = useState('')
   const [resultFilter, setResultFilter] = useState<'ALL' | 'APPROVED' | 'REJECTED'>('ALL')
@@ -123,6 +126,14 @@ export const AuditsPage = () => {
     }))
     setUnitFilter(preferredUnitId)
   }, [preferredUnitId, fleetUnits])
+
+  useEffect(() => {
+    if (pendingWorkOrder || createParam === '1') {
+      setIsFormOpen(true)
+    } else if (!pendingWorkOrder) {
+      setIsFormOpen(false)
+    }
+  }, [pendingWorkOrder, createParam])
 
   useEffect(() => {
     if (!pendingWorkOrder) {
@@ -303,6 +314,10 @@ export const AuditsPage = () => {
 
     setAudits([createdAudit, ...audits])
     resetAuditForm()
+    if (isFormOpen) {
+      setIsFormOpen(false)
+      navigate(ROUTE_PATHS.audits, { replace: true })
+    }
   }
 
   const handleExportPdf = async (auditId: string) => {
@@ -361,7 +376,7 @@ export const AuditsPage = () => {
         <p className="text-sm text-slate-600">Checklist dinamico, observaciones, fotos y trazabilidad por unidad.</p>
       </header>
 
-      {pendingReauditOrders.length > 0 ? (
+      {!isFormOpen && pendingReauditOrders.length > 0 ? (
         <section className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -378,11 +393,11 @@ export const AuditsPage = () => {
               return (
               <Link
                 key={order.id}
-                to={`${ROUTE_PATHS.audits}?workOrderId=${order.id}`}
+                to={`${ROUTE_PATHS.audits}?workOrderId=${order.id}&create=1`}
                 className="flex items-center justify-between rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-sky-100"
               >
-                <span className="font-semibold">{order.code ?? 'OT'}</span>
-                <span className="text-xs text-slate-500">Unidad {unit?.internalCode ?? order.unitId}</span>
+                <span className="font-semibold">Realizar re-auditoria</span>
+                <span className="text-xs text-slate-500">{order.code ?? 'OT'} • {unit?.internalCode ?? order.unitId}</span>
               </Link>
               )
             })}
@@ -392,7 +407,7 @@ export const AuditsPage = () => {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-1">
-          {canCreate ? (
+          {canCreate && isFormOpen ? (
             <>
               <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h3 className="text-lg font-bold text-slate-900">
@@ -403,6 +418,18 @@ export const AuditsPage = () => {
                     OT {pendingWorkOrder.code ?? 'OT'} • Unidad{' '}
                     {fleetUnits.find((unit) => unit.id === pendingWorkOrder.unitId)?.internalCode ?? pendingWorkOrder.unitId}
                   </div>
+                ) : null}
+                {!isReauditMode ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsFormOpen(false)
+                      navigate(ROUTE_PATHS.audits, { replace: true })
+                    }}
+                    className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  >
+                    Volver al listado
+                  </button>
                 ) : null}
 
                 <label className="mt-4 flex flex-col gap-2">
@@ -575,6 +602,24 @@ export const AuditsPage = () => {
                 onRemovePhoto={handleRemovePhoto}
               />
             </>
+          ) : !isFormOpen ? (
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Historial de auditorias</h3>
+                  <p className="text-sm text-slate-600">Buscador por dominio y resultados.</p>
+                </div>
+                {canCreate ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsFormOpen(true)}
+                    className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
+                  >
+                    Crear nueva auditoria
+                  </button>
+                ) : null}
+              </div>
+            </section>
           ) : (
             <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
               No tenes permisos para crear auditorias.
@@ -583,7 +628,7 @@ export const AuditsPage = () => {
         </div>
 
         <div className="space-y-4 xl:col-span-2">
-          {canCreate && formData.auditMode === 'INDEPENDENT' ? (
+          {canCreate && isFormOpen && formData.auditMode === 'INDEPENDENT' ? (
             <>
               <AuditChecklistEditor
                 sections={formData.checklistSections}
@@ -599,7 +644,7 @@ export const AuditsPage = () => {
             </>
           ) : null}
 
-          {!isReauditMode ? (
+          {!isFormOpen ? (
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -674,3 +719,4 @@ export const AuditsPage = () => {
     </section>
   )
 }
+
