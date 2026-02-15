@@ -32,6 +32,7 @@ const deriveOperationalStatus = (requested: FleetOperationalStatus, documents: a
   hasInvalidDocuments(documents) ? 'OUT_OF_SERVICE' : requested
 
 const fleetSchema = z.object({
+  id: z.string().uuid().optional(),
   qrId: z.string().min(1),
   internalCode: z.string().min(1),
   brand: z.string().optional().default(''),
