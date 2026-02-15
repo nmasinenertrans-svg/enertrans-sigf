@@ -13,7 +13,9 @@ export const RequireAuth = ({ children }: RequireAuthProps) => {
   } = useAppContext()
   const token = getAuthToken()
 
-  if (!currentUser || !token) {
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine
+
+  if (!currentUser || (!token && !isOffline)) {
     return <Navigate to={ROUTE_PATHS.auth.login} replace />
   }
 
