@@ -9,6 +9,7 @@ import type {
   MaintenancePlan,
   RepairRecord,
   WorkOrder,
+  type MaintenanceStatus,
 } from '../../types/domain'
 
 const STORAGE_KEY = 'enertrans.sigf.app-state.v1'
@@ -31,6 +32,7 @@ export interface AppState extends PersistedAppState {
   currentUser: AppUser | null
   isGlobalLoading: boolean
   appError: string | null
+  maintenanceStatus: MaintenanceStatus
 }
 
 export interface AppActions {
@@ -45,6 +47,7 @@ export interface AppActions {
   setInventoryItems: (items: InventoryItem[]) => void
   setGlobalLoading: (value: boolean) => void
   setAppError: (errorMessage: string | null) => void
+  setMaintenanceStatus: (status: MaintenanceStatus) => void
 }
 
 export interface AppContextValue {
@@ -78,6 +81,11 @@ const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError' | 'curr
   isGlobalLoading: false,
   appError: null,
   currentUser: null,
+}
+
+const defaultMaintenanceStatus: MaintenanceStatus = {
+  enabled: false,
+  message: '',
 }
 
 const normalizePersistedUsers = (users?: AppUser[]): AppUser[] => {
@@ -133,6 +141,7 @@ export const getInitialAppState = (): AppState => {
     currentUserId: token ? resolvedUserId ?? null : null,
     currentUser,
     ...defaultRuntimeState,
+    maintenanceStatus: defaultMaintenanceStatus,
   }
 }
 

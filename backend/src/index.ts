@@ -12,9 +12,11 @@ import repairsRoutes from './routes/repairs.js'
 import inventoryRoutes from './routes/inventory.js'
 import filesRoutes from './routes/files.js'
 import externalRequestsRoutes from './routes/externalRequests.js'
+import settingsRoutes from './routes/settings.js'
 import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
+import { maintenanceGuard } from './middleware/maintenance.js'
 
 const app = express()
 
@@ -24,7 +26,9 @@ app.use(express.json({ limit: '10mb' }))
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))
 
 app.use('/auth', authRoutes)
+app.use(maintenanceGuard)
 
+app.use('/settings', requireAuth, settingsRoutes)
 app.use('/users', requireAuth, requirePermission('USERS', 'view'), usersRoutes)
 app.use('/fleet', requireAuth, requirePermission('FLEET', 'view'), fleetRoutes)
 app.use('/maintenance', requireAuth, requirePermission('MAINTENANCE', 'view'), maintenanceRoutes)

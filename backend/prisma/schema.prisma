@@ -217,3 +217,11 @@ model Sequence {
   key   String @id
   value Int
 }
+
+model AppSettings {
+  id                 String   @id @default("app")
+  maintenanceEnabled Boolean  @default(false)
+  maintenanceMessage String   @default("")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}

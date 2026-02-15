@@ -103,6 +103,19 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           appError: errorMessage,
         }))
       },
+      setMaintenanceStatus: (status) => {
+        setState((previousState) => ({
+          ...previousState,
+          maintenanceStatus: status,
+        }))
+        if (typeof window !== 'undefined') {
+          try {
+            window.localStorage.setItem('enertrans.sigf.maintenance', JSON.stringify(status))
+          } catch {
+            // ignore
+          }
+        }
+      },
     }),
     [],
   )

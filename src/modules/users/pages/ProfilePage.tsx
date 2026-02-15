@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -9,8 +9,8 @@ import { BackLink } from '../../../components/shared/BackLink'
 export const ProfilePage = () => {
   const navigate = useNavigate()
   const {
-    state: { currentUser, users },
-    actions: { setCurrentUser, setUsers, setAppError },
+    state: { currentUser, users, maintenanceStatus },
+    actions: { setCurrentUser, setUsers, setAppError, setMaintenanceStatus },
   } = useAppContext()
 
   const user = currentUser
@@ -20,6 +20,9 @@ export const ProfilePage = () => {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [maintenanceEnabled, setMaintenanceEnabled] = useState(maintenanceStatus.enabled)
+  const [maintenanceMessage, setMaintenanceMessage] = useState(maintenanceStatus.message)
+  const [isSavingMaintenance, setIsSavingMaintenance] = useState(false)
 
   const initials = useMemo(() => {
     const name = user?.fullName?.trim() || user?.username || ''
@@ -36,6 +39,8 @@ export const ProfilePage = () => {
       </section>
     )
   }
+
+  const isDevUser = user.role === 'DEV'
 
   const updateLocalUser = (updates: Partial<typeof user>) => {
     const nextUser = { ...user, ...updates }
@@ -122,6 +127,50 @@ export const ProfilePage = () => {
     reader.readAsDataURL(file)
   }
 
+  const loadMaintenance = async () => {
+    if (!isDevUser || typeof navigator !== 'undefined' && !navigator.onLine) {
+      return
+    }
+
+    try {
+      const response = await apiRequest<{ enabled: boolean; message?: string }>('/settings/maintenance')
+      const next = { enabled: response.enabled, message: response.message ?? '' }
+      setMaintenanceStatus(next)
+      setMaintenanceEnabled(next.enabled)
+      setMaintenanceMessage(next.message)
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleSaveMaintenance = async () => {
+    if (!isDevUser) {
+      return
+    }
+
+    setIsSavingMaintenance(true)
+    const payload = {
+      enabled: maintenanceEnabled,
+      message: maintenanceMessage.trim(),
+    }
+
+    try {
+      const response = await apiRequest<{ enabled: boolean; message?: string }>('/settings/maintenance', {
+        method: 'PUT',
+        body: payload,
+      })
+      const next = { enabled: response.enabled, message: response.message ?? '' }
+      setMaintenanceStatus(next)
+      setMaintenanceEnabled(next.enabled)
+      setMaintenanceMessage(next.message)
+      setAppError(next.enabled ? 'Modo mantenimiento activado.' : 'Modo mantenimiento desactivado.')
+    } catch (error) {
+      setAppError('No se pudo actualizar el modo mantenimiento.')
+    } finally {
+      setIsSavingMaintenance(false)
+    }
+  }
+\n  useEffect(() => {\n    void loadMaintenance()\n  }, [isDevUser])\n
   return (
     <section className="space-y-6">
       <header className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -227,6 +276,43 @@ export const ProfilePage = () => {
             </div>
           </div>
 
+          {isDevUser ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+              <h3 className="text-sm font-semibold text-amber-800">Mantenimiento programado</h3>
+              <p className="mt-1 text-xs text-amber-700">
+                Al activar este modo, las operaciones de alta/edición quedan bloqueadas para todos los usuarios.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <label className="inline-flex items-center gap-2 text-sm font-semibold text-amber-900">
+                  <input
+                    type="checkbox"
+                    checked={maintenanceEnabled}
+                    onChange={(event) => setMaintenanceEnabled(event.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  Activar mantenimiento
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSaveMaintenance}
+                  className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
+                  disabled={isSavingMaintenance}
+                >
+                  {isSavingMaintenance ? 'Guardando...' : 'Guardar mantenimiento'}
+                </button>
+              </div>
+              <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-amber-900">
+                Mensaje para usuarios
+                <textarea
+                  className="min-h-[90px] rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  value={maintenanceMessage}
+                  onChange={(event) => setMaintenanceMessage(event.target.value)}
+                  placeholder="Ej: Actualización programada. Volvemos en 30 minutos."
+                />
+              </label>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
@@ -252,3 +338,4 @@ export const ProfilePage = () => {
     </section>
   )
 }
+

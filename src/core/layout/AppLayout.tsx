@@ -117,7 +117,18 @@ export const AppLayout = () => {
   const syncStatus = useOfflineSync()
   const isFetchingRef = useRef(false)
   const {
-    state: { fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, users, currentUser },
+    state: {
+      fleetUnits,
+      maintenancePlans,
+      audits,
+      workOrders,
+      repairs,
+      externalRequests,
+      inventoryItems,
+      users,
+      currentUser,
+      maintenanceStatus,
+    },
     actions: {
       setFleetUnits,
       setMaintenancePlans,
@@ -130,6 +141,7 @@ export const AppLayout = () => {
       setCurrentUser,
       setAppError,
       setGlobalLoading,
+      setMaintenanceStatus,
     },
   } = useAppContext()
 
@@ -141,6 +153,7 @@ export const AppLayout = () => {
   const repairsRef = useRef(repairs)
   const externalRequestsRef = useRef(externalRequests)
   const inventoryRef = useRef(inventoryItems)
+
 
   useEffect(() => {
     usersRef.current = users
@@ -445,6 +458,23 @@ export const AppLayout = () => {
   ])
 
   useEffect(() => {
+    if (!currentUser?.id || !syncStatus.isOnline) {
+      return
+    }
+
+    const loadMaintenance = async () => {
+      try {
+        const response = await apiRequest<{ enabled: boolean; message?: string }>('/settings/maintenance')
+        setMaintenanceStatus({ enabled: response.enabled, message: response.message ?? '' })
+      } catch {
+        // ignore
+      }
+    }
+
+    loadMaintenance()
+  }, [currentUser?.id, syncStatus.isOnline, setMaintenanceStatus])
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
@@ -470,6 +500,12 @@ export const AppLayout = () => {
           syncStatus={syncStatus}
           notifications={notifications}
         />
+        {maintenanceStatus.enabled ? (
+          <div className="mx-6 mt-4 rounded-lg border border-amber-300 bg-amber-100 px-4 py-3 text-sm text-amber-900 md:mx-8">
+            <strong className="font-semibold">Sistema en mantenimiento:</strong>{' '}
+            {maintenanceStatus.message || 'Actualizaciones en curso. Las operaciones quedan pausadas.'}
+          </div>
+        ) : null}
         <ErrorBanner />
         <main className="flex-1 p-6 md:p-8">
           <Outlet />

@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authenticateUser } from '../../../core/auth/authService'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -16,6 +16,18 @@ export const LoginPage = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const maintenanceStatus = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem('enertrans.sigf.maintenance')
+      return raw ? (JSON.parse(raw) as { enabled: boolean; message?: string }) : null
+    } catch {
+      return null
+    }
+  }, [])
+
   const [lastUser, setLastUser] = useState(() => {
     if (typeof window === 'undefined') {
       return null
@@ -53,6 +65,11 @@ export const LoginPage = () => {
     setErrorMessage('')
     setAppError(null)
 
+    if (maintenanceStatus?.enabled && username.trim().toLowerCase() !== 'nmasin') {
+      setErrorMessage(maintenanceStatus.message || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.')
+      return
+    }
+
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       try {
         const response = await apiRequest<{
@@ -88,6 +105,13 @@ export const LoginPage = () => {
         navigate(ROUTE_PATHS.dashboard, { replace: true })
         return
       } catch (error) {
+        const message = String((error as Error)?.message ?? '')
+        if (message.includes('503')) {
+          setErrorMessage(
+            maintenanceStatus?.message || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.',
+          )
+          return
+        }
         setErrorMessage('No se pudo autenticar en el servidor. Probando modo local...')
       }
     }
@@ -169,6 +193,12 @@ export const LoginPage = () => {
                 setErrorMessage('Desconectá internet para usar el modo offline.')
                 return
               }
+              if (maintenanceStatus?.enabled && lastUser.role !== 'DEV') {
+                setErrorMessage(
+                  maintenanceStatus.message || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.',
+                )
+                return
+              }
               setAuthToken(null)
               setCurrentUser(lastUser)
               navigate(ROUTE_PATHS.dashboard, { replace: true })
@@ -182,3 +212,5 @@ export const LoginPage = () => {
     </section>
   )
 }
+
+
