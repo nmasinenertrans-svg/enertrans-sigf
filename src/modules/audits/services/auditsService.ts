@@ -111,6 +111,8 @@ const createStandardChecklist = (): AuditChecklistSectionDraft[] => [
 
 export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
   unitId,
+  auditMode: 'INDEPENDENT',
+  externalRequestId: '',
   observations: '',
   checklistSections: createStandardChecklist(),
   photoBase64List: [],
@@ -164,6 +166,10 @@ export const validateAuditFormData = (formData: AuditFormData, unitList: FleetUn
     validationErrors.observations = 'Las observaciones superan el largo maximo permitido.'
   }
 
+  if (formData.auditMode === 'EXTERNAL_REQUEST' && !formData.externalRequestId) {
+    validationErrors.externalRequestId = 'Selecciona la nota de pedido vinculada.'
+  }
+
   if (formData.unitKilometers < 0) {
     validationErrors.unitKilometers = 'Los kilometros deben ser validos.'
   }
@@ -176,12 +182,14 @@ export const validateAuditFormData = (formData: AuditFormData, unitList: FleetUn
     validationErrors.hydroHours = 'Las horas de hidrogrua deben ser validas.'
   }
 
-  const hasValidSections = formData.checklistSections.some(
-    (section) => section.title.trim() && section.items.some((item) => item.label.trim()),
-  )
+  if (formData.auditMode === 'INDEPENDENT') {
+    const hasValidSections = formData.checklistSections.some(
+      (section) => section.title.trim() && section.items.some((item) => item.label.trim()),
+    )
 
-  if (!hasValidSections) {
-    validationErrors.checklistSections = 'El checklist debe tener al menos una seccion con un item valido.'
+    if (!hasValidSections) {
+      validationErrors.checklistSections = 'El checklist debe tener al menos una seccion con un item valido.'
+    }
   }
 
   return validationErrors
@@ -265,7 +273,7 @@ export const createWorkOrderFromAudit = (audit: AuditRecord, unitCode: string): 
     createdAt: new Date().toISOString(),
     taskList: buildDeviationList(audit.checklistSections),
     spareParts: [],
-    laborDetail: `Desvios detectados en auditoria ${audit.id}`,
+    laborDetail: `Desvios detectados en auditoria ${audit.code}`,
     linkedInventorySkuList: [],
   }
 }
@@ -295,10 +303,28 @@ export const toAuditRecord = (
   auditorName: string,
   workOrders: WorkOrder[] = [],
   unitCode: string = '',
+  externalRequestCode?: string,
 ): AuditRecord => {
-  const checklistSections = formData.checklistSections
+  let checklistSections = formData.checklistSections
     .map((sectionDraft) => toChecklistSection(sectionDraft))
     .filter((section): section is AuditChecklistSection => section !== null)
+
+  if (formData.auditMode === 'EXTERNAL_REQUEST') {
+    checklistSections = [
+      {
+        id: createId(),
+        title: 'NOTA DE PEDIDO EXTERNO',
+        items: [
+          {
+            id: createId(),
+            label: externalRequestCode ? `NDP ${externalRequestCode}` : 'NDP vinculada',
+            status: 'BAD',
+            observation: formData.observations.trim(),
+          },
+        ],
+      },
+    ]
+  }
 
   const auditKind = resolveAuditKind(formData.unitId, workOrders)
   const pendingOrder = workOrders.find((order) => order.unitId === formData.unitId && order.pendingReaudit)
@@ -313,7 +339,7 @@ export const toAuditRecord = (
     auditorUserId,
     auditorName,
     performedAt: new Date().toISOString(),
-    result: evaluateAuditResult(checklistSections),
+    result: formData.auditMode === 'EXTERNAL_REQUEST' ? 'REJECTED' : evaluateAuditResult(checklistSections),
     observations: formData.observations.trim(),
     photoBase64List: formData.photoBase64List,
     checklistSections,

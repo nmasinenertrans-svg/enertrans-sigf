@@ -15,6 +15,8 @@ export interface AuditChecklistSectionDraft {
 
 export interface AuditFormData {
   unitId: string
+  auditMode: 'INDEPENDENT' | 'EXTERNAL_REQUEST'
+  externalRequestId: string
   observations: string
   checklistSections: AuditChecklistSectionDraft[]
   photoBase64List: string[]
@@ -25,6 +27,8 @@ export interface AuditFormData {
 
 export type AuditFormErrors = {
   unitId?: string
+  auditMode?: string
+  externalRequestId?: string
   checklistSections?: string
   observations?: string
   unitKilometers?: string

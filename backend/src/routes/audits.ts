@@ -161,7 +161,7 @@ router.post('/', async (req, res) => {
               status: 'OPEN',
               taskList: extractBadItems(parsed.data.checklist),
               spareParts: [],
-              laborDetail: `Desvios detectados en auditoria ${item.id}`,
+              laborDetail: `Desvios detectados en auditoria ${code}`,
               linkedInventorySkuList: [],
             },
           })

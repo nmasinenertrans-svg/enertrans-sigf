@@ -29,7 +29,7 @@ export const AuditsPage = () => {
   const { can } = usePermissions()
   const [searchParams] = useSearchParams()
   const {
-    state: { currentUser, fleetUnits, audits, workOrders },
+    state: { currentUser, fleetUnits, audits, workOrders, externalRequests },
     actions: { setAudits, setGlobalLoading, setAppError, setWorkOrders, setFleetUnits },
   } = useAppContext()
 
@@ -114,6 +114,8 @@ export const AuditsPage = () => {
     setFormData((previousFormData) => ({
       ...previousFormData,
       unitId: preferredUnitId,
+      auditMode: 'INDEPENDENT',
+      externalRequestId: '',
       unitKilometers: selectedUnit?.currentKilometers ?? 0,
       engineHours: selectedUnit?.currentEngineHours ?? 0,
       hydroHours: selectedUnit?.currentHydroHours ?? 0,
@@ -201,7 +203,9 @@ export const AuditsPage = () => {
     const auditorName = currentUser?.fullName ?? 'Usuario no identificado'
     const selectedUnit = fleetUnits.find((unit) => unit.id === formData.unitId)
     const unitCode = selectedUnit?.internalCode ?? ''
-    const createdAudit = toAuditRecord(formData, auditorId, auditorName, workOrders, unitCode)
+    const selectedExternalRequest = externalRequests.find((item) => item.id === formData.externalRequestId)
+    const externalRequestCode = selectedExternalRequest?.code
+    const createdAudit = toAuditRecord(formData, auditorId, auditorName, workOrders, unitCode, externalRequestCode)
 
     const updatedFleetUnits = fleetUnits.map((unit) =>
       unit.id === createdAudit.unitId
@@ -384,6 +388,8 @@ export const AuditsPage = () => {
                       setFormData((previousFormData) => ({
                         ...previousFormData,
                         unitId: event.target.value,
+                        auditMode: 'INDEPENDENT',
+                        externalRequestId: '',
                       }))
                       setErrors((previousErrors) => ({ ...previousErrors, unitId: undefined }))
                     }}
@@ -397,6 +403,55 @@ export const AuditsPage = () => {
                   </select>
                   {errors.unitId ? <span className="text-xs font-semibold text-rose-700">{errors.unitId}</span> : null}
                 </label>
+
+                <label className="mt-4 flex flex-col gap-2">
+                  <span className="text-sm font-semibold text-slate-700">Tipo de auditoria</span>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                    value={formData.auditMode}
+                    onChange={(event) => {
+                      const nextMode = event.target.value as AuditFormData['auditMode']
+                      setFormData((previousFormData) => ({
+                        ...previousFormData,
+                        auditMode: nextMode,
+                        externalRequestId: nextMode === 'EXTERNAL_REQUEST' ? previousFormData.externalRequestId : '',
+                      }))
+                      setErrors((previousErrors) => ({ ...previousErrors, auditMode: undefined, externalRequestId: undefined }))
+                    }}
+                  >
+                    <option value="INDEPENDENT">Auditoria independiente</option>
+                    <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
+                  </select>
+                </label>
+
+                {formData.auditMode === 'EXTERNAL_REQUEST' ? (
+                  <label className="mt-4 flex flex-col gap-2">
+                    <span className="text-sm font-semibold text-slate-700">Nota de pedido vinculada</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                      value={formData.externalRequestId}
+                      onChange={(event) => {
+                        setFormData((previousFormData) => ({
+                          ...previousFormData,
+                          externalRequestId: event.target.value,
+                        }))
+                        setErrors((previousErrors) => ({ ...previousErrors, externalRequestId: undefined }))
+                      }}
+                    >
+                      <option value="">Seleccionar nota de pedido</option>
+                      {externalRequests
+                        .filter((item) => item.unitId === formData.unitId)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.code} - {item.companyName}
+                          </option>
+                        ))}
+                    </select>
+                    {errors.externalRequestId ? (
+                      <span className="text-xs font-semibold text-rose-700">{errors.externalRequestId}</span>
+                    ) : null}
+                  </label>
+                ) : null}
 
                 <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                   <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
@@ -499,7 +554,7 @@ export const AuditsPage = () => {
         </div>
 
         <div className="space-y-4 xl:col-span-2">
-          {canCreate ? (
+          {canCreate && formData.auditMode === 'INDEPENDENT' ? (
             <>
               <AuditChecklistEditor
                 sections={formData.checklistSections}
