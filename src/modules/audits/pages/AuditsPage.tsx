@@ -67,6 +67,7 @@ export const AuditsPage = () => {
   }, [searchParams, workOrders, pendingReauditOrder, pendingReauditParam])
 
   const pendingReauditOrders = useMemo(() => workOrders.filter((order) => order.pendingReaudit), [workOrders])
+  const isReauditMode = Boolean(pendingWorkOrder)
 
   const [formData, setFormData] = useState<AuditFormData>(() => createEmptyAuditFormData(preferredUnitId))
   const [errors, setErrors] = useState<AuditFormErrors>({})
@@ -131,6 +132,8 @@ export const AuditsPage = () => {
     setFormData((previousFormData) => ({
       ...previousFormData,
       unitId: pendingWorkOrder.unitId,
+      auditMode: 'INDEPENDENT',
+      externalRequestId: '',
       checklistSections: createChecklistFromDeviations(pendingWorkOrder.taskList ?? []),
     }))
     setUnitFilter(pendingWorkOrder.unitId)
@@ -388,13 +391,22 @@ export const AuditsPage = () => {
           {canCreate ? (
             <>
               <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900">Nueva auditoria</h3>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {isReauditMode ? 'Re-auditoria pendiente' : 'Nueva auditoria'}
+                </h3>
+                {isReauditMode && pendingWorkOrder ? (
+                  <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-slate-700">
+                    OT {pendingWorkOrder.code ?? 'OT'} • Unidad{' '}
+                    {fleetUnits.find((unit) => unit.id === pendingWorkOrder.unitId)?.internalCode ?? pendingWorkOrder.unitId}
+                  </div>
+                ) : null}
 
                 <label className="mt-4 flex flex-col gap-2">
                   <span className="text-sm font-semibold text-slate-700">Unidad</span>
                   <select
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
                     value={formData.unitId}
+                    disabled={isReauditMode}
                     onChange={(event) => {
                       setFormData((previousFormData) => ({
                         ...previousFormData,
@@ -415,27 +427,29 @@ export const AuditsPage = () => {
                   {errors.unitId ? <span className="text-xs font-semibold text-rose-700">{errors.unitId}</span> : null}
                 </label>
 
-                <label className="mt-4 flex flex-col gap-2">
-                  <span className="text-sm font-semibold text-slate-700">Tipo de auditoria</span>
-                  <select
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                    value={formData.auditMode}
-                    onChange={(event) => {
-                      const nextMode = event.target.value as AuditFormData['auditMode']
-                      setFormData((previousFormData) => ({
-                        ...previousFormData,
-                        auditMode: nextMode,
-                        externalRequestId: nextMode === 'EXTERNAL_REQUEST' ? previousFormData.externalRequestId : '',
-                      }))
-                      setErrors((previousErrors) => ({ ...previousErrors, auditMode: undefined, externalRequestId: undefined }))
-                    }}
-                  >
-                    <option value="INDEPENDENT">Auditoria independiente</option>
-                    <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
-                  </select>
-                </label>
+                {!isReauditMode ? (
+                  <label className="mt-4 flex flex-col gap-2">
+                    <span className="text-sm font-semibold text-slate-700">Tipo de auditoria</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                      value={formData.auditMode}
+                      onChange={(event) => {
+                        const nextMode = event.target.value as AuditFormData['auditMode']
+                        setFormData((previousFormData) => ({
+                          ...previousFormData,
+                          auditMode: nextMode,
+                          externalRequestId: nextMode === 'EXTERNAL_REQUEST' ? previousFormData.externalRequestId : '',
+                        }))
+                        setErrors((previousErrors) => ({ ...previousErrors, auditMode: undefined, externalRequestId: undefined }))
+                      }}
+                    >
+                      <option value="INDEPENDENT">Auditoria independiente</option>
+                      <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
+                    </select>
+                  </label>
+                ) : null}
 
-                {formData.auditMode === 'EXTERNAL_REQUEST' ? (
+                {!isReauditMode && formData.auditMode === 'EXTERNAL_REQUEST' ? (
                   <label className="mt-4 flex flex-col gap-2">
                     <span className="text-sm font-semibold text-slate-700">Nota de pedido vinculada</span>
                     <select
@@ -547,7 +561,7 @@ export const AuditsPage = () => {
                   onClick={handleSubmitAudit}
                   className="mt-5 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
                 >
-                  Crear auditoria
+                  {isReauditMode ? 'Cerrar re-auditoria' : 'Crear auditoria'}
                 </button>
               </section>
 
@@ -581,7 +595,8 @@ export const AuditsPage = () => {
             </>
           ) : null}
 
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          {!isReauditMode ? (
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Historial por unidad</h3>
@@ -638,7 +653,8 @@ export const AuditsPage = () => {
                 canDelete={canDelete}
               />
             </div>
-          </section>
+            </section>
+          ) : null}
         </div>
       </div>
 
