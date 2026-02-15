@@ -1,3 +1,4 @@
 -- AlterTable
-ALTER TABLE "enertrans_sgi"."ExternalRequest" ADD COLUMN     "providerFileName" TEXT NOT NULL DEFAULT '',
-ADD COLUMN     "providerFileUrl" TEXT NOT NULL DEFAULT '';
+ALTER TABLE IF EXISTS "ExternalRequest"
+  ADD COLUMN IF NOT EXISTS "providerFileName" TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS "providerFileUrl" TEXT NOT NULL DEFAULT '';

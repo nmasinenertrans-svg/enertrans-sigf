@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "enertrans_sgi"."ExternalRequest" (
+CREATE TABLE IF NOT EXISTS "ExternalRequest" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "unitId" TEXT NOT NULL,
@@ -12,7 +12,14 @@ CREATE TABLE "enertrans_sgi"."ExternalRequest" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ExternalRequest_code_key" ON "enertrans_sgi"."ExternalRequest"("code");
+CREATE UNIQUE INDEX IF NOT EXISTS "ExternalRequest_code_key" ON "ExternalRequest"("code");
 
 -- AddForeignKey
-ALTER TABLE "enertrans_sgi"."ExternalRequest" ADD CONSTRAINT "ExternalRequest_unitId_fkey" FOREIGN KEY ("unitId") REFERENCES "enertrans_sgi"."FleetUnit"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$
+BEGIN
+  ALTER TABLE "ExternalRequest"
+    ADD CONSTRAINT "ExternalRequest_unitId_fkey"
+    FOREIGN KEY ("unitId") REFERENCES "FleetUnit"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
