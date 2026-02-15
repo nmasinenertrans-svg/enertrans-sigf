@@ -257,7 +257,7 @@ export const DashboardPage = () => {
         </button>
         <button
           type="button"
-          onClick={() => navigate(`${ROUTE_PATHS.workOrders.list}?status=OPEN&includeInProgress=1`)}
+          onClick={() => navigate(`${ROUTE_PATHS.workOrders}?status=OPEN&includeInProgress=1`)}
           className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">OT abiertas</p>
