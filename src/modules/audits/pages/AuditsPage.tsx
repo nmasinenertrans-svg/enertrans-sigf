@@ -310,6 +310,13 @@ export const AuditsPage = () => {
         payload: { ...createdAudit, ...workOrderPayload },
         createdAt: new Date().toISOString(),
       })
+
+      if (pendingWorkOrder && typeof navigator !== 'undefined' && navigator.onLine) {
+        apiRequest(`/work-orders/${pendingWorkOrder.id}`, {
+          method: 'PATCH',
+          body: { pendingReaudit: false },
+        }).catch(() => null)
+      }
     }
 
     setAudits([createdAudit, ...audits])

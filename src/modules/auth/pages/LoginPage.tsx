@@ -167,18 +167,23 @@ export const LoginPage = () => {
 
         <p className="mt-4 text-center text-xs text-slate-500">Acceso privado Enertrans. Usa tu usuario asignado.</p>
 
-        <button
-          type="button"
-          onClick={() => {
-            if (typeof window !== 'undefined') {
-              window.localStorage.removeItem('enertrans.sigf.app-state.v1')
-              window.location.reload()
-            }
-          }}
-          className="mt-4 w-full rounded-lg border border-amber-400/30 bg-transparent px-4 py-2 text-xs font-semibold text-amber-200 hover:border-amber-400 hover:text-amber-100"
-        >
-          Restablecer acceso en este navegador
-        </button>
+        {lastUser ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.onLine) {
+                setErrorMessage('Desconectá internet para usar el modo offline.')
+                return
+              }
+              setAuthToken(null)
+              setCurrentUser(lastUser)
+              navigate(ROUTE_PATHS.dashboard, { replace: true })
+            }}
+            className="mt-4 w-full rounded-lg border border-amber-400/30 bg-transparent px-4 py-2 text-xs font-semibold text-amber-200 hover:border-amber-400 hover:text-amber-100"
+          >
+            Entrar en modo offline
+          </button>
+        ) : null}
       </form>
     </section>
   )

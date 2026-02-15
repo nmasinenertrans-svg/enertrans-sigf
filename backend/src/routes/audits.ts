@@ -172,6 +172,12 @@ router.post('/', async (req, res) => {
         data: { operationalStatus: 'OUT_OF_SERVICE' },
       })
     } else {
+      if (parsed.data.workOrderId) {
+        await prisma.workOrder.updateMany({
+          where: { id: parsed.data.workOrderId },
+          data: { pendingReaudit: false },
+        })
+      }
       await prisma.workOrder.updateMany({
         where: { unitId: item.unitId, pendingReaudit: true },
         data: { pendingReaudit: false },
