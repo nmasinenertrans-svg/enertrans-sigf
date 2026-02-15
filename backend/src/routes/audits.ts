@@ -172,6 +172,10 @@ router.post('/', async (req, res) => {
         data: { operationalStatus: 'OUT_OF_SERVICE' },
       })
     } else {
+      await prisma.workOrder.updateMany({
+        where: { unitId: item.unitId, pendingReaudit: true },
+        data: { pendingReaudit: false },
+      })
       const openWorkOrders = await prisma.workOrder.findFirst({
         where: {
           unitId: item.unitId,

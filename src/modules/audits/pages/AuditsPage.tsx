@@ -253,6 +253,10 @@ export const AuditsPage = () => {
       void ensureRemoteUnit()
     }
 
+    const workOrderPayload = pendingWorkOrder
+      ? { workOrderId: pendingWorkOrder.id, workOrderCode: pendingWorkOrder.code }
+      : {}
+
     if (createdAudit.result === 'REJECTED') {
       const createdWorkOrder = createWorkOrderFromAudit(createdAudit, unitCode)
       setWorkOrders([createdWorkOrder, ...workOrders])
@@ -292,7 +296,7 @@ export const AuditsPage = () => {
       enqueueAndSync({
         id: `audit.create.${createdAudit.id}`,
         type: 'audit.create',
-        payload: createdAudit,
+        payload: { ...createdAudit, ...workOrderPayload },
         createdAt: new Date().toISOString(),
       })
     }
