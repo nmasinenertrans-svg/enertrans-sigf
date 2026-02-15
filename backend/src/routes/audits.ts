@@ -190,6 +190,12 @@ router.post('/', async (req, res) => {
     return res.status(201).json(item)
   } catch (error: any) {
     if (error?.code === 'P2002') {
+      const existing = parsed.data.code
+        ? await prisma.auditRecord.findUnique({ where: { code: parsed.data.code } })
+        : null
+      if (existing) {
+        return res.json(existing)
+      }
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
     if (error?.code === 'P2003') {

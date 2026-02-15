@@ -221,9 +221,21 @@ export const WorkOrdersPage = () => {
     if (!workOrder) {
       return
     }
+    if (workOrder.status !== 'CLOSED') {
+      setAppError('Solo podes exportar el PDF cuando la OT esta cerrada.')
+      return
+    }
+    const normalizedTasks = normalizeTaskList(workOrder.taskList)
+    const allResolved = normalizedTasks.every(
+      (task) => task.status === 'RESOLVED' && (task.resolutionPhotoUrl || task.resolutionPhotoBase64),
+    )
+    if (!allResolved) {
+      setAppError('Faltan fotos de reparacion. Completa todos los desvios antes de exportar el PDF.')
+      return
+    }
     const unit = fleetUnits.find((item) => item.id === workOrder.unitId)
     try {
-      await exportWorkOrderPdf({ workOrder: { ...workOrder, taskList: normalizeTaskList(workOrder.taskList) }, unit })
+      await exportWorkOrderPdf({ workOrder: { ...workOrder, taskList: normalizedTasks }, unit })
     } catch {
       setAppError('No se pudo generar el PDF de la OT.')
     }
@@ -337,7 +349,18 @@ export const WorkOrdersPage = () => {
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       apiRequest(`/work-orders/${workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(() => null)
-      apiRequest(`/fleet/${updatedWorkOrder.unitId}`, { method: 'PATCH', body: { operationalStatus: 'MAINTENANCE' } }).catch(() => null)
+      const unitPayload = fleetUnits.find((unit) => unit.id === updatedWorkOrder.unitId)
+      if (unitPayload) {
+        apiRequest(`/fleet/${updatedWorkOrder.unitId}`, {
+          method: 'PATCH',
+          body: { ...unitPayload, operationalStatus: 'MAINTENANCE' },
+        }).catch((error) => {
+          const message = String((error as Error)?.message ?? '')
+          if (message.startsWith('404')) {
+            apiRequest('/fleet', { method: 'POST', body: { ...unitPayload, operationalStatus: 'MAINTENANCE' } }).catch(() => null)
+          }
+        })
+      }
     }
 
     setAppError('OT cerrada. Se genero una re-auditoria pendiente para el auditor.')

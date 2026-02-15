@@ -61,15 +61,23 @@ router.patch('/:id', async (req, res) => {
 
   const pendingReaudit = parsed.data.status === 'CLOSED' ? true : parsed.data.pendingReaudit
 
-  const item = await prisma.workOrder.update({
-    where: { id: req.params.id },
-    data: {
-      ...parsed.data,
-      pendingReaudit,
-    },
-  })
+  try {
+    const item = await prisma.workOrder.update({
+      where: { id: req.params.id },
+      data: {
+        ...parsed.data,
+        pendingReaudit,
+      },
+    })
 
-  return res.json(item)
+    return res.json(item)
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+      return res.status(404).json({ message: 'Orden de trabajo no encontrada.' })
+    }
+    console.error('WorkOrder PATCH error:', error)
+    return res.status(500).json({ message: 'No se pudo actualizar la OT.' })
+  }
 })
 
 router.delete('/:id', async (req, res) => {
