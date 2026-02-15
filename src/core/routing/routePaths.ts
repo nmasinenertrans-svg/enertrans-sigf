@@ -18,6 +18,7 @@
   reports: '/reports',
   users: '/users',
   profile: '/profile',
+  maintenanceMode: '/maintenance-mode',
 } as const
 
 const unitIdPlaceholder = ':unitId'

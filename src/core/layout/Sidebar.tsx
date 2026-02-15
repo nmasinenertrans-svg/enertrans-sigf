@@ -12,6 +12,7 @@ const navigationItems = [
   { path: ROUTE_PATHS.inventory, label: 'Inventario', module: 'INVENTORY' },
   { path: ROUTE_PATHS.reports, label: 'Reportes', module: 'REPORTS' },
   { path: ROUTE_PATHS.users, label: 'Usuarios', module: 'USERS' },
+  { path: ROUTE_PATHS.maintenanceMode, label: 'Mantenimiento app', module: 'MAINTENANCE_MODE' },
 ]
 
 const getNavItemClassName = ({ isActive }: { isActive: boolean }) =>

@@ -13,6 +13,7 @@ export const permissionModules = [
   'INVENTORY',
   'REPORTS',
   'USERS',
+  'MAINTENANCE_MODE',
 ] as const
 export type PermissionModule = (typeof permissionModules)[number]
 
