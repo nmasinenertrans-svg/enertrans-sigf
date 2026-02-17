@@ -98,7 +98,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   }, [currentUser])
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-300/80 bg-amber-300 px-4 py-3 shadow-sm md:h-20 md:flex-nowrap md:px-8">
+    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300/80 bg-amber-300 px-3 py-2 shadow-sm md:h-20 md:flex-nowrap md:gap-3 md:px-8">
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
         <button
           type="button"
@@ -112,7 +112,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <img src={enertransLogoUrl} alt="Enertrans" className="h-8 w-auto md:h-10" />
+        <img src={enertransLogoUrl} alt="Enertrans" className="h-7 w-auto md:h-10" />
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-700 md:text-xs">ENERTRANS</p>
           <p className="truncate text-sm font-bold text-slate-900 md:text-lg">Sistema Integral de Gestion de Flota</p>
@@ -147,8 +147,8 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
           </button>
 
           {isNotificationsOpen ? (
-            <div className="absolute right-0 mt-3 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-              <div className="flex items-center justify-between">
+            <div className="fixed left-3 right-3 top-16 z-50 rounded-xl border border-slate-200 bg-white p-4 shadow-xl md:absolute md:left-auto md:right-0 md:top-auto md:mt-3 md:w-80">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-bold text-slate-900">Notificaciones</p>
                 <div className="flex items-center gap-2">
                   {unreadCount > 0 ? (
@@ -173,7 +173,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                   </button>
                 </div>
               </div>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 max-h-[55vh] space-y-2 overflow-auto md:max-h-[380px]">
                 {visibleNotifications.length === 0 ? (
                   <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
                     No hay alertas pendientes.
@@ -210,7 +210,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                 )}
               </div>
               {notifications.length > 0 ? (
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                   <p>
                     Mostrando {Math.min(8, visibleNotifications.length)} de{' '}
                     {showAllNotifications ? notifications.length : unreadNotifications.length}
@@ -232,7 +232,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
           <button
             type="button"
             onClick={() => setIsUserMenuOpen((prev) => !prev)}
-            className="flex items-center gap-3 rounded-lg border border-slate-900/10 bg-white/50 px-3 py-2 text-left backdrop-blur"
+            className="flex items-center gap-2 rounded-lg border border-slate-900/10 bg-white/50 px-2 py-2 text-left backdrop-blur md:gap-3 md:px-3"
           >
             {currentUser?.avatarUrl ? (
               <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="h-10 w-10 rounded-full object-cover" />
@@ -243,7 +243,9 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
             )}
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Usuario</p>
-              <p className="text-sm font-bold text-slate-900">{currentUser?.fullName ?? 'Sin usuario'}</p>
+              <p className="max-w-[140px] truncate text-sm font-bold text-slate-900 md:max-w-none">
+                {currentUser?.fullName ?? 'Sin usuario'}
+              </p>
               <p className="text-xs font-semibold text-slate-600">{currentUser?.role ?? ''}</p>
             </div>
             <svg className="h-4 w-4 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
