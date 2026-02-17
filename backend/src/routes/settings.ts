@@ -24,13 +24,26 @@ const defaultFeatureFlags = {
   showInventoryModule: true,
 }
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const withRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn()
+  } catch (error) {
+    await wait(600)
+    return await fn()
+  }
+}
+
 const loadSettings = async () => {
   try {
-    return await prisma.appSettings.upsert({
-      where: { id: 'app' },
-      update: {},
-      create: { id: 'app' },
-    })
+    return await withRetry(() =>
+      prisma.appSettings.upsert({
+        where: { id: 'app' },
+        update: {},
+        create: { id: 'app' },
+      }),
+    )
   } catch {
     return null
   }
@@ -69,25 +82,28 @@ router.put('/maintenance', async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const next = await prisma.appSettings.upsert({
-      where: { id: 'app' },
-      update: {
-        maintenanceEnabled: parsed.data.enabled,
-        maintenanceMessage: parsed.data.message ?? '',
-      },
-      create: {
-        id: 'app',
-        maintenanceEnabled: parsed.data.enabled,
-        maintenanceMessage: parsed.data.message ?? '',
-      },
-    })
+    const next = await withRetry(() =>
+      prisma.appSettings.upsert({
+        where: { id: 'app' },
+        update: {
+          maintenanceEnabled: parsed.data.enabled,
+          maintenanceMessage: parsed.data.message ?? '',
+        },
+        create: {
+          id: 'app',
+          maintenanceEnabled: parsed.data.enabled,
+          maintenanceMessage: parsed.data.message ?? '',
+        },
+      }),
+    )
 
     return res.json({
       enabled: next.maintenanceEnabled,
       message: next.maintenanceMessage ?? '',
     })
-  } catch {
-    return res.status(503).json({ message: 'No se pudo actualizar mantenimiento.' })
+  } catch (error) {
+    console.error('Error actualizando mantenimiento:', error)
+    return res.status(503).json({ message: 'No se pudo actualizar mantenimiento. Reintentá en 1 minuto.' })
   }
 })
 
@@ -111,17 +127,20 @@ router.put('/features', async (req: AuthenticatedRequest, res) => {
     const current = (settings?.featureFlags as Record<string, boolean> | null) ?? {}
     const merged = { ...defaultFeatureFlags, ...current, ...parsed.data }
 
-    const next = await prisma.appSettings.update({
-      where: { id: 'app' },
-      data: { featureFlags: merged },
-    })
+    const next = await withRetry(() =>
+      prisma.appSettings.update({
+        where: { id: 'app' },
+        data: { featureFlags: merged },
+      }),
+    )
 
     return res.json({
       ...defaultFeatureFlags,
       ...(next.featureFlags as Record<string, boolean>),
     })
-  } catch {
-    return res.status(503).json({ message: 'No se pudo actualizar la configuración.' })
+  } catch (error) {
+    console.error('Error actualizando feature flags:', error)
+    return res.status(503).json({ message: 'No se pudo actualizar la configuración. Reintentá en 1 minuto.' })
   }
 })
 
