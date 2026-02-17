@@ -14,7 +14,10 @@ const updateProfileSchema = z.object({
 
 router.get('/', async (req, res) => {
   const authReq = req as AuthenticatedRequest
-  const user = await prisma.user.findUnique({ where: { id: authReq.user.id } })
+  if (!authReq.userId) {
+    return res.status(401).json({ message: 'Token requerido.' })
+  }
+  const user = await prisma.user.findUnique({ where: { id: authReq.userId } })
   if (!user) {
     return res.status(404).json({ message: 'Usuario no encontrado.' })
   }
@@ -31,6 +34,9 @@ router.get('/', async (req, res) => {
 
 router.patch('/', async (req, res) => {
   const authReq = req as AuthenticatedRequest
+  if (!authReq.userId) {
+    return res.status(401).json({ message: 'Token requerido.' })
+  }
   const parsed = updateProfileSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: 'Datos invalidos.' })
@@ -46,7 +52,7 @@ router.patch('/', async (req, res) => {
   }
 
   const user = await prisma.user.update({
-    where: { id: authReq.user.id },
+    where: { id: authReq.userId },
     data: updateData,
   })
 
