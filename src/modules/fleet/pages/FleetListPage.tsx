@@ -183,7 +183,7 @@ export const FleetListPage = () => {
     }
 
     setQrError('')
-    let mediaStream: MediaStream
+    let mediaStream: MediaStream | null = null
     const videoConstraints: MediaStreamConstraints[] = [
       { video: { facingMode: { exact: 'environment' } }, audio: false },
       { video: { facingMode: 'environment' }, audio: false },
