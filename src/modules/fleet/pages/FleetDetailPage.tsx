@@ -70,14 +70,17 @@ const isMissingOrExpired = (expiresAt?: string): boolean => {
   return date.getTime() < new Date().setHours(0, 0, 0, 0)
 }
 
-const hasInvalidDocuments = (documents?: { rto?: { expiresAt?: string }; insurance?: { expiresAt?: string }; hoist?: { expiresAt?: string } }): boolean => {
+const hasInvalidDocuments = (
+  documents?: { rto?: { expiresAt?: string }; insurance?: { expiresAt?: string }; hoist?: { expiresAt?: string } },
+  requiresHoist = true,
+): boolean => {
   if (!documents) {
     return true
   }
   return (
     isMissingOrExpired(documents.rto?.expiresAt) ||
     isMissingOrExpired(documents.insurance?.expiresAt) ||
-    isMissingOrExpired(documents.hoist?.expiresAt)
+    (requiresHoist ? isMissingOrExpired(documents.hoist?.expiresAt) : false)
   )
 }
 
@@ -273,6 +276,7 @@ export const FleetDetailPage = () => {
   }
 
   const safeDocuments = selectedUnit?.documents ?? emptyDocs
+  const requiresHoist = Boolean(selectedUnit?.hasHydroCrane)
   const safeLubricants = selectedUnit?.lubricants ?? emptyLubricants
   const safeFilters = selectedUnit?.filters ?? emptyFilters
 
@@ -284,7 +288,7 @@ export const FleetDetailPage = () => {
         expiresAt: value,
       },
     }
-    const invalidDocs = hasInvalidDocuments(nextDocuments)
+    const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
     const nextOperationalStatus = invalidDocs
       ? 'OUT_OF_SERVICE'
       : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
@@ -331,7 +335,7 @@ export const FleetDetailPage = () => {
                 fileUrl: response.url,
               },
             }
-            const invalidDocs = hasInvalidDocuments(nextDocuments)
+            const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
             const nextOperationalStatus = invalidDocs
               ? 'OUT_OF_SERVICE'
               : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
@@ -356,7 +360,7 @@ export const FleetDetailPage = () => {
                 fileBase64: result,
               },
             }
-            const invalidDocs = hasInvalidDocuments(nextDocuments)
+            const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
             const nextOperationalStatus = invalidDocs
               ? 'OUT_OF_SERVICE'
               : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
@@ -377,7 +381,7 @@ export const FleetDetailPage = () => {
             fileBase64: result,
           },
         }
-        const invalidDocs = hasInvalidDocuments(nextDocuments)
+        const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
         const nextOperationalStatus = invalidDocs
           ? 'OUT_OF_SERVICE'
           : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
@@ -615,7 +619,11 @@ export const FleetDetailPage = () => {
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <dt className="text-xs uppercase tracking-wide text-slate-500">Tara / Carga maxima</dt>
             <dd className="mt-1 font-semibold text-slate-900">
-              {selectedUnit.tareWeightKg} kg / {selectedUnit.maxLoadKg} kg
+              {selectedUnit.tareWeightKg > 0 || selectedUnit.maxLoadKg > 0
+                ? `${selectedUnit.tareWeightKg > 0 ? `${selectedUnit.tareWeightKg} kg` : '—'} / ${
+                    selectedUnit.maxLoadKg > 0 ? `${selectedUnit.maxLoadKg} kg` : '—'
+                  }`
+                : 'No aplica'}
             </dd>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2 xl:col-span-3">
@@ -691,7 +699,7 @@ export const FleetDetailPage = () => {
               [
                 { key: 'rto', title: 'RTO / VTV' },
                 { key: 'insurance', title: 'Seguro' },
-                { key: 'hoist', title: 'Certificación de Izaje' },
+                ...(requiresHoist ? [{ key: 'hoist', title: 'Certificación de Izaje' } as const] : []),
               ] as const
             ).map((doc) => {
               const docData = safeDocuments[doc.key]
