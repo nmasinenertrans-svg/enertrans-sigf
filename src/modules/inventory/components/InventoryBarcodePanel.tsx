@@ -31,6 +31,7 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
   const [quantityInput, setQuantityInput] = useState(1)
   const [isCameraScanning, setIsCameraScanning] = useState(false)
   const [cameraError, setCameraError] = useState('')
+  const cameraCheckRef = useRef<number | null>(null)
 
   const barcodeDetectorCtor = useMemo(
     () => (window as WindowWithBarcodeDetector).BarcodeDetector,
@@ -46,6 +47,10 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
     if (scanIntervalRef.current !== null) {
       window.clearInterval(scanIntervalRef.current)
       scanIntervalRef.current = null
+    }
+    if (cameraCheckRef.current !== null) {
+      window.clearTimeout(cameraCheckRef.current)
+      cameraCheckRef.current = null
     }
 
     if (streamRef.current) {
@@ -102,8 +107,31 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
 
     if (videoRef.current) {
       videoRef.current.srcObject = mediaStream
-      await videoRef.current.play()
+      videoRef.current.muted = true
+      videoRef.current.autoplay = true
+      videoRef.current.playsInline = true
+      await new Promise<void>((resolve) => {
+        if (!videoRef.current) {
+          resolve()
+          return
+        }
+        videoRef.current.onloadedmetadata = () => resolve()
+      })
+      try {
+        await videoRef.current.play()
+      } catch {
+        setCameraError('No se pudo iniciar la cámara. Revisa permisos del navegador.')
+        stopCamera()
+        return
+      }
     }
+
+    cameraCheckRef.current = window.setTimeout(() => {
+      if (videoRef.current && (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0)) {
+        setCameraError('La cámara no entregó imagen. Probá cerrar y abrir nuevamente.')
+        stopCamera()
+      }
+    }, 1200)
 
     const detector = new barcodeDetectorCtor({
       formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39'],
@@ -212,7 +240,7 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
 
       {isCameraScanning ? (
         <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
-          <video ref={videoRef} className="h-56 w-full object-cover" muted playsInline />
+          <video ref={videoRef} className="h-56 w-full object-cover" muted playsInline autoPlay />
         </div>
       ) : null}
     </section>

@@ -50,6 +50,7 @@ export const FleetListPage = () => {
   const qrVideoRef = useRef<HTMLVideoElement | null>(null)
   const qrStreamRef = useRef<MediaStream | null>(null)
   const qrIntervalRef = useRef<number | null>(null)
+  const qrCameraCheckRef = useRef<number | null>(null)
 
   const qrDetectorCtor = useMemo(
     () => (window as WindowWithBarcodeDetector).BarcodeDetector,
@@ -113,6 +114,10 @@ export const FleetListPage = () => {
     if (qrIntervalRef.current !== null) {
       window.clearInterval(qrIntervalRef.current)
       qrIntervalRef.current = null
+    }
+    if (qrCameraCheckRef.current !== null) {
+      window.clearTimeout(qrCameraCheckRef.current)
+      qrCameraCheckRef.current = null
     }
 
     if (qrStreamRef.current) {
@@ -193,8 +198,31 @@ export const FleetListPage = () => {
 
     if (qrVideoRef.current) {
       qrVideoRef.current.srcObject = mediaStream
-      await qrVideoRef.current.play()
+      qrVideoRef.current.muted = true
+      qrVideoRef.current.autoplay = true
+      qrVideoRef.current.playsInline = true
+      await new Promise<void>((resolve) => {
+        if (!qrVideoRef.current) {
+          resolve()
+          return
+        }
+        qrVideoRef.current.onloadedmetadata = () => resolve()
+      })
+      try {
+        await qrVideoRef.current.play()
+      } catch {
+        setQrError('No se pudo iniciar la cámara. Revisa permisos del navegador.')
+        stopQrCamera()
+        return
+      }
     }
+
+    qrCameraCheckRef.current = window.setTimeout(() => {
+      if (qrVideoRef.current && (qrVideoRef.current.videoWidth === 0 || qrVideoRef.current.videoHeight === 0)) {
+        setQrError('La cámara no entregó imagen. Probá cerrar y abrir nuevamente.')
+        stopQrCamera()
+      }
+    }, 1200)
 
     const detector = new qrDetectorCtor({ formats: qrFormats })
 
@@ -466,7 +494,7 @@ export const FleetListPage = () => {
 
               {isQrScanning ? (
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
-                  <video ref={qrVideoRef} className="h-64 w-full object-cover" muted playsInline />
+                  <video ref={qrVideoRef} className="h-64 w-full object-cover" muted playsInline autoPlay />
                 </div>
               ) : null}
             </div>
