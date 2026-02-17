@@ -103,6 +103,11 @@ const documentStatusClassMap: Record<'overdue' | 'soon' | 'ok' | 'missing' | 'na
   na: 'border-slate-200 bg-slate-50 text-slate-500',
 }
 
+const auditResultLabelMap: Record<'APPROVED' | 'REJECTED', string> = {
+  APPROVED: 'APROBADO',
+  REJECTED: 'RECHAZADO',
+}
+
 const operationalStatusClassMap = {
   OPERATIONAL: 'border-emerald-300 bg-emerald-50 text-emerald-700',
   MAINTENANCE: 'border-amber-300 bg-amber-50 text-amber-700',
@@ -653,7 +658,7 @@ export const FleetDetailPage = () => {
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima auditoria</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestAudit ? latestAudit.result : 'Sin auditorias'}
+              {latestAudit ? auditResultLabelMap[latestAudit.result] : 'Sin auditorias'}
             </p>
             <p className="text-xs text-slate-600">
               {latestAudit ? formatDateTime(latestAudit.performedAt) : '—'}
@@ -662,7 +667,7 @@ export const FleetDetailPage = () => {
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima re-auditoria</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestReaudit ? latestReaudit.result : 'Sin re-auditorias'}
+              {latestReaudit ? auditResultLabelMap[latestReaudit.result] : 'Sin re-auditorias'}
             </p>
             <p className="text-xs text-slate-600">
               {latestReaudit ? formatDateTime(latestReaudit.performedAt) : '—'}
@@ -1059,6 +1064,7 @@ export const FleetDetailPage = () => {
                 unitAudits.map((audit) => (
                   <div key={audit.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                     <p className="font-semibold text-slate-900">{audit.result}</p>
+                    <p className="text-xs font-semibold text-slate-700">{auditResultLabelMap[audit.result]}</p>
                     <p className="text-xs text-slate-600">Auditor: {audit.auditorName || 'No definido'}</p>
                     <p className="text-xs text-slate-600">Fecha: {formatDateTime(audit.performedAt)}</p>
                   </div>
