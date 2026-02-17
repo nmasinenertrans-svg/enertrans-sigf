@@ -69,6 +69,7 @@ const hasInvalidDocuments = (
 }
 
 const unitTypesWithHydroCrane = new Set<FleetUnitType>(['CHASSIS_WITH_HYDROCRANE', 'TRACTOR_WITH_HYDROCRANE'])
+const unitTypesWithoutHoist = new Set<FleetUnitType>(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN'])
 
 export const FleetUnitForm = ({
   title,
@@ -84,9 +85,10 @@ export const FleetUnitForm = ({
   semiTrailerOptions = [],
 }: FleetUnitFormProps) => {
   const requiresHydroCrane = unitTypesWithHydroCrane.has(formData.unitType)
-  const showHydroCraneFields = requiresHydroCrane || formData.hasHydroCrane
+  const canHaveHydroCrane = !unitTypesWithoutHoist.has(formData.unitType)
+  const showHydroCraneFields = canHaveHydroCrane && (requiresHydroCrane || formData.hasHydroCrane)
   const showSemiTrailerFields = formData.hasSemiTrailer && !formData.semiTrailerUnitId
-  const invalidDocs = hasInvalidDocuments(formData.documents, formData.hasHydroCrane)
+  const invalidDocs = hasInvalidDocuments(formData.documents, showHydroCraneFields)
   const parseNumberInput = (value: string) => (value.trim() === '' ? 0 : Number(value))
 
   return (
@@ -177,6 +179,13 @@ export const FleetUnitForm = ({
 
               if (unitTypesWithHydroCrane.has(nextUnitType) && !formData.hasHydroCrane) {
                 onFieldChange('hasHydroCrane', true)
+              }
+
+              if (unitTypesWithoutHoist.has(nextUnitType) && formData.hasHydroCrane) {
+                onFieldChange('hasHydroCrane', false)
+                onFieldChange('hydroCraneBrand', '')
+                onFieldChange('hydroCraneModel', '')
+                onFieldChange('hydroCraneSerialNumber', '')
               }
             }}
             className={inputClassName}

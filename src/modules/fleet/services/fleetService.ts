@@ -10,13 +10,14 @@ import {
 } from '../../../types/domain'
 import type { FleetFormData, FleetFormErrors } from '../types'
 
-const MIN_WEIGHT_KG = 1
+const MIN_WEIGHT_KG = 0
 const MAX_TEXT_LENGTH = 120
 
 const fallbackOperationalStatus: FleetOperationalStatus = fleetOperationalStatuses[0]
 const fallbackUnitType: FleetUnitType = fleetUnitTypes[0]
 
 const unitTypesWithHydroCrane = new Set<FleetUnitType>(['CHASSIS_WITH_HYDROCRANE', 'TRACTOR_WITH_HYDROCRANE'])
+const unitTypesWithoutHoist = new Set<FleetUnitType>(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN'])
 
 export const fleetOperationalStatusLabelMap: Record<FleetOperationalStatus, string> = {
   OPERATIONAL: 'Operativo',
@@ -48,8 +49,12 @@ const sanitizeText = (value: string): string => value.trim()
 
 const requiresHydroCraneFromType = (unitType: FleetUnitType): boolean => unitTypesWithHydroCrane.has(unitType)
 
-const normalizeHydroCraneFlag = (unitType: FleetUnitType, hasHydroCrane: boolean): boolean =>
-  requiresHydroCraneFromType(unitType) || hasHydroCrane
+const normalizeHydroCraneFlag = (unitType: FleetUnitType, hasHydroCrane: boolean): boolean => {
+  if (unitTypesWithoutHoist.has(unitType)) {
+    return false
+  }
+  return requiresHydroCraneFromType(unitType) || hasHydroCrane
+}
 
 const createEmptyLubricants = (): FleetUnitLubricants => ({
   engineOil: '',
@@ -125,26 +130,31 @@ const isMissingOrExpired = (expiresAt?: string): boolean => {
   return date.getTime() < new Date().setHours(0, 0, 0, 0)
 }
 
-const hasInvalidDocuments = (documents?: FleetUnitDocuments): boolean => {
+const hasInvalidDocuments = (documents?: FleetUnitDocuments, requiresHoist = true): boolean => {
   if (!documents) {
     return true
   }
   return (
     isMissingOrExpired(documents.rto?.expiresAt) ||
     isMissingOrExpired(documents.insurance?.expiresAt) ||
-    isMissingOrExpired(documents.hoist?.expiresAt)
+    (requiresHoist ? isMissingOrExpired(documents.hoist?.expiresAt) : false)
   )
 }
 
 const deriveOperationalStatus = (
   requested: FleetOperationalStatus,
   documents?: FleetUnitDocuments,
-): FleetOperationalStatus => (hasInvalidDocuments(documents) ? 'OUT_OF_SERVICE' : requested)
+  requiresHoist = true,
+): FleetOperationalStatus => (hasInvalidDocuments(documents, requiresHoist) ? 'OUT_OF_SERVICE' : requested)
 
 const normalizeFormData = (formData: FleetFormData): FleetFormData => {
   const normalizedHydroCraneFlag = normalizeHydroCraneFlag(formData.unitType, formData.hasHydroCrane)
   const normalizedDocuments = normalizeDocuments(formData.documents)
-  const nextOperationalStatus = deriveOperationalStatus(formData.operationalStatus, normalizedDocuments)
+  const nextOperationalStatus = deriveOperationalStatus(
+    formData.operationalStatus,
+    normalizedDocuments,
+    normalizedHydroCraneFlag,
+  )
 
   return {
     ...formData,
@@ -419,12 +429,16 @@ export const validateFleetFormData = (
   )
 
   if (normalizedFormData.tareWeightKg < MIN_WEIGHT_KG) {
-    validationErrors.tareWeightKg = 'La tara debe ser mayor a cero.'
+    validationErrors.tareWeightKg = 'La tara no puede ser negativa.'
   }
 
   if (normalizedFormData.maxLoadKg < MIN_WEIGHT_KG) {
-    validationErrors.maxLoadKg = 'La carga maxima debe ser mayor a cero.'
-  } else if (normalizedFormData.maxLoadKg < normalizedFormData.tareWeightKg) {
+    validationErrors.maxLoadKg = 'La carga maxima no puede ser negativa.'
+  } else if (
+    normalizedFormData.maxLoadKg > 0 &&
+    normalizedFormData.tareWeightKg > 0 &&
+    normalizedFormData.maxLoadKg < normalizedFormData.tareWeightKg
+  ) {
     validationErrors.maxLoadKg = 'La carga maxima no puede ser menor que la tara.'
   }
 
@@ -512,6 +526,7 @@ export const normalizeFleetUnit = (unit: FleetUnit): FleetUnit => {
   const nextOperationalStatus = deriveOperationalStatus(
     fleetOperationalStatuses.includes(unit.operationalStatus) ? unit.operationalStatus : fallbackOperationalStatus,
     normalizedDocuments,
+    normalizedHydroCraneFlag,
   )
 
   return {

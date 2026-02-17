@@ -19,8 +19,12 @@ const unitTypesWithHydroCrane = new Set([
   'CHASSIS_WITH_HYDROCRANE',
   'TRACTOR_WITH_HYDROCRANE',
 ])
+const unitTypesWithoutHoist = new Set(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN'])
 
 const requiresHoist = (data: { hasHydroCrane?: boolean; unitType?: string }): boolean => {
+  if (data.unitType && unitTypesWithoutHoist.has(data.unitType)) {
+    return false
+  }
   if (data.hasHydroCrane) {
     return true
   }
