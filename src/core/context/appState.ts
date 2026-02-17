@@ -77,10 +77,9 @@ const defaultPersistedState: PersistedAppState = {
   inventoryItems: [],
 }
 
-const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError' | 'currentUser'> = {
+const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError'> = {
   isGlobalLoading: false,
   appError: null,
-  currentUser: null,
 }
 
 const defaultMaintenanceStatus: MaintenanceStatus = {
