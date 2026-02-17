@@ -50,18 +50,21 @@ const isMissingOrExpired = (expiresAt?: string): boolean => {
   return date.getTime() < new Date().setHours(0, 0, 0, 0)
 }
 
-const hasInvalidDocuments = (documents?: {
-  rto?: { expiresAt?: string }
-  insurance?: { expiresAt?: string }
-  hoist?: { expiresAt?: string }
-}): boolean => {
+const hasInvalidDocuments = (
+  documents?: {
+    rto?: { expiresAt?: string }
+    insurance?: { expiresAt?: string }
+    hoist?: { expiresAt?: string }
+  },
+  requiresHoist = true,
+): boolean => {
   if (!documents) {
     return true
   }
   return (
     isMissingOrExpired(documents.rto?.expiresAt) ||
     isMissingOrExpired(documents.insurance?.expiresAt) ||
-    isMissingOrExpired(documents.hoist?.expiresAt)
+    (requiresHoist ? isMissingOrExpired(documents.hoist?.expiresAt) : false)
   )
 }
 
@@ -83,7 +86,7 @@ export const FleetUnitForm = ({
   const requiresHydroCrane = unitTypesWithHydroCrane.has(formData.unitType)
   const showHydroCraneFields = requiresHydroCrane || formData.hasHydroCrane
   const showSemiTrailerFields = formData.hasSemiTrailer && !formData.semiTrailerUnitId
-  const invalidDocs = hasInvalidDocuments(formData.documents)
+  const invalidDocs = hasInvalidDocuments(formData.documents, formData.hasHydroCrane)
   const parseNumberInput = (value: string) => (value.trim() === '' ? 0 : Number(value))
 
   return (
@@ -201,7 +204,7 @@ export const FleetUnitForm = ({
           </select>
           {invalidDocs ? (
             <span className="text-xs font-semibold text-rose-700">
-              La unidad queda fuera de servicio si faltan o vencen RTO, seguro o izaje.
+              La unidad queda fuera de servicio si faltan o vencen RTO y seguro. El izaje aplica solo si tiene hidrogrua.
             </span>
           ) : null}
         </InputRow>
@@ -237,7 +240,7 @@ export const FleetUnitForm = ({
           <input
             type="number"
             min={0}
-            value={formData.tareWeightKg === 0 ? '' : formData.tareWeightKg}
+            value={formData.tareWeightKg}
             onChange={(event) => onFieldChange('tareWeightKg', parseNumberInput(event.target.value))}
             className={inputClassName}
             placeholder="Ej: 5000"
@@ -248,7 +251,7 @@ export const FleetUnitForm = ({
           <input
             type="number"
             min={0}
-            value={formData.maxLoadKg === 0 ? '' : formData.maxLoadKg}
+            value={formData.maxLoadKg}
             onChange={(event) => onFieldChange('maxLoadKg', parseNumberInput(event.target.value))}
             className={inputClassName}
             placeholder="Ej: 12000"
