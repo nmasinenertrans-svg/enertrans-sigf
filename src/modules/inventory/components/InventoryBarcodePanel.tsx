@@ -30,6 +30,7 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
   const [barcodeInput, setBarcodeInput] = useState('')
   const [quantityInput, setQuantityInput] = useState(1)
   const [isCameraScanning, setIsCameraScanning] = useState(false)
+  const [cameraError, setCameraError] = useState('')
 
   const barcodeDetectorCtor = useMemo(
     () => (window as WindowWithBarcodeDetector).BarcodeDetector,
@@ -61,31 +62,41 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
 
   useEffect(() => stopCamera, [])
 
-  const handleSubmit = () => {
-    const normalizedBarcode = barcodeInput.trim()
+  const submitBarcode = (value: string, quantity = quantityInput) => {
+    const normalizedBarcode = value.trim()
 
-    if (normalizedBarcode.length < minBarcodeLength || quantityInput <= 0) {
+    if (normalizedBarcode.length < minBarcodeLength || quantity <= 0) {
       return
     }
 
     onSubmitBarcode({
       barcode: normalizedBarcode,
-      quantity: Math.floor(quantityInput),
+      quantity: Math.floor(quantity),
     })
 
     setBarcodeInput('')
     setQuantityInput(1)
   }
 
+  const handleSubmit = () => submitBarcode(barcodeInput)
+
   const startCamera = async () => {
     if (!hasCameraSupport || !barcodeDetectorCtor) {
       return
     }
 
-    const mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' },
-      audio: false,
-    })
+    setCameraError('')
+    let mediaStream: MediaStream
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      })
+    } catch {
+      setCameraError('No se pudo acceder a la cámara. Revisa permisos del navegador.')
+      return
+    }
 
     streamRef.current = mediaStream
 
@@ -108,7 +119,7 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
         const rawValue = detections[0]?.rawValue?.trim()
 
         if (rawValue && rawValue.length >= minBarcodeLength) {
-          setBarcodeInput(rawValue)
+          submitBarcode(rawValue)
           stopCamera()
         }
       } catch {
@@ -192,6 +203,12 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
           </span>
         )}
       </div>
+
+      {cameraError ? (
+        <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+          {cameraError}
+        </p>
+      ) : null}
 
       {isCameraScanning ? (
         <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-900">

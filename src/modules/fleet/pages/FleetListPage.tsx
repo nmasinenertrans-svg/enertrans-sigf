@@ -1,14 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { BackLink } from '../../../components/shared/BackLink'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { ROUTE_PATHS, buildFleetDetailPath } from '../../../core/routing/routePaths'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { FleetUnitCard } from '../components/FleetUnitCard'
 import { createEmptyFleetFormData, getOperationalStatusLabel, normalizeFleetUnits, toFleetUnit } from '../services/fleetService'
 import type { FleetUnit } from '../../../types/domain'
 import { apiRequest } from '../../../services/api/apiClient'
+
+interface BarcodeDetectorInstance {
+  detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>>
+}
+
+interface BarcodeDetectorCtor {
+  new (options?: { formats?: string[] }): BarcodeDetectorInstance
+}
+
+interface WindowWithBarcodeDetector extends Window {
+  BarcodeDetector?: BarcodeDetectorCtor
+}
+
+const qrFormats = ['qr_code']
 
 export const FleetListPage = () => {
   const [searchParams] = useSearchParams()
@@ -28,6 +42,23 @@ export const FleetListPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'>('ALL')
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
+  const [isQrOpen, setIsQrOpen] = useState(false)
+  const [isQrScanning, setIsQrScanning] = useState(false)
+  const [qrInput, setQrInput] = useState('')
+  const [qrError, setQrError] = useState('')
+  const qrVideoRef = useRef<HTMLVideoElement | null>(null)
+  const qrStreamRef = useRef<MediaStream | null>(null)
+  const qrIntervalRef = useRef<number | null>(null)
+
+  const qrDetectorCtor = useMemo(
+    () => (window as WindowWithBarcodeDetector).BarcodeDetector,
+    [],
+  )
+
+  const hasQrSupport = useMemo(
+    () => Boolean(qrDetectorCtor && navigator.mediaDevices?.getUserMedia),
+    [qrDetectorCtor],
+  )
 
   const summary = useMemo(
     () => ({
@@ -76,6 +107,114 @@ export const FleetListPage = () => {
       setStatusFilter(statusParam)
     }
   }, [searchParams])
+
+  const stopQrCamera = () => {
+    if (qrIntervalRef.current !== null) {
+      window.clearInterval(qrIntervalRef.current)
+      qrIntervalRef.current = null
+    }
+
+    if (qrStreamRef.current) {
+      qrStreamRef.current.getTracks().forEach((track) => track.stop())
+      qrStreamRef.current = null
+    }
+
+    if (qrVideoRef.current) {
+      qrVideoRef.current.srcObject = null
+    }
+
+    setIsQrScanning(false)
+  }
+
+  useEffect(() => stopQrCamera, [])
+
+  const resolveUnitFromQrValue = (value: string): FleetUnit | undefined => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return undefined
+    }
+
+    try {
+      const parsedUrl = new URL(trimmed)
+      const pathParts = parsedUrl.pathname.split('/').filter(Boolean)
+      const fleetIndex = pathParts.indexOf('fleet')
+      if (fleetIndex >= 0 && pathParts[fleetIndex + 1]) {
+        const idFromUrl = pathParts[fleetIndex + 1]
+        return normalizedUnits.find((unit) => unit.id === idFromUrl)
+      }
+    } catch {
+      // Not a URL, continue.
+    }
+
+    if (trimmed.startsWith('qr-')) {
+      return normalizedUnits.find((unit) => unit.qrId === trimmed)
+    }
+
+    const uuidMatch = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+    if (uuidMatch) {
+      const candidate = uuidMatch[0]
+      return normalizedUnits.find((unit) => unit.id === candidate)
+    }
+
+    return undefined
+  }
+
+  const handleQrValue = (value: string) => {
+    const matched = resolveUnitFromQrValue(value)
+    if (!matched) {
+      setQrError('QR no reconocido para una unidad registrada.')
+      return
+    }
+    setIsQrOpen(false)
+    setQrInput('')
+    setQrError('')
+    navigate(buildFleetDetailPath(matched.id))
+  }
+
+  const startQrCamera = async () => {
+    if (!hasQrSupport || !qrDetectorCtor) {
+      return
+    }
+
+    setQrError('')
+    let mediaStream: MediaStream
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false,
+      })
+    } catch {
+      setQrError('No se pudo acceder a la cámara. Revisa permisos del navegador.')
+      return
+    }
+
+    qrStreamRef.current = mediaStream
+
+    if (qrVideoRef.current) {
+      qrVideoRef.current.srcObject = mediaStream
+      await qrVideoRef.current.play()
+    }
+
+    const detector = new qrDetectorCtor({ formats: qrFormats })
+
+    qrIntervalRef.current = window.setInterval(async () => {
+      if (!qrVideoRef.current) {
+        return
+      }
+      try {
+        const detections = await detector.detect(qrVideoRef.current)
+        const rawValue = detections[0]?.rawValue?.trim()
+        if (rawValue) {
+          stopQrCamera()
+          handleQrValue(rawValue)
+        }
+      } catch {
+        // ignore detection noise
+      }
+    }, 500)
+
+    setIsQrScanning(true)
+  }
 
   const handleConfirmDelete = () => {
     if (!canDelete) {
@@ -134,6 +273,13 @@ export const FleetListPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsQrOpen(true)}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Escanear QR
+          </button>
           {isDev && featureFlags.showDemoUnitButton ? (
             <button
               type="button"
@@ -243,6 +389,88 @@ export const FleetListPage = () => {
           onCancel={() => setUnitPendingDelete(null)}
           onConfirm={handleConfirmDelete}
         />
+      ) : null}
+
+      {isQrOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Escanear QR de unidad</h3>
+                <p className="text-sm text-slate-600">Apunta la cámara o pega el link/ID del QR.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  stopQrCamera()
+                  setIsQrOpen(false)
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                QR / Link
+                <input
+                  value={qrInput}
+                  onChange={(event) => setQrInput(event.target.value)}
+                  placeholder="Pega el QR o escanea con la cámara"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQrValue(qrInput)}
+                  className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
+                >
+                  Buscar unidad
+                </button>
+                {hasQrSupport ? (
+                  isQrScanning ? (
+                    <button
+                      type="button"
+                      onClick={stopQrCamera}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Detener cámara
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void startQrCamera()
+                      }}
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Escanear con cámara
+                    </button>
+                  )
+                ) : (
+                  <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    Cámara no disponible en este navegador.
+                  </span>
+                )}
+              </div>
+
+              {qrError ? (
+                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {qrError}
+                </p>
+              ) : null}
+
+              {isQrScanning ? (
+                <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
+                  <video ref={qrVideoRef} className="h-64 w-full object-cover" muted playsInline />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   )
