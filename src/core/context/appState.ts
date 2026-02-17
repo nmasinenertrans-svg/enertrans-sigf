@@ -9,7 +9,7 @@ import type {
   MaintenancePlan,
   RepairRecord,
   WorkOrder,
-  type MaintenanceStatus,
+  MaintenanceStatus,
 } from '../../types/domain'
 
 const STORAGE_KEY = 'enertrans.sigf.app-state.v1'
