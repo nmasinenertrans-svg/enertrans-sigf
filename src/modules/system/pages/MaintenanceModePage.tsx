@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiRequest } from '../../../services/api/apiClient'
+import { getQueueItems } from '../../../services/offline/queue'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { BackLink } from '../../../components/shared/BackLink'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
@@ -15,6 +16,10 @@ export const MaintenanceModePage = () => {
   const [flags, setFlags] = useState(featureFlags)
   const [isSaving, setIsSaving] = useState(false)
   const [isSavingFlags, setIsSavingFlags] = useState(false)
+  const [diagnosticRunning, setDiagnosticRunning] = useState(false)
+  const [diagnosticResults, setDiagnosticResults] = useState<
+    Array<{ label: string; status: 'ok' | 'error'; detail?: string }>
+  >([])
 
   useEffect(() => {
     const load = async () => {
@@ -67,6 +72,73 @@ export const MaintenanceModePage = () => {
     } finally {
       setIsSavingFlags(false)
     }
+  }
+
+  const runDiagnostics = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setAppError('Sin conexión. El diagnóstico completo requiere internet.')
+      return
+    }
+
+    setDiagnosticRunning(true)
+    setDiagnosticResults([])
+    const results: Array<{ label: string; status: 'ok' | 'error'; detail?: string }> = []
+
+    const pushResult = (label: string, status: 'ok' | 'error', detail?: string) => {
+      results.push({ label, status, detail })
+      setDiagnosticResults([...results])
+    }
+
+    try {
+      const health = await fetch(`${import.meta.env.VITE_API_BASE_URL}/health`)
+      if (health.ok) {
+        pushResult('Backend /health', 'ok')
+      } else {
+        pushResult('Backend /health', 'error', `Status ${health.status}`)
+      }
+    } catch (error) {
+      pushResult('Backend /health', 'error', String((error as Error)?.message ?? 'Error'))
+    }
+
+    try {
+      await apiRequest('/settings/maintenance')
+      pushResult('Auth + DB (settings)', 'ok')
+    } catch (error) {
+      pushResult('Auth + DB (settings)', 'error', String((error as Error)?.message ?? 'Error'))
+    }
+
+    try {
+      await apiRequest('/fleet')
+      pushResult('Lectura Flota', 'ok')
+    } catch (error) {
+      pushResult('Lectura Flota', 'error', String((error as Error)?.message ?? 'Error'))
+    }
+
+    try {
+      const queueItems = await getQueueItems()
+      pushResult('Cola offline', 'ok', `Pendientes: ${queueItems.length}`)
+    } catch (error) {
+      pushResult('Cola offline', 'error', String((error as Error)?.message ?? 'Error'))
+    }
+
+    try {
+      const tinyPng =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P8z8BQDwAF/AL+7AfQGQAAAABJRU5ErkJggg=='
+      const response = await apiRequest<{ url: string }>('/files/upload', {
+        method: 'POST',
+        body: {
+          fileName: `diagnostic-${Date.now()}.png`,
+          contentType: 'image/png',
+          dataUrl: tinyPng,
+          folder: 'diagnostics',
+        },
+      })
+      pushResult('Storage (upload)', 'ok', response.url)
+    } catch (error) {
+      pushResult('Storage (upload)', 'error', String((error as Error)?.message ?? 'Error'))
+    }
+
+    setDiagnosticRunning(false)
   }
 
   return (
@@ -165,6 +237,43 @@ export const MaintenanceModePage = () => {
           >
             {isSavingFlags ? 'Guardando...' : 'Guardar configuración'}
           </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-800">Diagnóstico completo</h3>
+        <p className="mt-1 text-xs text-slate-500">Prueba backend, auth, base, storage y cola offline.</p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={runDiagnostics}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
+            disabled={diagnosticRunning}
+          >
+            {diagnosticRunning ? 'Ejecutando...' : 'Ejecutar diagnóstico'}
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {diagnosticResults.length === 0 ? (
+            <p className="text-xs text-slate-500">Sin resultados.</p>
+          ) : (
+            diagnosticResults.map((item) => (
+              <div
+                key={`${item.label}-${item.status}`}
+                className={[
+                  'flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs',
+                  item.status === 'ok'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-rose-200 bg-rose-50 text-rose-700',
+                ].join(' ')}
+              >
+                <span className="font-semibold">{item.label}</span>
+                <span className="text-[11px]">{item.detail ?? (item.status === 'ok' ? 'OK' : 'Error')}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </section>
