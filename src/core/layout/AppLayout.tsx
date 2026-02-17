@@ -130,7 +130,6 @@ export const AppLayout = () => {
       users,
       currentUser,
       maintenanceStatus,
-      featureFlags,
     },
     actions: {
       setFleetUnits,
@@ -145,7 +144,6 @@ export const AppLayout = () => {
       setAppError,
       setGlobalLoading,
       setMaintenanceStatus,
-      setFeatureFlags,
     },
   } = useAppContext()
 
@@ -157,6 +155,7 @@ export const AppLayout = () => {
   const repairsRef = useRef(repairs)
   const externalRequestsRef = useRef(externalRequests)
   const inventoryRef = useRef(inventoryItems)
+  const featureFlagsRef = useRef(featureFlags)
 
 
   useEffect(() => {
@@ -190,6 +189,10 @@ export const AppLayout = () => {
   useEffect(() => {
     inventoryRef.current = inventoryItems
   }, [inventoryItems])
+
+  useEffect(() => {
+    featureFlagsRef.current = featureFlags
+  }, [featureFlags])
 
   const notifications = useMemo(() => {
     const items: {
@@ -360,7 +363,6 @@ export const AppLayout = () => {
           repairsResponse,
           externalRequestsResponse,
           inventoryResponse,
-          featureFlagsResponse,
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
@@ -370,7 +372,6 @@ export const AppLayout = () => {
           safeRequest<RepairRecord[]>('/repairs'),
           safeRequest<ExternalRequest[]>('/external-requests'),
           safeRequest<InventoryItem[]>('/inventory'),
-          safeRequest<FeatureFlags>('/settings/features'),
         ])
 
         const mappedAudits: AuditRecord[] | null = auditsResponse
@@ -448,9 +449,6 @@ export const AppLayout = () => {
             ) ?? inventoryResponse,
           )
         }
-        if (featureFlagsResponse) {
-          setFeatureFlags({ ...featureFlags, ...featureFlagsResponse })
-        }
       } finally {
         setGlobalLoading(false)
         isFetchingRef.current = false
@@ -471,9 +469,28 @@ export const AppLayout = () => {
     setAppError,
     setGlobalLoading,
     setCurrentUser,
-    featureFlags,
-    setFeatureFlags,
   ])
+
+  useEffect(() => {
+    if (!currentUser?.id || !syncStatus.isOnline) {
+      return
+    }
+
+    const loadFlags = async () => {
+      try {
+        const response = await apiRequest<FeatureFlags>('/settings/features')
+        const current = featureFlagsRef.current
+        const merged = { ...current, ...response }
+        if (JSON.stringify(current) !== JSON.stringify(merged)) {
+          setFeatureFlags(merged)
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    loadFlags()
+  }, [currentUser?.id, syncStatus.isOnline, setFeatureFlags])
 
   useEffect(() => {
     if (!currentUser?.id || !syncStatus.isOnline) {
