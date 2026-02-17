@@ -222,6 +222,7 @@ model AppSettings {
   id                 String   @id @default("app")
   maintenanceEnabled Boolean  @default(false)
   maintenanceMessage String   @default("")
+  featureFlags       Json     @default("{}")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

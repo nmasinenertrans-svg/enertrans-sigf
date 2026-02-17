@@ -19,9 +19,18 @@ import {
 export const ExternalRequestsPage = () => {
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, externalRequests },
+    state: { fleetUnits, externalRequests, featureFlags },
     actions: { setExternalRequests, setAppError },
   } = useAppContext()
+
+  if (!featureFlags.showExternalRequestsModule) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900">Notas de pedido externo</h2>
+        <p className="mt-2 text-sm text-slate-600">Este módulo está deshabilitado por configuración.</p>
+      </section>
+    )
+  }
 
   const canCreate = can('WORK_ORDERS', 'create')
   const canDelete = can('WORK_ORDERS', 'delete')

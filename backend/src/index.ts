@@ -29,7 +29,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }))
 app.use('/auth', authRoutes)
 app.use(maintenanceGuard)
 
-app.use('/settings', requireAuth, requirePermission('MAINTENANCE_MODE', 'view'), settingsRoutes)
+app.use('/settings', requireAuth, settingsRoutes)
 app.use('/users/me', requireAuth, profileRoutes)
 app.use('/users', requireAuth, requirePermission('USERS', 'view'), usersRoutes)
 app.use('/fleet', requireAuth, requirePermission('FLEET', 'view'), fleetRoutes)

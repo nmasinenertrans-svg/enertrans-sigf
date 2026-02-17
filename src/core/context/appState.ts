@@ -4,6 +4,7 @@ import type {
   AppUser,
   AuditRecord,
   ExternalRequest,
+  FeatureFlags,
   FleetUnit,
   InventoryItem,
   MaintenancePlan,
@@ -26,6 +27,7 @@ interface PersistedAppState {
   repairs: RepairRecord[]
   externalRequests: ExternalRequest[]
   inventoryItems: InventoryItem[]
+  featureFlags: FeatureFlags
 }
 
 export interface AppState extends PersistedAppState {
@@ -45,6 +47,7 @@ export interface AppActions {
   setRepairs: (repairs: RepairRecord[]) => void
   setExternalRequests: (requests: ExternalRequest[]) => void
   setInventoryItems: (items: InventoryItem[]) => void
+  setFeatureFlags: (flags: FeatureFlags) => void
   setGlobalLoading: (value: boolean) => void
   setAppError: (errorMessage: string | null) => void
   setMaintenanceStatus: (status: MaintenanceStatus) => void
@@ -65,6 +68,13 @@ const defaultUsers: AppUser[] = [
   },
 ]
 
+const defaultFeatureFlags: FeatureFlags = {
+  showDemoUnitButton: true,
+  showExternalRequestsModule: true,
+  showReportsModule: true,
+  showInventoryModule: true,
+}
+
 const defaultPersistedState: PersistedAppState = {
   currentUserId: null,
   users: defaultUsers,
@@ -75,6 +85,7 @@ const defaultPersistedState: PersistedAppState = {
   repairs: [],
   externalRequests: [],
   inventoryItems: [],
+  featureFlags: defaultFeatureFlags,
 }
 
 const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError'> = {
@@ -123,6 +134,7 @@ export const getInitialAppState = (): AppState => {
     repairs: persistedState.repairs ?? [],
     externalRequests: persistedState.externalRequests ?? [],
     inventoryItems: persistedState.inventoryItems ?? [],
+    featureFlags: persistedState.featureFlags ?? defaultFeatureFlags,
   }
   const fallbackUserId = typeof window !== 'undefined' ? window.localStorage.getItem(CURRENT_USER_KEY) : null
   const sessionUserId =
@@ -154,6 +166,7 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   repairs: state.repairs,
   externalRequests: state.externalRequests,
   inventoryItems: state.inventoryItems,
+  featureFlags: state.featureFlags,
 })
 
 export const persistAppState = (state: AppState): void => {

@@ -9,6 +9,7 @@ import type {
   AppUser,
   AuditRecord,
   ExternalRequest,
+  FeatureFlags,
   FleetUnit,
   InventoryItem,
   MaintenancePlan,
@@ -129,6 +130,7 @@ export const AppLayout = () => {
       users,
       currentUser,
       maintenanceStatus,
+      featureFlags,
     },
     actions: {
       setFleetUnits,
@@ -143,6 +145,7 @@ export const AppLayout = () => {
       setAppError,
       setGlobalLoading,
       setMaintenanceStatus,
+      setFeatureFlags,
     },
   } = useAppContext()
 
@@ -357,6 +360,7 @@ export const AppLayout = () => {
           repairsResponse,
           externalRequestsResponse,
           inventoryResponse,
+          featureFlagsResponse,
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
@@ -366,6 +370,7 @@ export const AppLayout = () => {
           safeRequest<RepairRecord[]>('/repairs'),
           safeRequest<ExternalRequest[]>('/external-requests'),
           safeRequest<InventoryItem[]>('/inventory'),
+          safeRequest<FeatureFlags>('/settings/features'),
         ])
 
         const mappedAudits: AuditRecord[] | null = auditsResponse
@@ -443,6 +448,9 @@ export const AppLayout = () => {
             ) ?? inventoryResponse,
           )
         }
+        if (featureFlagsResponse) {
+          setFeatureFlags({ ...featureFlags, ...featureFlagsResponse })
+        }
       } finally {
         setGlobalLoading(false)
         isFetchingRef.current = false
@@ -463,6 +471,8 @@ export const AppLayout = () => {
     setAppError,
     setGlobalLoading,
     setCurrentUser,
+    featureFlags,
+    setFeatureFlags,
   ])
 
   useEffect(() => {

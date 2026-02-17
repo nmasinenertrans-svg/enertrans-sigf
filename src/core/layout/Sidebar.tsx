@@ -1,6 +1,7 @@
 ﻿import { NavLink } from 'react-router-dom'
 import { ROUTE_PATHS } from '../routing/routePaths'
 import { usePermissions } from '../auth/usePermissions'
+import { useAppContext } from '../hooks/useAppContext'
 import type { PermissionModule } from '../../types/domain'
 
 const navigationItems: Array<{ path: string; label: string; module: PermissionModule }> = [
@@ -31,8 +32,25 @@ interface SidebarProps {
 
 export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { can } = usePermissions()
+  const {
+    state: { featureFlags },
+  } = useAppContext()
 
-  const navItems = navigationItems.filter((item) => can(item.module, 'view'))
+  const navItems = navigationItems.filter((item) => {
+    if (!can(item.module, 'view')) {
+      return false
+    }
+    if (item.path === ROUTE_PATHS.externalRequests && !featureFlags.showExternalRequestsModule) {
+      return false
+    }
+    if (item.path === ROUTE_PATHS.reports && !featureFlags.showReportsModule) {
+      return false
+    }
+    if (item.path === ROUTE_PATHS.inventory && !featureFlags.showInventoryModule) {
+      return false
+    }
+    return true
+  })
 
   return (
     <>

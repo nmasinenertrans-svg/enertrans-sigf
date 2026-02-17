@@ -91,6 +91,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setFeatureFlags: (flags) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, featureFlags: flags }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setGlobalLoading: (value) => {
         setState((previousState) => ({
           ...previousState,

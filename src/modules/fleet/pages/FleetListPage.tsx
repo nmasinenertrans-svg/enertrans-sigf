@@ -13,7 +13,7 @@ import { apiRequest } from '../../../services/api/apiClient'
 export const FleetListPage = () => {
   const [searchParams] = useSearchParams()
   const {
-    state: { fleetUnits },
+    state: { fleetUnits, featureFlags },
     actions: { setFleetUnits },
   } = useAppContext()
   const {
@@ -134,7 +134,7 @@ export const FleetListPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {isDev ? (
+          {isDev && featureFlags.showDemoUnitButton ? (
             <button
               type="button"
               onClick={handleQuickSeed}

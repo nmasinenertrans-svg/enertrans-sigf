@@ -6,13 +6,15 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 
 export const MaintenanceModePage = () => {
   const {
-    state: { maintenanceStatus },
-    actions: { setMaintenanceStatus, setAppError },
+    state: { maintenanceStatus, featureFlags },
+    actions: { setMaintenanceStatus, setFeatureFlags, setAppError },
   } = useAppContext()
 
   const [enabled, setEnabled] = useState(maintenanceStatus.enabled)
   const [message, setMessage] = useState(maintenanceStatus.message)
+  const [flags, setFlags] = useState(featureFlags)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSavingFlags, setIsSavingFlags] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -21,6 +23,9 @@ export const MaintenanceModePage = () => {
         setMaintenanceStatus({ enabled: response.enabled, message: response.message ?? '' })
         setEnabled(response.enabled)
         setMessage(response.message ?? '')
+        const flagsResponse = await apiRequest<typeof featureFlags>('/settings/features')
+        setFeatureFlags({ ...featureFlags, ...flagsResponse })
+        setFlags({ ...featureFlags, ...flagsResponse })
       } catch {
         // ignore
       }
@@ -44,6 +49,23 @@ export const MaintenanceModePage = () => {
       setAppError('No se pudo actualizar el modo mantenimiento.')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleSaveFlags = async () => {
+    setIsSavingFlags(true)
+    try {
+      const response = await apiRequest<typeof featureFlags>('/settings/features', {
+        method: 'PUT',
+        body: flags,
+      })
+      setFeatureFlags({ ...featureFlags, ...response })
+      setFlags({ ...featureFlags, ...response })
+      setAppError('Configuración de módulos actualizada.')
+    } catch {
+      setAppError('No se pudo actualizar la configuración de módulos.')
+    } finally {
+      setIsSavingFlags(false)
     }
   }
 
@@ -89,6 +111,61 @@ export const MaintenanceModePage = () => {
             placeholder="Ej: La aplicación se encuentra en mantenimiento, contacte con el área de soporte."
           />
         </label>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="text-sm font-semibold text-slate-800">Panel DEV - Módulos y botones</h3>
+        <p className="mt-1 text-xs text-slate-500">Oculta módulos y acciones en producción.</p>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar botón “Cargar unidad demo”
+            <input
+              type="checkbox"
+              checked={flags.showDemoUnitButton}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showDemoUnitButton: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar módulo Inventario
+            <input
+              type="checkbox"
+              checked={flags.showInventoryModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showInventoryModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar módulo Reportes
+            <input
+              type="checkbox"
+              checked={flags.showReportsModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showReportsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar módulo Notas de pedido externo
+            <input
+              type="checkbox"
+              checked={flags.showExternalRequestsModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showExternalRequestsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={handleSaveFlags}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+            disabled={isSavingFlags}
+          >
+            {isSavingFlags ? 'Guardando...' : 'Guardar configuración'}
+          </button>
+        </div>
       </div>
     </section>
   )

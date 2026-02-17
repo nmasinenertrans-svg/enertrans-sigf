@@ -113,8 +113,17 @@ const isWithinRange = (value: string | undefined, startDate?: string, endDate?: 
 
 export const ReportsPage = () => {
   const {
-    state: { audits, workOrders, repairs, fleetUnits },
+    state: { audits, workOrders, repairs, fleetUnits, featureFlags },
   } = useAppContext()
+
+  if (!featureFlags.showReportsModule) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
+        <p className="mt-2 text-sm text-slate-600">Este módulo está deshabilitado por configuración.</p>
+      </section>
+    )
+  }
 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')

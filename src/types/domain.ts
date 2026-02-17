@@ -69,6 +69,13 @@ export interface MaintenanceStatus {
   message: string
 }
 
+export interface FeatureFlags {
+  showDemoUnitButton: boolean
+  showExternalRequestsModule: boolean
+  showReportsModule: boolean
+  showInventoryModule: boolean
+}
+
 export interface FleetUnit {
   id: string
   qrId: string

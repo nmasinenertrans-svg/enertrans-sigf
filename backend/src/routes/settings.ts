@@ -10,6 +10,20 @@ const maintenanceSchema = z.object({
   message: z.string().optional(),
 })
 
+const featureFlagsSchema = z.object({
+  showDemoUnitButton: z.boolean().optional(),
+  showExternalRequestsModule: z.boolean().optional(),
+  showReportsModule: z.boolean().optional(),
+  showInventoryModule: z.boolean().optional(),
+})
+
+const defaultFeatureFlags = {
+  showDemoUnitButton: true,
+  showExternalRequestsModule: true,
+  showReportsModule: true,
+  showInventoryModule: true,
+}
+
 const loadSettings = async () => {
   try {
     return await prisma.appSettings.upsert({
@@ -27,6 +41,15 @@ router.get('/maintenance', async (_req, res) => {
   return res.json({
     enabled: settings?.maintenanceEnabled ?? false,
     message: settings?.maintenanceMessage ?? '',
+  })
+})
+
+router.get('/features', async (_req, res) => {
+  const settings = await loadSettings()
+  const stored = (settings?.featureFlags as Record<string, boolean> | null) ?? {}
+  return res.json({
+    ...defaultFeatureFlags,
+    ...stored,
   })
 })
 
@@ -65,6 +88,40 @@ router.put('/maintenance', async (req: AuthenticatedRequest, res) => {
     })
   } catch {
     return res.status(503).json({ message: 'No se pudo actualizar mantenimiento.' })
+  }
+})
+
+router.put('/features', async (req: AuthenticatedRequest, res) => {
+  if (!req.userId) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.userId } })
+  if (!user || user.role !== 'DEV') {
+    return res.status(403).json({ message: 'Solo un usuario DEV puede actualizar la configuración.' })
+  }
+
+  const parsed = featureFlagsSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Datos invalidos.' })
+  }
+
+  try {
+    const settings = await loadSettings()
+    const current = (settings?.featureFlags as Record<string, boolean> | null) ?? {}
+    const merged = { ...defaultFeatureFlags, ...current, ...parsed.data }
+
+    const next = await prisma.appSettings.update({
+      where: { id: 'app' },
+      data: { featureFlags: merged },
+    })
+
+    return res.json({
+      ...defaultFeatureFlags,
+      ...(next.featureFlags as Record<string, boolean>),
+    })
+  } catch {
+    return res.status(503).json({ message: 'No se pudo actualizar la configuración.' })
   }
 })
 
