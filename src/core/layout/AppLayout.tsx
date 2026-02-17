@@ -245,18 +245,18 @@ export const AppLayout = () => {
       })
     })
 
-    const rejectedByUnit = new Map<string, typeof audits[number]>()
+    const latestAuditByUnit = new Map<string, typeof audits[number]>()
     audits.forEach((audit) => {
-      if (audit.result !== 'REJECTED') {
-        return
-      }
-      const existing = rejectedByUnit.get(audit.unitId)
+      const existing = latestAuditByUnit.get(audit.unitId)
       if (!existing || new Date(audit.performedAt).getTime() > new Date(existing.performedAt).getTime()) {
-        rejectedByUnit.set(audit.unitId, audit)
+        latestAuditByUnit.set(audit.unitId, audit)
       }
     })
 
-    rejectedByUnit.forEach((audit) => {
+    latestAuditByUnit.forEach((audit) => {
+      if (audit.result !== 'REJECTED') {
+        return
+      }
       const unit = fleetUnits.find((fleetUnit) => fleetUnit.id === audit.unitId)
       items.push({
         id: `audit-${audit.id}`,

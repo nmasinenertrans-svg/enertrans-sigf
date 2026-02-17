@@ -68,6 +68,11 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     persistReadNotifications(readNotificationIds)
   }, [readNotificationIds])
 
+  useEffect(() => {
+    const activeIds = new Set(notifications.map((item) => item.id))
+    setReadNotificationIds((prev) => prev.filter((id) => activeIds.has(id)))
+  }, [notifications])
+
   const statusLabel = syncStatus.isOnline ? 'Online' : 'Offline'
   const statusClass = syncStatus.isOnline
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
