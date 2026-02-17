@@ -251,6 +251,18 @@ export const FleetDetailPage = () => {
     )
   }
 
+  const hasOpenWorkOrders = unitWorkOrders.some((workOrder) => workOrder.status !== 'CLOSED')
+
+  const resolveOperationalStatus = (invalidDocs: boolean) => {
+    if (invalidDocs) {
+      return 'OUT_OF_SERVICE'
+    }
+    if (hasOpenWorkOrders) {
+      return 'MAINTENANCE'
+    }
+    return 'OPERATIONAL'
+  }
+
   const emptyDoc = { fileName: '', fileBase64: '', fileUrl: '', expiresAt: '' }
   const emptyDocs = { rto: emptyDoc, insurance: emptyDoc, hoist: emptyDoc, hoistNotApplicable: false }
   const emptyLubricants = {
@@ -295,11 +307,7 @@ export const FleetDetailPage = () => {
       },
     }
     const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
-    const nextOperationalStatus = invalidDocs
-      ? 'OUT_OF_SERVICE'
-      : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
-        ? 'OPERATIONAL'
-        : selectedUnit?.operationalStatus ?? 'OPERATIONAL'
+    const nextOperationalStatus = resolveOperationalStatus(invalidDocs)
     updateUnit((unit) => ({
       ...unit,
       documents: nextDocuments,
@@ -342,11 +350,7 @@ export const FleetDetailPage = () => {
               },
             }
             const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
-            const nextOperationalStatus = invalidDocs
-              ? 'OUT_OF_SERVICE'
-              : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
-                ? 'OPERATIONAL'
-                : selectedUnit?.operationalStatus ?? 'OPERATIONAL'
+            const nextOperationalStatus = resolveOperationalStatus(invalidDocs)
             updateUnit((unit) => ({
               ...unit,
               documents: nextDocuments,
@@ -367,11 +371,7 @@ export const FleetDetailPage = () => {
               },
             }
             const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
-            const nextOperationalStatus = invalidDocs
-              ? 'OUT_OF_SERVICE'
-              : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
-                ? 'OPERATIONAL'
-                : selectedUnit?.operationalStatus ?? 'OPERATIONAL'
+            const nextOperationalStatus = resolveOperationalStatus(invalidDocs)
             updateUnit((unit) => ({
               ...unit,
               documents: nextDocuments,
@@ -388,11 +388,7 @@ export const FleetDetailPage = () => {
           },
         }
         const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
-        const nextOperationalStatus = invalidDocs
-          ? 'OUT_OF_SERVICE'
-          : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
-            ? 'OPERATIONAL'
-            : selectedUnit?.operationalStatus ?? 'OPERATIONAL'
+        const nextOperationalStatus = resolveOperationalStatus(invalidDocs)
         updateUnit((unit) => ({
           ...unit,
           documents: nextDocuments,
@@ -758,11 +754,7 @@ export const FleetDetailPage = () => {
                             hoistNotApplicable: event.target.checked,
                           }
                           const invalidDocs = hasInvalidDocuments(nextDocuments as any, requiresHoist)
-                          const nextOperationalStatus = invalidDocs
-                            ? 'OUT_OF_SERVICE'
-                            : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
-                              ? 'OPERATIONAL'
-                              : selectedUnit?.operationalStatus ?? 'OPERATIONAL'
+                          const nextOperationalStatus = resolveOperationalStatus(invalidDocs)
                           updateUnit((unit) => ({
                             ...unit,
                             documents: nextDocuments as any,
