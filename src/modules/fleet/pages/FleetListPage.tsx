@@ -190,14 +190,12 @@ export const FleetListPage = () => {
       { video: true, audio: false },
     ]
 
-    let lastError: unknown = null
     for (const constraints of videoConstraints) {
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-        lastError = null
         break
       } catch (error) {
-        lastError = error
+        void error
       }
     }
 
