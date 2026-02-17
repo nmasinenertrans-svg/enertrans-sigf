@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { BackLink } from '../../../components/shared/BackLink'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -34,6 +34,7 @@ export const FleetListPage = () => {
     state: { currentUser },
   } = useAppContext()
   const { can } = usePermissions()
+  const navigate = useNavigate()
   const canEdit = can('FLEET', 'edit')
   const canDelete = can('FLEET', 'delete')
   const isDev = currentUser?.role === 'DEV'
