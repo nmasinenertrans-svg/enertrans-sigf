@@ -18,7 +18,7 @@ const createUserId = (): string => {
 export const UsersPage = () => {
   const {
     state: { users },
-    actions: { setUsers },
+    actions: { setUsers, setAppError },
   } = useAppContext()
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
@@ -148,6 +148,24 @@ export const UsersPage = () => {
     }
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       apiRequest(`/users/${userId}`, { method: 'DELETE' }).catch(() => null)
+    }
+  }
+
+  const handleResetPassword = (userId: string) => {
+    const newPassword = window.prompt('Nueva contraseña temporal (min 6 caracteres):')
+    if (!newPassword || newPassword.trim().length < 6) {
+      setAppError('La contraseña debe tener al menos 6 caracteres.')
+      return
+    }
+    setUsers(
+      users.map((user) =>
+        user.id === userId
+          ? { ...user, password: newPassword.trim() }
+          : user,
+      ),
+    )
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      apiRequest(`/users/${userId}`, { method: 'PATCH', body: { password: newPassword.trim() } }).catch(() => null)
     }
   }
 
@@ -416,6 +434,13 @@ export const UsersPage = () => {
                   className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                 >
                   Eliminar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleResetPassword(user.id)}
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                >
+                  Resetear contraseña
                 </button>
               </div>
             </div>
