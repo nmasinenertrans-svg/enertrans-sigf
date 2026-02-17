@@ -130,6 +130,7 @@ export const AppLayout = () => {
       users,
       currentUser,
       maintenanceStatus,
+      featureFlags,
     },
     actions: {
       setFleetUnits,
