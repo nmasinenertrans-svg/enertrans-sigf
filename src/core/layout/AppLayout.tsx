@@ -145,6 +145,7 @@ export const AppLayout = () => {
       setAppError,
       setGlobalLoading,
       setMaintenanceStatus,
+      setFeatureFlags,
     },
   } = useAppContext()
 
