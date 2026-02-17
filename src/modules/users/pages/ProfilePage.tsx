@@ -44,7 +44,9 @@ export const ProfilePage = () => {
   }
 
   const handleSaveProfile = async () => {
-    if (!fullName.trim()) {
+    const safeFullName = (fullName ?? '').trim()
+    const safeAvatarUrl = (avatarUrl ?? '').trim()
+    if (!safeFullName) {
       setAppError('El nombre completo es obligatorio.')
       return
     }
@@ -61,8 +63,8 @@ export const ProfilePage = () => {
 
     setIsSaving(true)
     const payload: any = {
-      fullName: fullName.trim(),
-      avatarUrl: avatarUrl.trim(),
+      fullName: safeFullName,
+      avatarUrl: safeAvatarUrl,
     }
 
     if (newPassword) {
@@ -73,7 +75,7 @@ export const ProfilePage = () => {
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       try {
-        await apiRequest(`/users/${user.id}`, { method: 'PATCH', body: payload })
+        await apiRequest('/users/me', { method: 'PATCH', body: payload })
       } catch {
         setAppError('No se pudo guardar el perfil en el servidor.')
       }
@@ -109,7 +111,7 @@ export const ProfilePage = () => {
           })
           setAvatarUrl(response.url)
           updateLocalUser({ avatarUrl: response.url })
-          await apiRequest(`/users/${user.id}`, { method: 'PATCH', body: { avatarUrl: response.url } })
+          await apiRequest('/users/me', { method: 'PATCH', body: { avatarUrl: response.url } })
           return
         } catch {
           setAppError('No se pudo subir la foto en la nube. Se guardo localmente.')

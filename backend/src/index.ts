@@ -13,6 +13,7 @@ import inventoryRoutes from './routes/inventory.js'
 import filesRoutes from './routes/files.js'
 import externalRequestsRoutes from './routes/externalRequests.js'
 import settingsRoutes from './routes/settings.js'
+import profileRoutes from './routes/profile.js'
 import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
@@ -29,6 +30,7 @@ app.use('/auth', authRoutes)
 app.use(maintenanceGuard)
 
 app.use('/settings', requireAuth, requirePermission('MAINTENANCE_MODE', 'view'), settingsRoutes)
+app.use('/users/me', requireAuth, profileRoutes)
 app.use('/users', requireAuth, requirePermission('USERS', 'view'), usersRoutes)
 app.use('/fleet', requireAuth, requirePermission('FLEET', 'view'), fleetRoutes)
 app.use('/maintenance', requireAuth, requirePermission('MAINTENANCE', 'view'), maintenanceRoutes)
