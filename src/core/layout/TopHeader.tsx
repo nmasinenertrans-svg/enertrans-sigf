@@ -98,8 +98,8 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   }, [currentUser])
 
   return (
-    <header className="flex h-20 items-center justify-between border-b border-amber-300/80 bg-amber-300 px-6 shadow-sm md:px-8">
-      <div className="flex items-center gap-3">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-300/80 bg-amber-300 px-4 py-3 shadow-sm md:h-20 md:flex-nowrap md:px-8">
+      <div className="flex min-w-0 items-center gap-2 md:gap-3">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -112,18 +112,20 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <img src={enertransLogoUrl} alt="Enertrans" className="h-10 w-auto" />
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-700">ENERTRANS</p>
-          <p className="text-lg font-bold text-slate-900">Sistema Integral de Gestion de Flota</p>
+        <img src={enertransLogoUrl} alt="Enertrans" className="h-8 w-auto md:h-10" />
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-700 md:text-xs">ENERTRANS</p>
+          <p className="truncate text-sm font-bold text-slate-900 md:text-lg">Sistema Integral de Gestion de Flota</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass}`}>
+      <div className="ml-auto flex flex-wrap items-center gap-2 md:ml-0 md:gap-3">
+        <div className={`rounded-full border px-2 py-1 text-[10px] font-semibold md:px-3 md:text-xs ${statusClass}`}>
           {statusLabel}
-          {syncStatus.isSyncing ? ' • Sincronizando' : ''}
-          {syncStatus.pendingCount > 0 ? ` • Pendientes: ${syncStatus.pendingCount}` : ''}
+          {syncStatus.isSyncing ? <span className="hidden sm:inline"> • Sincronizando</span> : null}
+          {syncStatus.pendingCount > 0 ? (
+            <span className="hidden sm:inline">{` • Pendientes: ${syncStatus.pendingCount}`}</span>
+          ) : null}
         </div>
 
         <div className="relative">
