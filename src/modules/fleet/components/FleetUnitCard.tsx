@@ -53,6 +53,13 @@ export const FleetUnitCard = ({ unit, onRequestDelete, canEdit, canDelete }: Fle
 
     <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
       {(['rto', 'insurance', 'hoist'] as const).map((docKey) => {
+        if (docKey === 'hoist' && unit.documents?.hoistNotApplicable) {
+          return (
+            <span key={docKey} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-500">
+              Izaje N/A
+            </span>
+          )
+        }
         const labelMap = { rto: 'RTO', insurance: 'Seguro', hoist: 'Izaje' }
         const status = getDocumentStatus(unit.documents?.[docKey]?.expiresAt)
         const statusClass = documentStatusClassMap[status]

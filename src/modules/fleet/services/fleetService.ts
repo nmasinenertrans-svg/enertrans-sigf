@@ -95,6 +95,7 @@ const createEmptyDocuments = (): FleetUnitDocuments => ({
   rto: createEmptyDocument(),
   insurance: createEmptyDocument(),
   hoist: createEmptyDocument(),
+  hoistNotApplicable: false,
 })
 
 const normalizeLubricants = (lubricants?: FleetUnitLubricants): FleetUnitLubricants => ({
@@ -117,6 +118,7 @@ const normalizeDocuments = (documents?: FleetUnitDocuments): FleetUnitDocuments 
   rto: normalizeDocument(documents?.rto),
   insurance: normalizeDocument(documents?.insurance),
   hoist: normalizeDocument(documents?.hoist),
+  hoistNotApplicable: documents?.hoistNotApplicable ?? false,
 })
 
 const isMissingOrExpired = (expiresAt?: string): boolean => {
@@ -137,7 +139,7 @@ const hasInvalidDocuments = (documents?: FleetUnitDocuments, requiresHoist = tru
   return (
     isMissingOrExpired(documents.rto?.expiresAt) ||
     isMissingOrExpired(documents.insurance?.expiresAt) ||
-    (requiresHoist ? isMissingOrExpired(documents.hoist?.expiresAt) : false)
+    (requiresHoist && !documents.hoistNotApplicable ? isMissingOrExpired(documents.hoist?.expiresAt) : false)
   )
 }
 
@@ -150,9 +152,12 @@ const deriveOperationalStatus = (
 const normalizeFormData = (formData: FleetFormData): FleetFormData => {
   const normalizedHydroCraneFlag = normalizeHydroCraneFlag(formData.unitType, formData.hasHydroCrane)
   const normalizedDocuments = normalizeDocuments(formData.documents)
+  const defaultHoistNotApplicable = unitTypesWithoutHoist.has(formData.unitType)
+  const hoistNotApplicable =
+    formData.documents?.hoistNotApplicable ?? normalizedDocuments.hoistNotApplicable ?? defaultHoistNotApplicable
   const nextOperationalStatus = deriveOperationalStatus(
     formData.operationalStatus,
-    normalizedDocuments,
+    { ...normalizedDocuments, hoistNotApplicable },
     normalizedHydroCraneFlag,
   )
 
@@ -180,7 +185,7 @@ const normalizeFormData = (formData: FleetFormData): FleetFormData => {
     currentHydroHours: Number.isFinite(formData.currentHydroHours) ? formData.currentHydroHours : 0,
     lubricants: normalizeLubricants(formData.lubricants),
     filters: normalizeFilters(formData.filters),
-    documents: normalizedDocuments,
+    documents: { ...normalizedDocuments, hoistNotApplicable },
   }
 }
 
@@ -523,9 +528,11 @@ export const normalizeFleetUnit = (unit: FleetUnit): FleetUnit => {
   const normalizedHydroCraneFlag = normalizeHydroCraneFlag(normalizedUnitType, Boolean(unit.hasHydroCrane))
   const normalizedQrId = unit.qrId && unit.qrId.trim() ? unit.qrId : buildQrId(unit.id)
   const normalizedDocuments = normalizeDocuments(unit.documents)
+  const defaultHoistNotApplicable = unitTypesWithoutHoist.has(normalizedUnitType)
+  const hoistNotApplicable = normalizedDocuments.hoistNotApplicable ?? defaultHoistNotApplicable
   const nextOperationalStatus = deriveOperationalStatus(
     fleetOperationalStatuses.includes(unit.operationalStatus) ? unit.operationalStatus : fallbackOperationalStatus,
-    normalizedDocuments,
+    { ...normalizedDocuments, hoistNotApplicable },
     normalizedHydroCraneFlag,
   )
 
@@ -557,7 +564,7 @@ export const normalizeFleetUnit = (unit: FleetUnit): FleetUnit => {
     currentHydroHours: Number.isFinite(unit.currentHydroHours) ? unit.currentHydroHours : 0,
     lubricants: normalizeLubricants(unit.lubricants),
     filters: normalizeFilters(unit.filters),
-    documents: normalizedDocuments,
+    documents: { ...normalizedDocuments, hoistNotApplicable },
   }
 }
 

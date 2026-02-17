@@ -214,6 +214,9 @@ export const AppLayout = () => {
 
     fleetUnits.forEach((unit) => {
       ;(Object.keys(documentLabelMap) as Array<keyof typeof documentLabelMap>).forEach((docKey) => {
+        if (docKey === 'hoist' && unit.documents?.hoistNotApplicable) {
+          return
+        }
         const expiresAt = unit.documents?.[docKey]?.expiresAt
         const status = getDocumentStatus(expiresAt)
         const label = documentLabelMap[docKey]

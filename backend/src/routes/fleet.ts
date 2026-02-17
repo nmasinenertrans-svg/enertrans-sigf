@@ -41,7 +41,7 @@ const hasInvalidDocuments = (documents: any, needsHoist: boolean): boolean => {
   return (
     isMissingOrExpired(documents?.rto?.expiresAt) ||
     isMissingOrExpired(documents?.insurance?.expiresAt) ||
-    (needsHoist ? isMissingOrExpired(documents?.hoist?.expiresAt) : false)
+    (needsHoist && !documents?.hoistNotApplicable ? isMissingOrExpired(documents?.hoist?.expiresAt) : false)
   )
 }
 
@@ -118,12 +118,17 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    const normalizedDocuments = {
+      ...parsed.data.documents,
+      hoistNotApplicable:
+        parsed.data.documents?.hoistNotApplicable ?? (parsed.data.unitType ? unitTypesWithoutHoist.has(parsed.data.unitType) : false),
+    }
     const operationalStatus = deriveOperationalStatus(
       parsed.data.operationalStatus as FleetOperationalStatus,
-      parsed.data.documents,
+      normalizedDocuments,
       requiresHoist(parsed.data),
     )
-    const unit = await prisma.fleetUnit.create({ data: { ...parsed.data, operationalStatus } })
+    const unit = await prisma.fleetUnit.create({ data: { ...parsed.data, documents: normalizedDocuments, operationalStatus } })
     return res.status(201).json(unit)
   } catch (error: any) {
     console.error('Fleet POST error:', error)
@@ -156,7 +161,12 @@ router.patch('/:id', async (req, res) => {
       }
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
-    const nextDocuments = parsed.data.documents ?? current.documents
+    const nextDocuments = {
+      ...(parsed.data.documents ?? current.documents),
+      hoistNotApplicable:
+        parsed.data.documents?.hoistNotApplicable ??
+        (parsed.data.unitType ? unitTypesWithoutHoist.has(parsed.data.unitType) : current.documents?.hoistNotApplicable ?? false),
+    }
     const requestedStatus = (parsed.data.operationalStatus ?? current.operationalStatus) as FleetOperationalStatus
     const nextHasHydroCrane = parsed.data.hasHydroCrane ?? current.hasHydroCrane
     const nextUnitType = parsed.data.unitType ?? current.unitType

@@ -47,6 +47,7 @@ const buildDonutPaths = (segments: Segment[]) => {
 const DonutChart = ({ title, segments }: { title: string; segments: Segment[] }) => {
   const visibleSegments = toSegments(segments)
   const paths = buildDonutPaths(visibleSegments)
+  const total = segments.reduce((acc, item) => acc + item.value, 0)
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -72,19 +73,24 @@ const DonutChart = ({ title, segments }: { title: string; segments: Segment[] })
         </svg>
 
         <div className="w-full overflow-hidden rounded-lg border border-slate-200">
-          <div className="grid grid-cols-2 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+          <div className="grid grid-cols-3 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
             <div className="border-r border-slate-200 px-3 py-2">Estado</div>
-            <div className="px-3 py-2 text-right">Cantidad</div>
+            <div className="border-r border-slate-200 px-3 py-2 text-right">Cantidad</div>
+            <div className="px-3 py-2 text-right">%</div>
           </div>
-          {segments.map((item) => (
-            <div key={item.label} className="grid grid-cols-2 border-t border-slate-200 text-sm">
-              <div className="flex items-center gap-2 px-3 py-2 text-slate-700">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                {item.label}
+          {segments.map((item) => {
+            const percent = total > 0 ? Math.round((item.value / total) * 100) : 0
+            return (
+              <div key={item.label} className="grid grid-cols-3 border-t border-slate-200 text-sm">
+                <div className="flex items-center gap-2 px-3 py-2 text-slate-700">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                  {item.label}
+                </div>
+                <div className="px-3 py-2 text-right font-semibold text-slate-900">{formatCount(item.value)}</div>
+                <div className="px-3 py-2 text-right font-semibold text-slate-900">{percent}%</div>
               </div>
-              <div className="px-3 py-2 text-right font-semibold text-slate-900">{formatCount(item.value)}</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
@@ -94,6 +100,7 @@ const DonutChart = ({ title, segments }: { title: string; segments: Segment[] })
 const OccupancyChart = ({ segments }: { segments: Segment[] }) => {
   const visibleSegments = toSegments(segments)
   const paths = buildDonutPaths(visibleSegments)
+  const total = segments.reduce((acc, item) => acc + item.value, 0)
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -124,15 +131,20 @@ const OccupancyChart = ({ segments }: { segments: Segment[] }) => {
         </div>
 
         <div className="grid gap-2">
-          {segments.map((item) => (
-            <div key={item.label} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-              <div className="flex items-center gap-2 text-sm text-slate-700">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                {item.label}
+          {segments.map((item) => {
+            const percent = total > 0 ? Math.round((item.value / total) * 100) : 0
+            return (
+              <div key={item.label} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                  {item.label}
+                </div>
+                <div className="text-sm font-semibold text-slate-900">
+                  {formatCount(item.value)} ({percent}%)
+                </div>
               </div>
-              <div className="text-sm font-semibold text-slate-900">{formatCount(item.value)}</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
@@ -190,6 +202,9 @@ export const DashboardPage = () => {
   const hoistSegments = useMemo(() => {
     const counts = { overdue: 0, soon: 0, ok: 0, missing: 0 }
     fleetUnits.forEach((unit) => {
+      if (unit.documents?.hoistNotApplicable) {
+        return
+      }
       const status = getDocumentStatus(unit.documents?.hoist?.expiresAt)
       counts[status] += 1
     })

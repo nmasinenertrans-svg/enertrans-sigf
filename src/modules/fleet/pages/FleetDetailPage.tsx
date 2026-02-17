@@ -41,7 +41,10 @@ const buildQrImageUrl = (profileUrl: string): string =>
 const daysBetween = (target: Date, reference: Date) =>
   Math.ceil((target.getTime() - reference.getTime()) / (1000 * 60 * 60 * 24))
 
-const getDocumentStatus = (expiresAt?: string, thresholdDays = 30) => {
+const getDocumentStatus = (expiresAt?: string, thresholdDays = 30, notApplicable = false) => {
+  if (notApplicable) {
+    return 'na'
+  }
   if (!expiresAt) {
     return 'missing'
   }
@@ -80,22 +83,24 @@ const hasInvalidDocuments = (
   return (
     isMissingOrExpired(documents.rto?.expiresAt) ||
     isMissingOrExpired(documents.insurance?.expiresAt) ||
-    (requiresHoist ? isMissingOrExpired(documents.hoist?.expiresAt) : false)
+    (requiresHoist && !(documents as any).hoistNotApplicable ? isMissingOrExpired(documents.hoist?.expiresAt) : false)
   )
 }
 
-const documentStatusLabelMap: Record<'overdue' | 'soon' | 'ok' | 'missing', string> = {
+const documentStatusLabelMap: Record<'overdue' | 'soon' | 'ok' | 'missing' | 'na', string> = {
   overdue: 'Vencido',
   soon: 'Por vencer',
   ok: 'Vigente',
   missing: 'Sin registro',
+  na: 'No aplica',
 }
 
-const documentStatusClassMap: Record<'overdue' | 'soon' | 'ok' | 'missing', string> = {
+const documentStatusClassMap: Record<'overdue' | 'soon' | 'ok' | 'missing' | 'na', string> = {
   overdue: 'border-rose-300 bg-rose-50 text-rose-700',
   soon: 'border-amber-300 bg-amber-50 text-amber-700',
   ok: 'border-emerald-300 bg-emerald-50 text-emerald-700',
   missing: 'border-slate-200 bg-slate-100 text-slate-600',
+  na: 'border-slate-200 bg-slate-50 text-slate-500',
 }
 
 const operationalStatusClassMap = {
@@ -247,7 +252,7 @@ export const FleetDetailPage = () => {
   }
 
   const emptyDoc = { fileName: '', fileBase64: '', fileUrl: '', expiresAt: '' }
-  const emptyDocs = { rto: emptyDoc, insurance: emptyDoc, hoist: emptyDoc }
+  const emptyDocs = { rto: emptyDoc, insurance: emptyDoc, hoist: emptyDoc, hoistNotApplicable: false }
   const emptyLubricants = {
     engineOil: '',
     engineOilLiters: '',
@@ -277,6 +282,7 @@ export const FleetDetailPage = () => {
 
   const safeDocuments = selectedUnit?.documents ?? emptyDocs
   const requiresHoist = Boolean(selectedUnit?.hasHydroCrane)
+  const hoistNotApplicable = Boolean(safeDocuments.hoistNotApplicable)
   const safeLubricants = selectedUnit?.lubricants ?? emptyLubricants
   const safeFilters = selectedUnit?.filters ?? emptyFilters
 
@@ -699,12 +705,13 @@ export const FleetDetailPage = () => {
               [
                 { key: 'rto', title: 'RTO / VTV' },
                 { key: 'insurance', title: 'Seguro' },
-                ...(requiresHoist ? [{ key: 'hoist', title: 'Certificación de Izaje' } as const] : []),
+                { key: 'hoist', title: 'Certificación de Izaje' },
               ] as const
             ).map((doc) => {
               const docData = safeDocuments[doc.key]
               const hasFile = Boolean(docData.fileUrl || docData.fileBase64)
-              const docStatus = getDocumentStatus(docData.expiresAt)
+              const isNotApplicable = doc.key === 'hoist' && hoistNotApplicable
+              const docStatus = getDocumentStatus(docData.expiresAt, 30, isNotApplicable)
               const docStatusClass = documentStatusClassMap[docStatus]
               return (
                 <div key={doc.key} className="rounded-lg border border-slate-200 p-4">
@@ -717,10 +724,14 @@ export const FleetDetailPage = () => {
                       <span
                         className={[
                           'rounded-full px-2 py-1 text-xs font-semibold',
-                          hasFile ? 'border border-emerald-300 bg-emerald-50 text-emerald-700' : 'border border-slate-200 bg-slate-100 text-slate-600',
+                          isNotApplicable
+                            ? 'border border-slate-200 bg-slate-50 text-slate-500'
+                            : hasFile
+                              ? 'border border-emerald-300 bg-emerald-50 text-emerald-700'
+                              : 'border border-slate-200 bg-slate-100 text-slate-600',
                         ].join(' ')}
                       >
-                        {hasFile ? 'Cargado' : 'No cargado'}
+                        {isNotApplicable ? 'No aplica' : hasFile ? 'Cargado' : 'No cargado'}
                       </span>
                       <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${docStatusClass}`}>
                         {documentStatusLabelMap[docStatus]}
@@ -733,8 +744,41 @@ export const FleetDetailPage = () => {
                     className="mt-2 w-full rounded border border-slate-300 px-2 py-1 text-sm text-slate-900 outline-none focus:border-amber-400"
                     value={docData.expiresAt}
                     onChange={(event) => handleDocumentExpirationChange(doc.key, event.target.value)}
-                    disabled={!canEditFleet}
+                    disabled={!canEditFleet || (doc.key === 'hoist' && hoistNotApplicable)}
                   />
+
+                  {doc.key === 'hoist' ? (
+                    <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={hoistNotApplicable}
+                        onChange={(event) => {
+                          const nextDocuments = {
+                            ...(selectedUnit?.documents ?? emptyDocs),
+                            hoistNotApplicable: event.target.checked,
+                          }
+                          const invalidDocs = hasInvalidDocuments(nextDocuments as any, requiresHoist)
+                          const nextOperationalStatus = invalidDocs
+                            ? 'OUT_OF_SERVICE'
+                            : selectedUnit?.operationalStatus === 'OUT_OF_SERVICE'
+                              ? 'OPERATIONAL'
+                              : selectedUnit?.operationalStatus ?? 'OPERATIONAL'
+                          updateUnit((unit) => ({
+                            ...unit,
+                            documents: nextDocuments as any,
+                            operationalStatus: nextOperationalStatus,
+                          }))
+                          if (typeof navigator !== 'undefined' && navigator.onLine && selectedUnit) {
+                            apiRequest(`/fleet/${selectedUnit.id}`, {
+                              method: 'PATCH',
+                              body: { documents: nextDocuments, operationalStatus: nextOperationalStatus },
+                            }).catch(() => null)
+                          }
+                        }}
+                      />
+                      Izaje no aplica
+                    </label>
+                  ) : null}
 
                   <div className="mt-3 text-xs text-slate-600">
                     {docData.fileName ? `Archivo: ${docData.fileName}` : 'Sin archivos seleccionados'}
@@ -749,7 +793,7 @@ export const FleetDetailPage = () => {
                     type="file"
                     className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-200 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-300"
                     onChange={(event) => handleDocumentFileChange(doc.key, event.target.files?.[0] ?? null)}
-                    disabled={!canEditFleet}
+                    disabled={!canEditFleet || (doc.key === 'hoist' && hoistNotApplicable)}
                   />
                 </div>
               )

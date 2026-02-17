@@ -152,6 +152,7 @@ export interface FleetUnitDocuments {
   rto: FleetUnitDocument
   insurance: FleetUnitDocument
   hoist: FleetUnitDocument
+  hoistNotApplicable?: boolean
 }
 
 export interface MaintenancePlan {
