@@ -200,6 +200,14 @@ export const FleetDetailPage = () => {
     return [...unitAudits].sort((a, b) => new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime())[0]
   }, [unitAudits])
 
+  const latestReaudit = useMemo(() => {
+    const reauditList = unitAudits.filter((audit) => audit.auditKind === 'REAUDIT')
+    if (reauditList.length === 0) {
+      return undefined
+    }
+    return [...reauditList].sort((a, b) => new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime())[0]
+  }, [unitAudits])
+
   const unitWorkOrders = useMemo(
     () => workOrders.filter((workOrder) => workOrder.unitId === unitId),
     [workOrders, unitId],
@@ -211,6 +219,13 @@ export const FleetDetailPage = () => {
   )
 
   const unitRepairs = useMemo(() => repairs.filter((repair) => repair.unitId === unitId), [repairs, unitId])
+
+  const latestRepair = useMemo(() => {
+    if (unitRepairs.length === 0) {
+      return undefined
+    }
+    return [...unitRepairs].sort((a, b) => new Date(b.createdAt ?? '').getTime() - new Date(a.createdAt ?? '').getTime())[0]
+  }, [unitRepairs])
 
   const unitExternalRequests = useMemo(
     () => externalRequests.filter((request) => request.unitId === unitId),
@@ -645,9 +660,28 @@ export const FleetDetailPage = () => {
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima re-auditoria</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              {latestReaudit ? latestReaudit.result : 'Sin re-auditorias'}
+            </p>
+            <p className="text-xs text-slate-600">
+              {latestReaudit ? formatDateTime(latestReaudit.performedAt) : '—'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">OT abiertas</p>
             <p className="mt-2 text-2xl font-bold text-slate-900">{openWorkOrdersCount}</p>
             <p className="text-xs text-slate-600">Total OT: {unitWorkOrders.length}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima reparacion</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              {latestRepair ? `Costo: $${latestRepair.realCost}` : 'Sin reparaciones'}
+            </p>
+            <p className="text-xs text-slate-600">{latestRepair?.createdAt ? formatDateTime(latestRepair.createdAt) : '—'}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Proximo service motor</p>
@@ -657,6 +691,28 @@ export const FleetDetailPage = () => {
             <p className="text-xs text-slate-600">
               {latestServiceSchedule.motorHours ?? 'Sin registro'} hs
             </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Documentacion</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
+              {(['rto', 'insurance', 'hoist'] as const).map((docKey) => {
+                if (docKey === 'hoist' && safeDocuments.hoistNotApplicable) {
+                  return (
+                    <span key={docKey} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-500">
+                      Izaje N/A
+                    </span>
+                  )
+                }
+                const labelMap = { rto: 'RTO', insurance: 'Seguro', hoist: 'Izaje' }
+                const status = getDocumentStatus(safeDocuments?.[docKey]?.expiresAt)
+                const statusClass = documentStatusClassMap[status]
+                return (
+                  <span key={docKey} className={`rounded-full border px-2 py-1 ${statusClass}`}>
+                    {labelMap[docKey]}
+                  </span>
+                )
+              })}
+            </div>
           </div>
         </div>
 
