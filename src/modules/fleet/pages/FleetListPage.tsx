@@ -184,12 +184,24 @@ export const FleetListPage = () => {
 
     setQrError('')
     let mediaStream: MediaStream
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false,
-      })
-    } catch {
+    const videoConstraints: MediaStreamConstraints[] = [
+      { video: { facingMode: { exact: 'environment' } }, audio: false },
+      { video: { facingMode: 'environment' }, audio: false },
+      { video: true, audio: false },
+    ]
+
+    let lastError: unknown = null
+    for (const constraints of videoConstraints) {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
+        lastError = null
+        break
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    if (!mediaStream) {
       setQrError('No se pudo acceder a la cámara. Revisa permisos del navegador.')
       return
     }

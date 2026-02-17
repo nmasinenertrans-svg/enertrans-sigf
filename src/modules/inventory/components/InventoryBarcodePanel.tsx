@@ -91,14 +91,23 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
     }
 
     setCameraError('')
-    let mediaStream: MediaStream
+    const videoConstraints: MediaStreamConstraints[] = [
+      { video: { facingMode: { exact: 'environment' } }, audio: false },
+      { video: { facingMode: 'environment' }, audio: false },
+      { video: true, audio: false },
+    ]
 
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false,
-      })
-    } catch {
+    let mediaStream: MediaStream | null = null
+    for (const constraints of videoConstraints) {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
+        break
+      } catch {
+        // try next
+      }
+    }
+
+    if (!mediaStream) {
       setCameraError('No se pudo acceder a la cámara. Revisa permisos del navegador.')
       return
     }
@@ -134,7 +143,7 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
     }, 1200)
 
     const detector = new barcodeDetectorCtor({
-      formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39'],
+      formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'qr_code'],
     })
 
     scanIntervalRef.current = window.setInterval(async () => {
