@@ -46,6 +46,10 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     permissions.USERS.create = false
     permissions.USERS.edit = false
     permissions.USERS.delete = false
+    permissions.MAINTENANCE_MODE.view = false
+    permissions.MAINTENANCE_MODE.create = false
+    permissions.MAINTENANCE_MODE.edit = false
+    permissions.MAINTENANCE_MODE.delete = false
     return permissions
   }
 

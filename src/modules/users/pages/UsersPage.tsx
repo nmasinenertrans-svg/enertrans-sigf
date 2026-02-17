@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
@@ -35,8 +35,6 @@ export const UsersPage = () => {
       expiresAt: string
     }>,
   }))
-
-  const selectedUser = useMemo(() => users.find((user) => user.id === editingUserId) ?? null, [editingUserId, users])
 
   const resetForm = () => {
     setEditingUserId(null)

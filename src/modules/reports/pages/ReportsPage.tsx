@@ -6,14 +6,6 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
 import { getFleetUnitTypeLabel } from '../../fleet/services/fleetService'
 
-const formatDate = (value?: string) => {
-  if (!value) {
-    return ''
-  }
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
-}
-
 const formatDateTime = (value?: string) => {
   if (!value) {
     return ''

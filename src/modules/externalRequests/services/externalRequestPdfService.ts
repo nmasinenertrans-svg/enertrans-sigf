@@ -23,11 +23,12 @@ const fetchImageAsDataUrl = async (url: string): Promise<string> => {
 
 const applyOpacity = (pdf: jsPDF, opacity: number): (() => void) => {
   const anyPdf = pdf as unknown as { GState?: new (state: { opacity: number }) => unknown; setGState?: (state: unknown) => void }
-  if (anyPdf.GState && typeof anyPdf.setGState === 'function') {
+  const setGState = anyPdf.setGState
+  if (anyPdf.GState && typeof setGState === 'function') {
     const previous = new anyPdf.GState({ opacity: 1 })
     const next = new anyPdf.GState({ opacity })
-    anyPdf.setGState(next)
-    return () => anyPdf.setGState(previous)
+    setGState(next)
+    return () => setGState(previous)
   }
   return () => {}
 }

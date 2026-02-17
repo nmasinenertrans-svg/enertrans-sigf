@@ -108,7 +108,7 @@ export const toRepairRecord = (
   return {
     id: createId(),
     unitId: formData.sourceType === 'EXTERNAL_REQUEST' ? linkedExternalRequest?.unitId ?? '' : linkedWorkOrder?.unitId ?? '',
-    workOrderId: formData.workOrderId || undefined,
+    workOrderId: formData.sourceType === 'WORK_ORDER' ? formData.workOrderId : '',
     externalRequestId: formData.externalRequestId || undefined,
     sourceType: formData.sourceType,
     supplierName: formData.supplierName.trim(),
@@ -140,7 +140,7 @@ export const mergeRepairFromForm = (
       formData.sourceType === 'EXTERNAL_REQUEST'
         ? linkedExternalRequest?.unitId ?? repair.unitId
         : linkedWorkOrder?.unitId ?? repair.unitId,
-    workOrderId: formData.workOrderId || undefined,
+    workOrderId: formData.sourceType === 'WORK_ORDER' ? formData.workOrderId : '',
     externalRequestId: formData.externalRequestId || undefined,
     sourceType: formData.sourceType,
     supplierName: formData.supplierName.trim(),

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -22,13 +22,12 @@ import type { WorkOrderFormData, WorkOrderFormErrors, WorkOrderFormField } from 
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { apiRequest } from '../../../services/api/apiClient'
 import { exportWorkOrderPdf } from '../services/workOrderPdfService'
-import type { WorkOrderDeviation } from '../../../types/domain'
+import type { WorkOrder, WorkOrderDeviation, WorkOrderDeviationStatus, WorkOrderStatus } from '../../../types/domain'
 import { BackLink } from '../../../components/shared/BackLink'
 
 const allStatusesFilter = 'ALL'
 
 export const WorkOrdersPage = () => {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { can } = usePermissions()
   const {
@@ -285,17 +284,17 @@ export const WorkOrdersPage = () => {
       }
     }
 
-    const updatedWorkOrders = workOrders.map((order) => {
+    const updatedWorkOrders: WorkOrder[] = workOrders.map((order) => {
       if (order.id !== resolveTarget.workOrderId) {
         return order
       }
 
       const normalizedTasks = normalizeTaskList(order.taskList)
-      const nextTasks = normalizedTasks.map((task) =>
+      const nextTasks: WorkOrderDeviation[] = normalizedTasks.map((task) =>
         task.id === resolveTarget.deviation.id
           ? {
               ...task,
-              status: 'RESOLVED',
+              status: 'RESOLVED' as WorkOrderDeviationStatus,
               resolutionNote: resolutionNote.trim(),
               resolutionPhotoBase64: photoUrl ? '' : photoBase64,
               resolutionPhotoUrl: photoUrl,
@@ -345,7 +344,12 @@ export const WorkOrdersPage = () => {
       return
     }
 
-    const updatedWorkOrder = { ...workOrder, status: 'CLOSED', pendingReaudit: true, taskList: normalizedTasks }
+    const updatedWorkOrder: WorkOrder = {
+      ...workOrder,
+      status: 'CLOSED' as WorkOrderStatus,
+      pendingReaudit: true,
+      taskList: normalizedTasks,
+    }
     const nextWorkOrders = workOrders.map((order) => (order.id === workOrderId ? updatedWorkOrder : order))
     setWorkOrders(nextWorkOrders)
 

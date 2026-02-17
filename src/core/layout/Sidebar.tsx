@@ -1,8 +1,9 @@
 ﻿import { NavLink } from 'react-router-dom'
 import { ROUTE_PATHS } from '../routing/routePaths'
 import { usePermissions } from '../auth/usePermissions'
+import type { PermissionModule } from '../../types/domain'
 
-const navigationItems = [
+const navigationItems: Array<{ path: string; label: string; module: PermissionModule }> = [
   { path: ROUTE_PATHS.fleet.list, label: 'Flota', module: 'FLEET' },
   { path: ROUTE_PATHS.maintenance, label: 'Plan de Mantenimiento', module: 'MAINTENANCE' },
   { path: ROUTE_PATHS.audits, label: 'Auditorias', module: 'AUDITS' },

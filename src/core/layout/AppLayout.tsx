@@ -381,6 +381,9 @@ export const AppLayout = () => {
               observations: audit.observations ?? '',
               photoBase64List: Array.isArray(audit.photoUrls) ? audit.photoUrls : [],
               checklistSections: Array.isArray(audit.checklist?.sections) ? audit.checklist.sections : [],
+              unitKilometers: audit.unitKilometers ?? 0,
+              engineHours: audit.engineHours ?? 0,
+              hydroHours: audit.hydroHours ?? 0,
             }))
           : null
 

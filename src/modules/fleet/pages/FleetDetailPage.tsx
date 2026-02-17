@@ -13,6 +13,7 @@ import {
 } from '../services/fleetService'
 import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersService'
 import { jsPDF } from 'jspdf'
+import type { FleetUnit } from '../../../types/domain'
 
 const detailTabs = [
   { id: 'maintenancePlan', label: 'Plan de mantenimiento' },
@@ -232,13 +233,13 @@ export const FleetDetailPage = () => {
 
   const qrImageUrl = qrProfileUrl ? buildQrImageUrl(qrProfileUrl) : ''
 
-  const updateUnit = (updater: (unit: typeof selectedUnit) => typeof selectedUnit) => {
+  const updateUnit = (updater: (unit: FleetUnit) => FleetUnit) => {
     if (!selectedUnit) {
       return
     }
 
     setFleetUnits(
-      fleetUnits.map((unit) => (unit.id === selectedUnit.id ? (updater(unit) ?? unit) : unit)),
+      fleetUnits.map((unit) => (unit.id === selectedUnit.id ? updater(unit) : unit)),
     )
   }
 
@@ -1133,3 +1134,4 @@ export const FleetDetailPage = () => {
     </section>
   )
 }
+

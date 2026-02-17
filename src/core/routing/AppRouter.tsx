@@ -16,6 +16,7 @@ import { LoginPage } from '../../modules/auth/pages/LoginPage'
 import { UsersPage } from '../../modules/users/pages/UsersPage'
 import { ReportsPage } from '../../modules/reports/pages/ReportsPage'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
+import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { RequireAuth } from './RequireAuth'
 import { RequirePermission } from './RequirePermission'
 
@@ -136,6 +137,14 @@ export const AppRouter = () => (
           }
         />
         <Route path={ROUTE_PATHS.profile} element={<ProfilePage />} />
+        <Route
+          path={ROUTE_PATHS.maintenanceMode}
+          element={
+            <RequirePermission module="MAINTENANCE_MODE" action="view">
+              <MaintenanceModePage />
+            </RequirePermission>
+          }
+        />
         <Route path="*" element={<Navigate to={ROUTE_PATHS.dashboard} replace />} />
       </Route>
     </Routes>
