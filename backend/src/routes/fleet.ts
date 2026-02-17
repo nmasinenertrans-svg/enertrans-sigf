@@ -161,11 +161,12 @@ router.patch('/:id', async (req, res) => {
       }
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
+    const currentDocuments = (current.documents as any) ?? {}
     const nextDocuments = {
-      ...(parsed.data.documents ?? current.documents),
+      ...(parsed.data.documents ?? currentDocuments),
       hoistNotApplicable:
-        parsed.data.documents?.hoistNotApplicable ??
-        (parsed.data.unitType ? unitTypesWithoutHoist.has(parsed.data.unitType) : current.documents?.hoistNotApplicable ?? false),
+        (parsed.data.documents as any)?.hoistNotApplicable ??
+        (parsed.data.unitType ? unitTypesWithoutHoist.has(parsed.data.unitType) : currentDocuments.hoistNotApplicable ?? false),
     }
     const requestedStatus = (parsed.data.operationalStatus ?? current.operationalStatus) as FleetOperationalStatus
     const nextHasHydroCrane = parsed.data.hasHydroCrane ?? current.hasHydroCrane
