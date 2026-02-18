@@ -114,7 +114,7 @@ model FleetUnit {
   workOrders               WorkOrder[]
   repairs                  RepairRecord[]
   externalRequests         ExternalRequest[]
-  movements                FleetMovement[]
+  movementLinks            FleetMovementUnit[]
 }
 
 model MaintenancePlan {
@@ -221,7 +221,6 @@ model ExternalRequest {
 
 model FleetMovement {
   id                   String            @id @default(uuid())
-  unitId               String
   movementType         FleetMovementType
   remitoNumber         String            @default("")
   remitoDate           DateTime?
@@ -235,7 +234,17 @@ model FleetMovement {
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
-  unit FleetUnit @relation(fields: [unitId], references: [id])
+  units FleetMovementUnit[]
+}
+
+model FleetMovementUnit {
+  movementId String
+  unitId     String
+
+  movement FleetMovement @relation(fields: [movementId], references: [id])
+  unit     FleetUnit     @relation(fields: [unitId], references: [id])
+
+  @@id([movementId, unitId])
 }
 
 model Sequence {
