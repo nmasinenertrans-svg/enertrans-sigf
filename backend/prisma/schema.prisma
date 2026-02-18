@@ -48,6 +48,11 @@ enum VisualStatus {
   DUE_SOON
 }
 
+enum FleetMovementType {
+  ENTRY
+  RETURN
+}
+
 model User {
   id                  String   @id @default(uuid())
   username            String   @unique
@@ -109,6 +114,7 @@ model FleetUnit {
   workOrders               WorkOrder[]
   repairs                  RepairRecord[]
   externalRequests         ExternalRequest[]
+  movements                FleetMovement[]
 }
 
 model MaintenancePlan {
@@ -209,6 +215,25 @@ model ExternalRequest {
   providerFileUrl  String   @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  unit FleetUnit @relation(fields: [unitId], references: [id])
+}
+
+model FleetMovement {
+  id                   String            @id @default(uuid())
+  unitId               String
+  movementType         FleetMovementType
+  remitoNumber         String            @default("")
+  remitoDate           DateTime?
+  clientName           String            @default("")
+  workLocation         String            @default("")
+  equipmentDescription String            @default("")
+  observations         String            @default("")
+  pdfFileName          String            @default("")
+  pdfFileUrl           String            @default("")
+  parsedPayload        Json?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   unit FleetUnit @relation(fields: [unitId], references: [id])
 }
