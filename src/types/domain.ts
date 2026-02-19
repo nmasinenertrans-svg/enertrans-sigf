@@ -53,6 +53,9 @@ export const fleetUnitTypes = [
 ] as const
 export type FleetUnitType = (typeof fleetUnitTypes)[number]
 
+export const fleetMovementTypes = ['ENTRY', 'RETURN'] as const
+export type FleetMovementType = (typeof fleetMovementTypes)[number]
+
 export interface AppUser {
   id: string
   username: string
@@ -282,4 +285,20 @@ export interface ExternalRequest {
   providerFileName?: string
   providerFileBase64?: string
   providerFileUrl?: string
+}
+
+export interface FleetMovement {
+  id: string
+  unitIds: string[]
+  movementType: FleetMovementType
+  remitoNumber: string
+  remitoDate?: string
+  clientName: string
+  workLocation: string
+  equipmentDescription: string
+  observations: string
+  pdfFileName?: string
+  pdfFileUrl?: string
+  parsedPayload?: Record<string, unknown>
+  createdAt?: string
 }
