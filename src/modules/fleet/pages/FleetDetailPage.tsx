@@ -421,6 +421,24 @@ export const FleetDetailPage = () => {
     reader.readAsDataURL(file)
   }
 
+  const openDocument = (docKey: 'rto' | 'insurance' | 'hoist') => {
+    const doc = safeDocuments?.[docKey]
+    if (!doc) {
+      return
+    }
+    if (doc.fileUrl) {
+      window.open(doc.fileUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+    if (doc.fileBase64) {
+      const win = window.open('', '_blank', 'noopener,noreferrer')
+      if (win) {
+        win.document.write(`<iframe src="${doc.fileBase64}" style="border:0; width:100%; height:100%;" />`)
+        win.document.close()
+      }
+    }
+  }
+
   const lubricantRows = selectedUnit
     ? [
         { label: 'Aceite Motor', value: safeLubricants.engineOil, key: 'engineOil' as const },
@@ -843,6 +861,16 @@ export const FleetDetailPage = () => {
                       </span>
                     ) : null}
                   </div>
+
+                  {hasFile ? (
+                    <button
+                      type="button"
+                      onClick={() => openDocument(doc.key)}
+                      className="mt-2 inline-flex items-center rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                    >
+                      Ver archivo
+                    </button>
+                  ) : null}
 
                   <input
                     type="file"
