@@ -6,7 +6,7 @@ import {
   createEmptyMovementFormData,
   validateMovementFormData,
   type MovementFormData,
-} from '../../../movements/services/movementsService'
+} from '../../movements/services/movementsService'
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
