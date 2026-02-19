@@ -14,6 +14,7 @@ import {
 import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersService'
 import { jsPDF } from 'jspdf'
 import type { FleetUnit } from '../../../types/domain'
+import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
 
 const detailTabs = [
   { id: 'maintenancePlan', label: 'Plan de mantenimiento' },
@@ -21,6 +22,7 @@ const detailTabs = [
   { id: 'workOrders', label: 'Ordenes de trabajo' },
   { id: 'repairs', label: 'Reparaciones' },
   { id: 'externalRequests', label: 'Notas externas' },
+  { id: 'movements', label: 'Remitos' },
   { id: 'inventory', label: 'Inventario asociado' },
 ] as const
 
@@ -122,8 +124,8 @@ export const FleetDetailPage = () => {
   const [isQrPdfLoading, setIsQrPdfLoading] = useState(false)
 
   const {
-    state: { fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems },
-    actions: { setFleetUnits },
+    state: { fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements },
+    actions: { setFleetUnits, setMovements, setAppError },
   } = useAppContext()
 
   const canEditFleet = can('FLEET', 'edit')
@@ -1157,6 +1159,16 @@ export const FleetDetailPage = () => {
                 <p className="text-xs text-slate-500">Sin notas externas registradas.</p>
               )}
             </div>
+          ) : null}
+
+          {activeTab === 'movements' ? (
+            <FleetMovementsPanel
+              unitId={selectedUnit.id}
+              fleetUnits={fleetUnits}
+              movements={movements}
+              onMovementsChange={setMovements}
+              onError={setAppError}
+            />
           ) : null}
 
           {activeTab === 'inventory' ? (

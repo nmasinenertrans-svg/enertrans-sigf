@@ -84,6 +84,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setMovements: (movements) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, movements }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setInventoryItems: (items) => {
         setState((previousState) => {
           const nextState = { ...previousState, inventoryItems: items }

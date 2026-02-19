@@ -10,6 +10,7 @@ import type {
   AuditRecord,
   ExternalRequest,
   FeatureFlags,
+  FleetMovement,
   FleetUnit,
   InventoryItem,
   MaintenancePlan,
@@ -126,6 +127,7 @@ export const AppLayout = () => {
       workOrders,
       repairs,
       externalRequests,
+      movements,
       inventoryItems,
       users,
       currentUser,
@@ -139,6 +141,7 @@ export const AppLayout = () => {
       setWorkOrders,
       setRepairs,
       setExternalRequests,
+      setMovements,
       setInventoryItems,
       setUsers,
       setCurrentUser,
@@ -156,6 +159,7 @@ export const AppLayout = () => {
   const workOrdersRef = useRef(workOrders)
   const repairsRef = useRef(repairs)
   const externalRequestsRef = useRef(externalRequests)
+  const movementsRef = useRef(movements)
   const inventoryRef = useRef(inventoryItems)
   const featureFlagsRef = useRef(featureFlags)
 
@@ -187,6 +191,10 @@ export const AppLayout = () => {
   useEffect(() => {
     externalRequestsRef.current = externalRequests
   }, [externalRequests])
+
+  useEffect(() => {
+    movementsRef.current = movements
+  }, [movements])
 
   useEffect(() => {
     inventoryRef.current = inventoryItems
@@ -367,6 +375,7 @@ export const AppLayout = () => {
           workOrdersResponse,
           repairsResponse,
           externalRequestsResponse,
+          movementsResponse,
           inventoryResponse,
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
@@ -376,6 +385,7 @@ export const AppLayout = () => {
           safeRequest<WorkOrder[]>('/work-orders'),
           safeRequest<RepairRecord[]>('/repairs'),
           safeRequest<ExternalRequest[]>('/external-requests'),
+          safeRequest<FleetMovement[]>('/movements'),
           safeRequest<InventoryItem[]>('/inventory'),
         ])
 
@@ -445,6 +455,15 @@ export const AppLayout = () => {
             ) ?? externalRequestsResponse,
           )
         }
+        if (movementsResponse) {
+          setMovements(
+            mergeByIdWithLocal(
+              movementsResponse,
+              movementsRef.current,
+              getQueuedPayloads('movement.create'),
+            ) ?? movementsResponse,
+          )
+        }
         if (inventoryResponse) {
           setInventoryItems(
             mergeByIdWithLocal(
@@ -469,6 +488,8 @@ export const AppLayout = () => {
     setAudits,
     setWorkOrders,
     setRepairs,
+    setExternalRequests,
+    setMovements,
     setInventoryItems,
     setUsers,
     setAppError,

@@ -4,6 +4,7 @@ import type {
   AppUser,
   AuditRecord,
   ExternalRequest,
+  FleetMovement,
   FeatureFlags,
   FleetUnit,
   InventoryItem,
@@ -26,6 +27,7 @@ interface PersistedAppState {
   workOrders: WorkOrder[]
   repairs: RepairRecord[]
   externalRequests: ExternalRequest[]
+  movements: FleetMovement[]
   inventoryItems: InventoryItem[]
   featureFlags: FeatureFlags
 }
@@ -46,6 +48,7 @@ export interface AppActions {
   setWorkOrders: (orders: WorkOrder[]) => void
   setRepairs: (repairs: RepairRecord[]) => void
   setExternalRequests: (requests: ExternalRequest[]) => void
+  setMovements: (movements: FleetMovement[]) => void
   setInventoryItems: (items: InventoryItem[]) => void
   setFeatureFlags: (flags: FeatureFlags) => void
   setGlobalLoading: (value: boolean) => void
@@ -84,6 +87,7 @@ const defaultPersistedState: PersistedAppState = {
   workOrders: [],
   repairs: [],
   externalRequests: [],
+  movements: [],
   inventoryItems: [],
   featureFlags: defaultFeatureFlags,
 }
@@ -133,6 +137,7 @@ export const getInitialAppState = (): AppState => {
     workOrders: persistedState.workOrders ?? [],
     repairs: persistedState.repairs ?? [],
     externalRequests: persistedState.externalRequests ?? [],
+    movements: persistedState.movements ?? [],
     inventoryItems: persistedState.inventoryItems ?? [],
     featureFlags: persistedState.featureFlags ?? defaultFeatureFlags,
   }
@@ -165,6 +170,7 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   workOrders: state.workOrders,
   repairs: state.repairs,
   externalRequests: state.externalRequests,
+  movements: state.movements,
   inventoryItems: state.inventoryItems,
   featureFlags: state.featureFlags,
 })
