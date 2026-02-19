@@ -5,7 +5,9 @@ import type { AuditChecklistSectionDraft } from '../types'
 interface AuditChecklistEditorProps {
   sections: AuditChecklistSectionDraft[]
   onItemStatusChange: (sectionId: string, itemId: string, status: AuditChecklistStatus) => void
-  onItemObservationChange: (sectionId: string, itemId: string, observation: string) => void\r\n  readOnly?: boolean\r\n}
+  onItemObservationChange: (sectionId: string, itemId: string, observation: string) => void
+  readOnly?: boolean
+}
 
 const checklistStatusOptions: AuditChecklistStatus[] = ['OK', 'BAD', 'NA']
 
@@ -18,7 +20,9 @@ const statusButtonStyleMap: Record<AuditChecklistStatus, string> = {
 export const AuditChecklistEditor = ({
   sections,
   onItemStatusChange,
-  onItemObservationChange,\r\n  readOnly = false,\r\n}: AuditChecklistEditorProps) => (
+  onItemObservationChange,
+  readOnly = false,
+}: AuditChecklistEditorProps) => (
   <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="space-y-4">
       {sections.map((section, sectionIndex) => (
@@ -53,7 +57,9 @@ export const AuditChecklistEditor = ({
                   {checklistStatusOptions.map((status) => (
                     <button
                       key={status}
-                      type="button"\r\n                      disabled={readOnly}\r\n                      onClick={() => onItemStatusChange(section.id, item.id, status)}
+                      type="button"
+                      disabled={readOnly}
+                      onClick={() => onItemStatusChange(section.id, item.id, status)}
                       data-active={item.status === status}
                       className={[
                         'mx-auto w-16 rounded border px-2 py-1 text-[11px] font-semibold transition-colors',
@@ -69,7 +75,9 @@ export const AuditChecklistEditor = ({
                     className="w-full rounded border border-slate-300 px-2 py-1 text-sm text-slate-900 outline-none focus:border-amber-400"
                     value={item.observation}
                     onChange={(event) => onItemObservationChange(section.id, item.id, event.target.value)}
-                    placeholder="ObservaciÃ³n"\r\n                    readOnly={readOnly}\r\n                  />
+                    placeholder="Observación"
+                    readOnly={readOnly}
+                  />
                 </div>
               ))}
             </div>
@@ -79,4 +87,3 @@ export const AuditChecklistEditor = ({
     </div>
   </section>
 )
-
