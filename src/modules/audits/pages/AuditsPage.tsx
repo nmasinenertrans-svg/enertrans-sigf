@@ -78,8 +78,29 @@ export const AuditsPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [resultFilter, setResultFilter] = useState<'ALL' | 'APPROVED' | 'REJECTED'>('ALL')
   const [auditIdPendingDelete, setAuditIdPendingDelete] = useState<string | null>(null)
+  const [auditIdPendingView, setAuditIdPendingView] = useState<string | null>(null)
 
   const auditHistory = useMemo(() => buildAuditHistoryView(audits, fleetUnits), [audits, fleetUnits])
+  const viewAudit = useMemo(() => audits.find((audit) => audit.id === auditIdPendingView) ?? null, [audits, auditIdPendingView])
+  const viewAuditSummary = useMemo(
+    () => auditHistory.find((item) => item.id === auditIdPendingView) ?? null,
+    [auditHistory, auditIdPendingView],
+  )
+  const viewChecklistSections = useMemo(() => {
+    if (!viewAudit) {
+      return []
+    }
+    return viewAudit.checklistSections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      items: section.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        status: item.status,
+        observation: item.observation,
+      })),
+    }))
+  }, [viewAudit])
 
   const filteredAuditHistory = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -704,6 +725,7 @@ export const AuditsPage = () => {
             <div className="mt-4">
               <AuditHistoryList
                 items={filteredAuditHistory}
+                onViewAudit={setAuditIdPendingView}
                 onExportPdf={handleExportPdf}
                 onRequestDelete={setAuditIdPendingDelete}
                 canDelete={canDelete}
@@ -722,6 +744,66 @@ export const AuditsPage = () => {
           onCancel={() => setAuditIdPendingDelete(null)}
           onConfirm={handleConfirmDeleteAudit}
         />
+      ) : null}
+
+      {viewAudit ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Auditoria</p>
+                <h3 className="text-lg font-bold text-slate-900">{viewAuditSummary?.code ?? viewAudit.id}</h3>
+                <p className="text-sm text-slate-600">{viewAuditSummary?.unitLabel ?? viewAudit.unitId}</p>
+                <p className="text-sm text-slate-600">
+                  {new Date(viewAudit.performedAt).toLocaleString()} • {viewAudit.auditorName}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${viewAuditSummary?.resultClassName ?? ''}`}>
+                  {viewAuditSummary?.resultLabel ?? viewAudit.result}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAuditIdPendingView(null)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <span className="font-semibold">Observaciones:</span> {viewAudit.observations || 'Sin observaciones.'}
+            </div>
+
+            <div className="mt-4">
+              <AuditChecklistEditor
+                sections={viewChecklistSections}
+                onItemStatusChange={() => null}
+                onItemObservationChange={() => null}
+                readOnly
+              />
+            </div>
+
+            <div className="mt-4">
+              <h4 className="text-sm font-semibold text-slate-700">Fotos</h4>
+              {viewAudit.photoBase64List.length === 0 ? (
+                <p className="mt-1 text-sm text-slate-500">No se adjuntaron fotos.</p>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+                  {viewAudit.photoBase64List.map((photo, index) => (
+                    <img
+                      key={`${viewAudit.id}-photo-${index}`}
+                      src={photo}
+                      alt={`Foto ${index + 1}`}
+                      className="h-32 w-full rounded-lg border border-slate-200 object-cover"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   )

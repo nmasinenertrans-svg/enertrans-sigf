@@ -2,12 +2,13 @@
 
 interface AuditHistoryListProps {
   items: AuditHistoryViewItem[]
+  onViewAudit: (auditId: string) => void
   onExportPdf: (auditId: string) => void
   onRequestDelete: (auditId: string) => void
   canDelete?: boolean
 }
 
-export const AuditHistoryList = ({ items, onExportPdf, onRequestDelete, canDelete = true }: AuditHistoryListProps) => {
+export const AuditHistoryList = ({ items, onViewAudit, onExportPdf, onRequestDelete, canDelete = true }: AuditHistoryListProps) => {
   if (items.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
@@ -45,6 +46,13 @@ export const AuditHistoryList = ({ items, onExportPdf, onRequestDelete, canDelet
           </div>
 
           <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => onViewAudit(item.id)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Ver auditoria
+            </button>
             <button
               type="button"
               onClick={() => onExportPdf(item.id)}
