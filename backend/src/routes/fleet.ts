@@ -53,6 +53,20 @@ const deriveOperationalStatus = (
   needsHoist: boolean,
 ): FleetOperationalStatus => (hasInvalidDocuments(documents, needsHoist) ? 'OUT_OF_SERVICE' : requested)
 
+const normalizeSemiTrailerUnitId = async (
+  semiTrailerUnitId: unknown,
+  hasSemiTrailer: boolean,
+): Promise<string | null> => {
+  if (!hasSemiTrailer) {
+    return null
+  }
+  if (typeof semiTrailerUnitId !== 'string' || !semiTrailerUnitId.trim()) {
+    return null
+  }
+  const existing = await prisma.fleetUnit.findUnique({ where: { id: semiTrailerUnitId } })
+  return existing ? semiTrailerUnitId : null
+}
+
 const fleetSchema = z.object({
   id: z.string().uuid().optional(),
   qrId: z.string().min(1),
@@ -118,6 +132,10 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    const safeSemiTrailerUnitId = await normalizeSemiTrailerUnitId(
+      parsed.data.semiTrailerUnitId,
+      parsed.data.hasSemiTrailer,
+    )
     const normalizedDocuments = {
       ...parsed.data.documents,
       hoistNotApplicable:
@@ -128,7 +146,14 @@ router.post('/', async (req, res) => {
       normalizedDocuments,
       requiresHoist(parsed.data),
     )
-    const unit = await prisma.fleetUnit.create({ data: { ...parsed.data, documents: normalizedDocuments, operationalStatus } })
+    const unit = await prisma.fleetUnit.create({
+      data: {
+        ...parsed.data,
+        semiTrailerUnitId: safeSemiTrailerUnitId,
+        documents: normalizedDocuments,
+        operationalStatus,
+      },
+    })
     return res.status(201).json(unit)
   } catch (error: any) {
     console.error('Fleet POST error:', error)
@@ -149,13 +174,17 @@ router.patch('/:id', async (req, res) => {
     const current = await prisma.fleetUnit.findUnique({ where: { id: req.params.id } })
     if (!current) {
       if (parsed.data.id && parsed.data.qrId) {
+        const safeSemiTrailerUnitId = await normalizeSemiTrailerUnitId(
+          parsed.data.semiTrailerUnitId,
+          parsed.data.hasSemiTrailer ?? false,
+        )
         const operationalStatus = deriveOperationalStatus(
           (parsed.data.operationalStatus ?? 'OPERATIONAL') as FleetOperationalStatus,
           parsed.data.documents ?? {},
           requiresHoist(parsed.data),
         )
         const created = await prisma.fleetUnit.create({
-          data: { ...parsed.data, operationalStatus } as any,
+          data: { ...parsed.data, semiTrailerUnitId: safeSemiTrailerUnitId, operationalStatus } as any,
         })
         return res.status(201).json(created)
       }
@@ -171,13 +200,17 @@ router.patch('/:id', async (req, res) => {
     const requestedStatus = (parsed.data.operationalStatus ?? current.operationalStatus) as FleetOperationalStatus
     const nextHasHydroCrane = parsed.data.hasHydroCrane ?? current.hasHydroCrane
     const nextUnitType = parsed.data.unitType ?? current.unitType
+    const safeSemiTrailerUnitId = await normalizeSemiTrailerUnitId(
+      parsed.data.semiTrailerUnitId ?? current.semiTrailerUnitId,
+      parsed.data.hasSemiTrailer ?? current.hasSemiTrailer,
+    )
     const operationalStatus = deriveOperationalStatus(requestedStatus, nextDocuments, requiresHoist({
       hasHydroCrane: nextHasHydroCrane,
       unitType: nextUnitType,
     }))
     const unit = await prisma.fleetUnit.update({
       where: { id: req.params.id },
-      data: { ...parsed.data, documents: nextDocuments, operationalStatus },
+      data: { ...parsed.data, semiTrailerUnitId: safeSemiTrailerUnitId, documents: nextDocuments, operationalStatus },
     })
     return res.json(unit)
   } catch (error: any) {
