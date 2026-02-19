@@ -6,7 +6,7 @@ import {
   createEmptyMovementFormData,
   validateMovementFormData,
   type MovementFormData,
-} from '../../movements/services/movementsService'
+} from '../../../movements/services/movementsService'
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -51,15 +51,15 @@ export const FleetMovementsPanel = ({
   )
 
   const handleFieldChange = <K extends keyof MovementFormData>(field: K, value: MovementFormData[K]) => {
-    setFormData((previous) => ({ ...previous, [field]: value }))
-    setErrors((previous) => ({ ...previous, [field]: undefined }))
+    setFormData((previous: MovementFormData) => ({ ...previous, [field]: value }))
+    setErrors((previous: Partial<Record<keyof MovementFormData, string>>) => ({ ...previous, [field]: undefined }))
   }
 
   const handleToggleUnit = (targetUnitId: string) => {
-    setFormData((previous) => {
+    setFormData((previous: MovementFormData) => {
       const exists = previous.unitIds.includes(targetUnitId)
       const next = exists
-        ? previous.unitIds.filter((id) => id !== targetUnitId)
+        ? previous.unitIds.filter((id: string) => id !== targetUnitId)
         : [...previous.unitIds, targetUnitId]
       return { ...previous, unitIds: next.length ? next : [unitId] }
     })
@@ -73,7 +73,7 @@ export const FleetMovementsPanel = ({
 
     try {
       const dataUrl = await readFileAsDataUrl(file)
-      setFormData((previous) => ({
+      setFormData((previous: MovementFormData) => ({
         ...previous,
         pdfFileName: file.name,
         pdfFileBase64: dataUrl,
@@ -89,7 +89,7 @@ export const FleetMovementsPanel = ({
         },
       })
 
-      setFormData((previous) => applyParsedPayload(previous, parsed ?? {}))
+      setFormData((previous: MovementFormData) => applyParsedPayload(previous, parsed ?? {}))
     } catch {
       onError('No se pudo leer el PDF automáticamente. Completa los datos manualmente.')
     } finally {
@@ -309,4 +309,3 @@ export const FleetMovementsPanel = ({
     </div>
   )
 }
-
