@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { jsPDF } from 'jspdf'
 import * as XLSX from 'xlsx'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
 import { getFleetUnitTypeLabel } from '../../fleet/services/fleetService'
+import type { FleetUnit } from '../../../types/domain'
 
 const formatDateTime = (value?: string) => {
   if (!value) {
@@ -157,6 +158,28 @@ export const ReportsPage = () => {
 
   const rangeLabel = startDate || endDate ? `Periodo: ${startDate || 'Inicio'} → ${endDate || 'Hoy'}` : 'Periodo completo'
 
+  const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
+
+  const occupancyByClient = useMemo(() => {
+    const counts = new Map<string, { count: number; units: FleetUnit[] }>()
+    fleetUnits.forEach((unit) => {
+      const client = unit.clientName?.trim() || 'Sin asignar'
+      const current = counts.get(client) ?? { count: 0, units: [] }
+      current.count += 1
+      current.units.push(unit)
+      counts.set(client, current)
+    })
+
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1].count - a[1].count)
+    const segments = sorted.map(([label, value], index) => ({
+      label,
+      value: value.count,
+      color: palette[index % palette.length],
+    }))
+
+    return { segments, detail: sorted }
+  }, [fleetUnits])
+
   const exportAuditsCsv = () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Auditor', 'Resultado']
     const rows = filteredAudits.map((audit) => [
@@ -305,6 +328,83 @@ export const ReportsPage = () => {
         <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
         <p className="text-sm text-slate-600">Exportaciones en PDF y CSV para Auditorias, OT y Reparaciones.</p>
       </header>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-lg font-semibold text-slate-900">Ocupación por cliente</h3>
+            <span className="text-xs text-slate-500">Unidades activas por cliente</span>
+          </div>
+          <div className="mt-4 grid gap-6 lg:grid-cols-[220px_1fr]">
+            <div className="flex items-center justify-center">
+              <svg width={200} height={200} viewBox="0 0 200 200">
+                <g transform="translate(100,100)">
+                  <circle r={70} fill="transparent" stroke="#e2e8f0" strokeWidth={18} />
+                  {occupancyByClient.segments.reduce<{ dashOffset: number; elements: ReactNode[] }>(
+                    (acc, segment, index) => {
+                      const total = occupancyByClient.segments.reduce((sum, item) => sum + item.value, 0) || 1
+                      const circumference = 2 * Math.PI * 70
+                      const length = (segment.value / total) * circumference
+                      const dashArray = `${length} ${circumference - length}`
+                      const element = (
+                        <circle
+                          key={`${segment.label}-${index}`}
+                          r={70}
+                          fill="transparent"
+                          stroke={segment.color}
+                          strokeWidth={18}
+                          strokeDasharray={dashArray}
+                          strokeDashoffset={-acc.dashOffset}
+                          transform="rotate(-90)"
+                        />
+                      )
+                      return { dashOffset: acc.dashOffset + length, elements: [...acc.elements, element] }
+                    },
+                    { dashOffset: 0, elements: [] },
+                  ).elements}
+                </g>
+              </svg>
+            </div>
+            <div className="grid gap-2">
+              {occupancyByClient.segments.length === 0 ? (
+                <p className="text-sm text-slate-500">No hay unidades activas.</p>
+              ) : (
+                occupancyByClient.segments.map((segment) => (
+                  <div key={segment.label} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
+                      {segment.label}
+                    </div>
+                    <div className="text-sm font-semibold text-slate-900">{segment.value}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Unidades por cliente</h3>
+          <div className="mt-4 space-y-3">
+            {occupancyByClient.detail.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay unidades activas.</p>
+            ) : (
+              occupancyByClient.detail.map(([client, data]) => (
+                <div key={client} className="rounded-lg border border-slate-200 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-800">{client}</p>
+                    <span className="text-sm font-semibold text-slate-900">{data.count}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {data.units.map((unit) => unit.internalCode).join(', ') || 'Sin unidades'}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+      </div>
+
 
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-3">
