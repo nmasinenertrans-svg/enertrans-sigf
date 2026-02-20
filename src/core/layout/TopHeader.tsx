@@ -2,7 +2,6 @@
 import { useNavigate } from 'react-router-dom'
 import enertransLogoUrl from '../../assets/enertrans-logo.png'
 import { setAuthToken } from '../../services/api/apiClient'
-import { clearQueue } from '../../services/offline/queue'
 import { syncQueue } from '../../services/offline/sync'
 import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
@@ -275,19 +274,6 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
               >
                 Perfil
               </button>
-              {currentUser?.role === 'DEV' ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await clearQueue()
-                    setAppError('Cola offline limpiada.')
-                    setIsUserMenuOpen(false)
-                  }}
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  Limpiar cola offline
-                </button>
-              ) : null}
               <button
                 type="button"
                 onClick={async () => {
