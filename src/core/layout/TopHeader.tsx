@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import enertransLogoUrl from '../../assets/enertrans-logo.png'
 import { setAuthToken } from '../../services/api/apiClient'
 import { clearQueue } from '../../services/offline/queue'
+import { syncQueue } from '../../services/offline/sync'
 import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
 
@@ -287,6 +288,22 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                   Limpiar cola offline
                 </button>
               ) : null}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                    setAppError('No hay conexion para sincronizar.')
+                    setIsUserMenuOpen(false)
+                    return
+                  }
+                  await syncQueue()
+                  setAppError('Sincronizacion iniciada.')
+                  setIsUserMenuOpen(false)
+                }}
+                className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Sincronizar pendientes
+              </button>
               <button
                 type="button"
                 onClick={() => {
