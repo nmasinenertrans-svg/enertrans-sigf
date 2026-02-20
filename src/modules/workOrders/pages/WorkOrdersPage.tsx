@@ -113,13 +113,8 @@ export const WorkOrdersPage = () => {
       setDraftChecked(true)
       return
     }
-    const shouldRestore = window.confirm('Se encontro una OT sin guardar. Deseas recuperarla?')
-    if (shouldRestore) {
-      setEditingWorkOrderId(draft.editingWorkOrderId ?? null)
-      setFormData(draft.formData)
-    } else {
-      clearDraft()
-    }
+    setEditingWorkOrderId(draft.editingWorkOrderId ?? null)
+    setFormData(draft.formData)
     setDraftChecked(true)
   }, [draftChecked])
 

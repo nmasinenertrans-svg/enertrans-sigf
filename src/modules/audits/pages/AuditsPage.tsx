@@ -224,12 +224,7 @@ export const AuditsPage = () => {
       return
     }
 
-    const shouldRestore = window.confirm('Se encontro una auditoria sin guardar. Deseas recuperarla?')
-    if (shouldRestore) {
-      setFormData(draft.formData)
-    } else {
-      clearDraft()
-    }
+    setFormData(draft.formData)
     setDraftChecked(true)
   }, [isFormOpen, isReauditMode, draftChecked])
 
