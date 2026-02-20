@@ -31,8 +31,17 @@ export const AuditPhotoPicker = ({ photoBase64List, onAddPhotoFiles, onRemovePho
     ) : (
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
         {photoBase64List.map((photoBase64, index) => (
-          <div key={`${photoBase64.slice(0, 20)}-${index}`} className="relative overflow-hidden rounded-lg border border-slate-200">
-            <img src={photoBase64} alt={`Evidencia ${index + 1}`} className="h-28 w-full object-cover" />
+          <div
+            key={`${photoBase64.slice(0, 20)}-${index}`}
+            className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+          >
+            <div className="aspect-[4/3] w-full">
+              <img
+                src={photoBase64}
+                alt={`Evidencia ${index + 1}`}
+                className="h-full w-full object-contain"
+              />
+            </div>
             <button
               type="button"
               onClick={() => onRemovePhoto(index)}

@@ -792,12 +792,18 @@ export const AuditsPage = () => {
               ) : (
                 <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
                   {viewAudit.photoBase64List.map((photo, index) => (
-                    <img
+                    <div
                       key={`${viewAudit.id}-photo-${index}`}
-                      src={photo}
-                      alt={`Foto ${index + 1}`}
-                      className="h-32 w-full rounded-lg border border-slate-200 object-cover"
-                    />
+                      className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                    >
+                      <div className="aspect-[4/3] w-full">
+                        <img
+                          src={photo}
+                          alt={`Foto ${index + 1}`}
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
