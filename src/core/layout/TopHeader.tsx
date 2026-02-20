@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import enertransLogoUrl from '../../assets/enertrans-logo.png'
 import { setAuthToken } from '../../services/api/apiClient'
+import { getQueueItems, type OfflineQueueItem } from '../../services/offline/queue'
 import { syncQueue } from '../../services/offline/sync'
 import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
@@ -63,6 +64,9 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   const [showAllNotifications, setShowAllNotifications] = useState(false)
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(readStoredNotifications)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const [isQueueOpen, setIsQueueOpen] = useState(false)
+  const [queueItems, setQueueItems] = useState<OfflineQueueItem[]>([])
+  const [isQueueLoading, setIsQueueLoading] = useState(false)
 
   useEffect(() => {
     persistReadNotifications(readNotificationIds)
@@ -101,6 +105,29 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     const letters = parts.slice(0, 2).map((part) => part[0])
     return letters.join('').toUpperCase() || 'U'
   }, [currentUser])
+
+  const loadQueue = async () => {
+    setIsQueueLoading(true)
+    try {
+      const items = await getQueueItems()
+      setQueueItems(items)
+    } catch {
+      setAppError('No se pudo cargar la cola offline.')
+    } finally {
+      setIsQueueLoading(false)
+    }
+  }
+
+  const handleExportQueue = () => {
+    const payload = JSON.stringify(queueItems, null, 2)
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `enertrans-offline-queue-${new Date().toISOString()}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300/80 bg-amber-300 px-3 py-2 shadow-sm md:h-20 md:flex-nowrap md:gap-3 md:px-8">
@@ -290,6 +317,19 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
               >
                 Sincronizar pendientes
               </button>
+              {currentUser?.role === 'DEV' ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await loadQueue()
+                    setIsQueueOpen(true)
+                    setIsUserMenuOpen(false)
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Ver pendientes (cola)
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
@@ -304,6 +344,71 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
           ) : null}
         </div>
       </div>
+
+      {isQueueOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Cola offline</p>
+                <h3 className="text-lg font-bold text-slate-900">Pendientes de sincronizacion</h3>
+                <p className="text-sm text-slate-600">
+                  {isQueueLoading ? 'Cargando...' : `${queueItems.length} item(s) en cola`}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await syncQueue()
+                    await loadQueue()
+                    setAppError('Reintento de sincronizacion completado.')
+                  }}
+                  className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
+                >
+                  Reintentar sync
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportQueue}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Exportar JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsQueueOpen(false)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {queueItems.length === 0 ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  No hay elementos pendientes.
+                </div>
+              ) : (
+                queueItems.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{item.type}</p>
+                        <p className="text-[11px] text-slate-500">{item.id}</p>
+                      </div>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                        {new Date(item.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </header>
   )
 }
