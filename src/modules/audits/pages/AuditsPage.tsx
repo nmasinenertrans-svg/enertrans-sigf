@@ -24,6 +24,8 @@ import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
 
 const allUnitsFilter = 'ALL_UNITS'
+const AUDIT_DRAFT_KEY = 'enertrans.auditDraft'
+const AUDIT_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 
 export const AuditsPage = () => {
   const navigate = useNavigate()
@@ -79,6 +81,7 @@ export const AuditsPage = () => {
   const [resultFilter, setResultFilter] = useState<'ALL' | 'APPROVED' | 'REJECTED'>('ALL')
   const [auditIdPendingDelete, setAuditIdPendingDelete] = useState<string | null>(null)
   const [auditIdPendingView, setAuditIdPendingView] = useState<string | null>(null)
+  const [draftChecked, setDraftChecked] = useState(false)
 
   const auditHistory = useMemo(() => buildAuditHistoryView(audits, fleetUnits), [audits, fleetUnits])
   const viewAudit = useMemo(() => audits.find((audit) => audit.id === auditIdPendingView) ?? null, [audits, auditIdPendingView])
@@ -129,6 +132,53 @@ export const AuditsPage = () => {
     setFormData(createEmptyAuditFormData(preferredUnitId))
   }
 
+  const saveDraft = (data: AuditFormData) => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        AUDIT_DRAFT_KEY,
+        JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          formData: data,
+        }),
+      )
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  const loadDraft = (): { updatedAt: string; formData: AuditFormData } | null => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem(AUDIT_DRAFT_KEY)
+      if (!raw) {
+        return null
+      }
+      const parsed = JSON.parse(raw) as { updatedAt?: string; formData?: AuditFormData }
+      if (!parsed?.updatedAt || !parsed?.formData) {
+        return null
+      }
+      return { updatedAt: parsed.updatedAt, formData: parsed.formData }
+    } catch {
+      return null
+    }
+  }
+
+  const clearDraft = () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.removeItem(AUDIT_DRAFT_KEY)
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     if (!preferredUnitId) {
       return
@@ -155,6 +205,45 @@ export const AuditsPage = () => {
       setIsFormOpen(false)
     }
   }, [pendingWorkOrder, createParam])
+
+  useEffect(() => {
+    if (!isFormOpen || isReauditMode || draftChecked) {
+      return
+    }
+
+    const draft = loadDraft()
+    if (!draft) {
+      setDraftChecked(true)
+      return
+    }
+
+    const draftAge = Date.now() - new Date(draft.updatedAt).getTime()
+    if (Number.isNaN(draftAge) || draftAge > AUDIT_DRAFT_TTL_MS) {
+      clearDraft()
+      setDraftChecked(true)
+      return
+    }
+
+    const shouldRestore = window.confirm('Se encontro una auditoria sin guardar. Deseas recuperarla?')
+    if (shouldRestore) {
+      setFormData(draft.formData)
+    } else {
+      clearDraft()
+    }
+    setDraftChecked(true)
+  }, [isFormOpen, isReauditMode, draftChecked])
+
+  useEffect(() => {
+    if (!isFormOpen || isReauditMode) {
+      return
+    }
+
+    const handler = window.setTimeout(() => {
+      saveDraft(formData)
+    }, 800)
+
+    return () => window.clearTimeout(handler)
+  }, [formData, isFormOpen, isReauditMode])
 
   useEffect(() => {
     if (!pendingWorkOrder) {
@@ -342,6 +431,7 @@ export const AuditsPage = () => {
 
     setAudits([createdAudit, ...audits])
     resetAuditForm()
+    clearDraft()
     if (isFormOpen) {
       setIsFormOpen(false)
       navigate(ROUTE_PATHS.audits, { replace: true })

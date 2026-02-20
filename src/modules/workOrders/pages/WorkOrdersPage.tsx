@@ -26,6 +26,8 @@ import type { WorkOrder, WorkOrderDeviation, WorkOrderDeviationStatus, WorkOrder
 import { BackLink } from '../../../components/shared/BackLink'
 
 const allStatusesFilter = 'ALL'
+const WORK_ORDER_DRAFT_KEY = 'enertrans.workOrderDraft'
+const WORK_ORDER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 
 export const WorkOrdersPage = () => {
   const [searchParams] = useSearchParams()
@@ -51,6 +53,7 @@ export const WorkOrdersPage = () => {
   const [resolveTarget, setResolveTarget] = useState<{ workOrderId: string; deviation: WorkOrderDeviation } | null>(null)
   const [resolutionNote, setResolutionNote] = useState('')
   const [resolutionPhoto, setResolutionPhoto] = useState<File | null>(null)
+  const [draftChecked, setDraftChecked] = useState(false)
 
   const workOrderViewList = useMemo(() => buildWorkOrderView(workOrders, fleetUnits), [workOrders, fleetUnits])
 
@@ -95,6 +98,39 @@ export const WorkOrdersPage = () => {
     setPendingReauditOnly(pendingParam === '1')
   }, [searchParams])
 
+  useEffect(() => {
+    if (draftChecked) {
+      return
+    }
+    const draft = loadDraft()
+    if (!draft) {
+      setDraftChecked(true)
+      return
+    }
+    const draftAge = Date.now() - new Date(draft.updatedAt).getTime()
+    if (Number.isNaN(draftAge) || draftAge > WORK_ORDER_DRAFT_TTL_MS) {
+      clearDraft()
+      setDraftChecked(true)
+      return
+    }
+    const shouldRestore = window.confirm('Se encontro una OT sin guardar. Deseas recuperarla?')
+    if (shouldRestore) {
+      setEditingWorkOrderId(draft.editingWorkOrderId ?? null)
+      setFormData(draft.formData)
+    } else {
+      clearDraft()
+    }
+    setDraftChecked(true)
+  }, [draftChecked])
+
+  useEffect(() => {
+    const handler = window.setTimeout(() => {
+      saveDraft(formData, editingWorkOrderId)
+    }, 800)
+
+    return () => window.clearTimeout(handler)
+  }, [formData, editingWorkOrderId])
+
   const boardSummary = useMemo(
     () => ({
       total: workOrderViewList.length,
@@ -109,6 +145,63 @@ export const WorkOrdersPage = () => {
     setEditingWorkOrderId(null)
     setErrors({})
     setFormData(createEmptyWorkOrderFormData(fleetUnits[0]?.id ?? ''))
+    clearDraft()
+  }
+
+  const saveDraft = (data: WorkOrderFormData, editingId: string | null) => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        WORK_ORDER_DRAFT_KEY,
+        JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          editingWorkOrderId: editingId,
+          formData: data,
+        }),
+      )
+    } catch {
+      // ignore
+    }
+  }
+
+  const loadDraft = (): { updatedAt: string; editingWorkOrderId: string | null; formData: WorkOrderFormData } | null => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem(WORK_ORDER_DRAFT_KEY)
+      if (!raw) {
+        return null
+      }
+      const parsed = JSON.parse(raw) as {
+        updatedAt?: string
+        editingWorkOrderId?: string | null
+        formData?: WorkOrderFormData
+      }
+      if (!parsed?.updatedAt || !parsed?.formData) {
+        return null
+      }
+      return {
+        updatedAt: parsed.updatedAt,
+        editingWorkOrderId: parsed.editingWorkOrderId ?? null,
+        formData: parsed.formData,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  const clearDraft = () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.removeItem(WORK_ORDER_DRAFT_KEY)
+    } catch {
+      // ignore
+    }
   }
 
   const handleFieldChange = <TField extends WorkOrderFormField>(field: TField, value: WorkOrderFormData[TField]) => {
