@@ -50,6 +50,7 @@ export const fleetUnitTypes = [
   'SEMI_TRAILER',
   'AUTOMOBILE',
   'VAN',
+  'PICKUP',
 ] as const
 export type FleetUnitType = (typeof fleetUnitTypes)[number]
 

@@ -29,6 +29,7 @@ enum FleetUnitType {
   SEMI_TRAILER
   AUTOMOBILE
   VAN
+  PICKUP
 }
 
 enum AuditResult {

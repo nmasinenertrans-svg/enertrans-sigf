@@ -19,7 +19,7 @@ const unitTypesWithHydroCrane = new Set([
   'CHASSIS_WITH_HYDROCRANE',
   'TRACTOR_WITH_HYDROCRANE',
 ])
-const unitTypesWithoutHoist = new Set(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN'])
+const unitTypesWithoutHoist = new Set(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN', 'PICKUP'])
 
 const requiresHoist = (data: { hasHydroCrane?: boolean; unitType?: string }): boolean => {
   if (data.unitType && unitTypesWithoutHoist.has(data.unitType)) {
@@ -86,6 +86,7 @@ const fleetSchema = z.object({
     'SEMI_TRAILER',
     'AUTOMOBILE',
     'VAN',
+    'PICKUP',
   ]),
   configurationNotes: z.string().optional().default(''),
   chassisNumber: z.string().min(1),

@@ -69,7 +69,7 @@ const hasInvalidDocuments = (
 }
 
 const unitTypesWithHydroCrane = new Set<FleetUnitType>(['CHASSIS_WITH_HYDROCRANE', 'TRACTOR_WITH_HYDROCRANE'])
-const unitTypesWithoutHoist = new Set<FleetUnitType>(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN'])
+const unitTypesWithoutHoist = new Set<FleetUnitType>(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN', 'PICKUP'])
 
 export const FleetUnitForm = ({
   title,

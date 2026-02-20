@@ -17,7 +17,7 @@ const fallbackOperationalStatus: FleetOperationalStatus = fleetOperationalStatus
 const fallbackUnitType: FleetUnitType = fleetUnitTypes[0]
 
 const unitTypesWithHydroCrane = new Set<FleetUnitType>(['CHASSIS_WITH_HYDROCRANE', 'TRACTOR_WITH_HYDROCRANE'])
-const unitTypesWithoutHoist = new Set<FleetUnitType>(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN'])
+const unitTypesWithoutHoist = new Set<FleetUnitType>(['SEMI_TRAILER', 'AUTOMOBILE', 'VAN', 'PICKUP'])
 
 export const fleetOperationalStatusLabelMap: Record<FleetOperationalStatus, string> = {
   OPERATIONAL: 'Operativo',
@@ -33,6 +33,7 @@ export const fleetUnitTypeLabelMap: Record<FleetUnitType, string> = {
   SEMI_TRAILER: 'Semirremolque',
   AUTOMOBILE: 'Automovil',
   VAN: 'Furgon',
+  PICKUP: 'Pickup',
 }
 
 const createId = (): string => {
