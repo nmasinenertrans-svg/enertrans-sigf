@@ -159,9 +159,16 @@ export const syncQueue = async () => {
         const statusMatch = message.match(/^(\d{3})\b/)
         const statusCode = statusMatch ? Number(statusMatch[1]) : null
 
-        if (statusCode && [400, 404, 409, 422].includes(statusCode)) {
-          await removeQueueItem(item.id)
-          continue
+        if (statusCode) {
+          if (item.type === 'audit.create') {
+            if (statusCode === 409) {
+              await removeQueueItem(item.id)
+              continue
+            }
+          } else if ([400, 404, 409, 422].includes(statusCode)) {
+            await removeQueueItem(item.id)
+            continue
+          }
         }
         break
       }
