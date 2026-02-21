@@ -20,6 +20,25 @@ export const useOfflineSync = () => {
 
     const handleOnline = async () => {
       setIsOnline(true)
+      await triggerSync()
+    }
+
+    const handleOffline = () => {
+      setIsOnline(false)
+    }
+
+    const triggerSync = async () => {
+      if (syncingRef.current) {
+        return
+      }
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return
+      }
+      const items = await getQueueItems()
+      if (items.length === 0) {
+        await refreshCount()
+        return
+      }
       setIsSyncing(true)
       syncingRef.current = true
       await syncQueue()
@@ -28,35 +47,28 @@ export const useOfflineSync = () => {
       syncingRef.current = false
     }
 
-    const handleOffline = () => {
-      setIsOnline(false)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void triggerSync()
+      }
     }
 
     refreshCount()
 
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
+    document.addEventListener('visibilitychange', handleVisibility)
 
     const interval = setInterval(async () => {
-      await refreshCount()
-      if (navigator.onLine && !syncingRef.current) {
-        const items = await getQueueItems()
-        if (items.length > 0) {
-          setIsSyncing(true)
-          syncingRef.current = true
-          await syncQueue()
-          await refreshCount()
-          setIsSyncing(false)
-          syncingRef.current = false
-        }
-      }
-    }, 5000)
+      await triggerSync()
+    }, 15000)
 
     return () => {
       mounted = false
       clearInterval(interval)
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
 
