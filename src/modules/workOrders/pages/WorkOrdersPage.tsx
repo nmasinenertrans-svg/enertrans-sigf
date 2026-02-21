@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { usePermissions } from '../../../core/auth/usePermissions'
@@ -27,6 +27,7 @@ import { BackLink } from '../../../components/shared/BackLink'
 
 const allStatusesFilter = 'ALL'
 const WORK_ORDER_DRAFT_KEY = 'enertrans.workOrderDraft'
+const WORK_ORDER_RESOLUTION_DRAFT_KEY = 'enertrans.workOrderResolutionDraft'
 const WORK_ORDER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 
 export const WorkOrdersPage = () => {
@@ -53,6 +54,7 @@ export const WorkOrdersPage = () => {
   const [resolveTarget, setResolveTarget] = useState<{ workOrderId: string; deviation: WorkOrderDeviation } | null>(null)
   const [resolutionNote, setResolutionNote] = useState('')
   const [resolutionPhoto, setResolutionPhoto] = useState<File | null>(null)
+  const [resolutionPhotoBase64, setResolutionPhotoBase64] = useState('')
   const [draftChecked, setDraftChecked] = useState(false)
 
   const workOrderViewList = useMemo(() => buildWorkOrderView(workOrders, fleetUnits), [workOrders, fleetUnits])
@@ -99,6 +101,42 @@ export const WorkOrdersPage = () => {
   }, [searchParams])
 
   useEffect(() => {
+    if (!resolveTarget) {
+      return
+    }
+    const draft = loadResolutionDraft()
+    if (!draft) {
+      return
+    }
+    if (draft.workOrderId !== resolveTarget.workOrderId || draft.deviationId !== resolveTarget.deviation.id) {
+      return
+    }
+    const draftAge = Date.now() - new Date(draft.updatedAt).getTime()
+    if (Number.isNaN(draftAge) || draftAge > WORK_ORDER_DRAFT_TTL_MS) {
+      clearResolutionDraft()
+      return
+    }
+    if (draft.note) {
+      setResolutionNote(draft.note)
+    }
+    if (draft.photoBase64) {
+      setResolutionPhotoBase64(draft.photoBase64)
+      setResolutionPhoto(null)
+    }
+  }, [resolveTarget])
+
+  useEffect(() => {
+    if (!resolveTarget) {
+      return
+    }
+    const handler = window.setTimeout(() => {
+      saveResolutionDraft(resolveTarget.workOrderId, resolveTarget.deviation.id, resolutionNote, resolutionPhotoBase64)
+    }, 800)
+
+    return () => window.clearTimeout(handler)
+  }, [resolveTarget, resolutionNote, resolutionPhotoBase64])
+
+  useEffect(() => {
     if (draftChecked) {
       return
     }
@@ -141,6 +179,74 @@ export const WorkOrdersPage = () => {
     setErrors({})
     setFormData(createEmptyWorkOrderFormData(fleetUnits[0]?.id ?? ''))
     clearDraft()
+  }
+
+  const saveResolutionDraft = (workOrderId: string, deviationId: string, note: string, photoBase64: string) => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        WORK_ORDER_RESOLUTION_DRAFT_KEY,
+        JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          workOrderId,
+          deviationId,
+          note,
+          photoBase64,
+        }),
+      )
+    } catch {
+      // ignore
+    }
+  }
+
+  const loadResolutionDraft = (): {
+    updatedAt: string
+    workOrderId: string
+    deviationId: string
+    note: string
+    photoBase64: string
+  } | null => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem(WORK_ORDER_RESOLUTION_DRAFT_KEY)
+      if (!raw) {
+        return null
+      }
+      const parsed = JSON.parse(raw) as {
+        updatedAt?: string
+        workOrderId?: string
+        deviationId?: string
+        note?: string
+        photoBase64?: string
+      }
+      if (!parsed?.updatedAt || !parsed?.workOrderId || !parsed?.deviationId) {
+        return null
+      }
+      return {
+        updatedAt: parsed.updatedAt,
+        workOrderId: parsed.workOrderId,
+        deviationId: parsed.deviationId,
+        note: parsed.note ?? '',
+        photoBase64: parsed.photoBase64 ?? '',
+      }
+    } catch {
+      return null
+    }
+  }
+
+  const clearResolutionDraft = () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.removeItem(WORK_ORDER_RESOLUTION_DRAFT_KEY)
+    } catch {
+      // ignore
+    }
   }
 
   const saveDraft = (data: WorkOrderFormData, editingId: string | null) => {
@@ -332,6 +438,7 @@ export const WorkOrdersPage = () => {
     setResolveTarget({ workOrderId, deviation })
     setResolutionNote(deviation.resolutionNote ?? '')
     setResolutionPhoto(null)
+    setResolutionPhotoBase64('')
   }
 
   const handleSaveResolution = async () => {
@@ -339,7 +446,7 @@ export const WorkOrdersPage = () => {
       return
     }
 
-    if (!resolutionNote.trim() || !resolutionPhoto) {
+    if (!resolutionNote.trim() || (!resolutionPhoto && !resolutionPhotoBase64)) {
       setAppError('La foto y la descripcion de la reparacion son obligatorias.')
       return
     }
@@ -352,7 +459,7 @@ export const WorkOrdersPage = () => {
         reader.readAsDataURL(file)
       })
 
-    const photoBase64 = await readFileAsDataUrl(resolutionPhoto)
+    const photoBase64 = resolutionPhoto ? await readFileAsDataUrl(resolutionPhoto) : resolutionPhotoBase64
     let photoUrl = ''
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
@@ -360,8 +467,10 @@ export const WorkOrdersPage = () => {
         const response = await apiRequest<{ url: string }>('/files/upload', {
           method: 'POST',
           body: {
-            fileName: `${resolveTarget.workOrderId}-${resolveTarget.deviation.id}-${resolutionPhoto.name}`,
-            contentType: resolutionPhoto.type || 'application/octet-stream',
+            fileName: resolutionPhoto?.name
+              ? `${resolveTarget.workOrderId}-${resolveTarget.deviation.id}-${resolutionPhoto.name}`
+              : `${resolveTarget.workOrderId}-${resolveTarget.deviation.id}.jpg`,
+            contentType: resolutionPhoto?.type || 'image/jpeg',
             dataUrl: photoBase64,
             folder: 'work-orders',
           },
@@ -414,6 +523,8 @@ export const WorkOrdersPage = () => {
     setResolveTarget(null)
     setResolutionNote('')
     setResolutionPhoto(null)
+    setResolutionPhotoBase64('')
+    clearResolutionDraft()
   }
 
   const handleCloseWorkOrder = async (workOrderId: string) => {
@@ -627,7 +738,13 @@ export const WorkOrdersPage = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setResolveTarget(null)}
+                onClick={() => {
+                  setResolveTarget(null)
+                  setResolutionNote('')
+                  setResolutionPhoto(null)
+                  setResolutionPhotoBase64('')
+                  clearResolutionDraft()
+                }}
                 className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
               >
                 Cerrar
@@ -650,14 +767,31 @@ export const WorkOrdersPage = () => {
                 type="file"
                 accept="image/*"
                 className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-200 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-300"
-                onChange={(event) => setResolutionPhoto(event.target.files?.[0] ?? null)}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  setResolutionPhoto(file)
+                  if (!file) {
+                    setResolutionPhotoBase64('')
+                    return
+                  }
+                  const reader = new FileReader()
+                  reader.onload = () => setResolutionPhotoBase64(typeof reader.result === 'string' ? reader.result : '')
+                  reader.onerror = () => setResolutionPhotoBase64('')
+                  reader.readAsDataURL(file)
+                }}
               />
             </label>
 
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setResolveTarget(null)}
+                onClick={() => {
+                  setResolveTarget(null)
+                  setResolutionNote('')
+                  setResolutionPhoto(null)
+                  setResolutionPhotoBase64('')
+                  clearResolutionDraft()
+                }}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Cancelar
@@ -676,4 +810,5 @@ export const WorkOrdersPage = () => {
     </section>
   )
 }
+
 
