@@ -830,10 +830,10 @@ export const FleetDetailPage = () => {
                 { key: 'registration', title: 'Cedula', tracksExpiration: false },
               ] as const
             ).map((doc) => {
-              const docData = safeDocuments[doc.key]
+              const docData = safeDocuments[doc.key] ?? emptyDoc
               const hasFile = Boolean(docData.fileUrl || docData.fileBase64)
               const isNotApplicable = doc.key === 'hoist' && hoistNotApplicable
-              const tracksExpiration = doc.tracksExpiration ?? true
+              const tracksExpiration = 'tracksExpiration' in doc ? doc.tracksExpiration : true
               const docStatus = tracksExpiration ? getDocumentStatus(docData.expiresAt, 30, isNotApplicable) : 'na'
               const docStatusClass = documentStatusClassMap[docStatus]
               return (
