@@ -439,6 +439,36 @@ export const FleetDetailPage = () => {
     }
   }
 
+  const downloadDocument = (docKey: 'rto' | 'insurance' | 'hoist') => {
+    const doc = safeDocuments?.[docKey]
+    if (!doc) {
+      return
+    }
+
+    const fileName = doc.fileName?.trim() || `${docKey}.pdf`
+
+    if (doc.fileUrl) {
+      const link = document.createElement('a')
+      link.href = doc.fileUrl
+      link.download = fileName
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      return
+    }
+
+    if (doc.fileBase64) {
+      const link = document.createElement('a')
+      link.href = doc.fileBase64
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }
+
   const lubricantRows = selectedUnit
     ? [
         { label: 'Aceite Motor', value: safeLubricants.engineOil, key: 'engineOil' as const },
@@ -863,13 +893,24 @@ export const FleetDetailPage = () => {
                   </div>
 
                   {hasFile ? (
-                    <button
-                      type="button"
-                      onClick={() => openDocument(doc.key)}
-                      className="mt-2 inline-flex items-center rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
-                    >
-                      Ver archivo
-                    </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openDocument(doc.key)}
+                        className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                      >
+                        Ver archivo
+                      </button>
+                      {doc.key === 'insurance' ? (
+                        <button
+                          type="button"
+                          onClick={() => downloadDocument('insurance')}
+                          className="inline-flex items-center rounded-lg border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"
+                        >
+                          Descargar poliza PDF
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
 
                   <input
