@@ -96,6 +96,8 @@ const createEmptyDocuments = (): FleetUnitDocuments => ({
   rto: createEmptyDocument(),
   insurance: createEmptyDocument(),
   hoist: createEmptyDocument(),
+  title: createEmptyDocument(),
+  registration: createEmptyDocument(),
   hoistNotApplicable: false,
 })
 
@@ -119,6 +121,8 @@ const normalizeDocuments = (documents?: FleetUnitDocuments): FleetUnitDocuments 
   rto: normalizeDocument(documents?.rto),
   insurance: normalizeDocument(documents?.insurance),
   hoist: normalizeDocument(documents?.hoist),
+  title: normalizeDocument(documents?.title),
+  registration: normalizeDocument(documents?.registration),
   hoistNotApplicable: documents?.hoistNotApplicable ?? false,
 })
 

@@ -286,7 +286,14 @@ export const FleetDetailPage = () => {
   }
 
   const emptyDoc = { fileName: '', fileBase64: '', fileUrl: '', expiresAt: '' }
-  const emptyDocs = { rto: emptyDoc, insurance: emptyDoc, hoist: emptyDoc, hoistNotApplicable: false }
+  const emptyDocs = {
+    rto: emptyDoc,
+    insurance: emptyDoc,
+    hoist: emptyDoc,
+    title: emptyDoc,
+    registration: emptyDoc,
+    hoistNotApplicable: false,
+  }
   const emptyLubricants = {
     engineOil: '',
     engineOilLiters: '',
@@ -320,7 +327,10 @@ export const FleetDetailPage = () => {
   const safeLubricants = selectedUnit?.lubricants ?? emptyLubricants
   const safeFilters = selectedUnit?.filters ?? emptyFilters
 
-  const handleDocumentExpirationChange = (docKey: 'rto' | 'insurance' | 'hoist', value: string) => {
+  const handleDocumentExpirationChange = (
+    docKey: 'rto' | 'insurance' | 'hoist' | 'title' | 'registration',
+    value: string,
+  ) => {
     const nextDocuments = {
       ...(selectedUnit?.documents ?? emptyDocs),
       [docKey]: {
@@ -343,7 +353,10 @@ export const FleetDetailPage = () => {
     }
   }
 
-  const handleDocumentFileChange = async (docKey: 'rto' | 'insurance' | 'hoist', file?: File | null) => {
+  const handleDocumentFileChange = async (
+    docKey: 'rto' | 'insurance' | 'hoist' | 'title' | 'registration',
+    file?: File | null,
+  ) => {
     if (!file) {
       return
     }
@@ -421,7 +434,7 @@ export const FleetDetailPage = () => {
     reader.readAsDataURL(file)
   }
 
-  const openDocument = (docKey: 'rto' | 'insurance' | 'hoist') => {
+  const openDocument = (docKey: 'rto' | 'insurance' | 'hoist' | 'title' | 'registration') => {
     const doc = safeDocuments?.[docKey]
     if (!doc) {
       return
@@ -439,7 +452,7 @@ export const FleetDetailPage = () => {
     }
   }
 
-  const downloadDocument = (docKey: 'rto' | 'insurance' | 'hoist') => {
+  const downloadDocument = (docKey: 'rto' | 'insurance' | 'hoist' | 'title' | 'registration') => {
     const doc = safeDocuments?.[docKey]
     if (!doc) {
       return
@@ -810,22 +823,25 @@ export const FleetDetailPage = () => {
           <div className="mt-4 grid gap-4 xl:grid-cols-3">
             {(
               [
-                { key: 'rto', title: 'RTO / VTV' },
-                { key: 'insurance', title: 'Seguro' },
+                { key: 'rto', title: 'RTO / VTV', tracksExpiration: true },
+                { key: 'insurance', title: 'Seguro', tracksExpiration: true },
                 { key: 'hoist', title: 'Certificación de Izaje' },
+                { key: 'title', title: 'Titulo', tracksExpiration: false },
+                { key: 'registration', title: 'Cedula', tracksExpiration: false },
               ] as const
             ).map((doc) => {
               const docData = safeDocuments[doc.key]
               const hasFile = Boolean(docData.fileUrl || docData.fileBase64)
               const isNotApplicable = doc.key === 'hoist' && hoistNotApplicable
-              const docStatus = getDocumentStatus(docData.expiresAt, 30, isNotApplicable)
+              const tracksExpiration = doc.tracksExpiration ?? true
+              const docStatus = tracksExpiration ? getDocumentStatus(docData.expiresAt, 30, isNotApplicable) : 'na'
               const docStatusClass = documentStatusClassMap[docStatus]
               return (
                 <div key={doc.key} className="rounded-lg border border-slate-200 p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{doc.title}</p>
-                      <p className="text-xs text-slate-500">Vencimiento</p>
+                      <p className="text-xs text-slate-500">{tracksExpiration ? 'Vencimiento' : 'Documento informativo'}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span
@@ -840,19 +856,23 @@ export const FleetDetailPage = () => {
                       >
                         {isNotApplicable ? 'No aplica' : hasFile ? 'Cargado' : 'No cargado'}
                       </span>
-                      <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${docStatusClass}`}>
-                        {documentStatusLabelMap[docStatus]}
-                      </span>
+                      {tracksExpiration ? (
+                        <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${docStatusClass}`}>
+                          {documentStatusLabelMap[docStatus]}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
-                  <input
-                    type="date"
-                    className="mt-2 w-full rounded border border-slate-300 px-2 py-1 text-sm text-slate-900 outline-none focus:border-amber-400"
-                    value={docData.expiresAt}
-                    onChange={(event) => handleDocumentExpirationChange(doc.key, event.target.value)}
-                    disabled={!canEditFleet || (doc.key === 'hoist' && hoistNotApplicable)}
-                  />
+                  {tracksExpiration ? (
+                    <input
+                      type="date"
+                      className="mt-2 w-full rounded border border-slate-300 px-2 py-1 text-sm text-slate-900 outline-none focus:border-amber-400"
+                      value={docData.expiresAt}
+                      onChange={(event) => handleDocumentExpirationChange(doc.key, event.target.value)}
+                      disabled={!canEditFleet || (doc.key === 'hoist' && hoistNotApplicable)}
+                    />
+                  ) : null}
 
                   {doc.key === 'hoist' ? (
                     <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-600">
@@ -901,13 +921,13 @@ export const FleetDetailPage = () => {
                       >
                         Ver archivo
                       </button>
-                      {doc.key === 'insurance' ? (
+                      {doc.key === 'insurance' || doc.key === 'title' || doc.key === 'registration' ? (
                         <button
                           type="button"
-                          onClick={() => downloadDocument('insurance')}
+                          onClick={() => downloadDocument(doc.key)}
                           className="inline-flex items-center rounded-lg border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"
                         >
-                          Descargar poliza PDF
+                          Descargar PDF
                         </button>
                       ) : null}
                     </div>

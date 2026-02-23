@@ -156,6 +156,8 @@ export interface FleetUnitDocuments {
   rto: FleetUnitDocument
   insurance: FleetUnitDocument
   hoist: FleetUnitDocument
+  title?: FleetUnitDocument
+  registration?: FleetUnitDocument
   hoistNotApplicable?: boolean
 }
 
