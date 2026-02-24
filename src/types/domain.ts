@@ -150,6 +150,8 @@ export interface FleetUnitDocument {
   fileBase64: string
   fileUrl?: string
   expiresAt: string
+  rtoProvincial?: boolean
+  rtoNacional?: boolean
 }
 
 export interface FleetUnitDocuments {

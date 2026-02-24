@@ -285,7 +285,14 @@ export const FleetDetailPage = () => {
     return 'OPERATIONAL'
   }
 
-  const emptyDoc = { fileName: '', fileBase64: '', fileUrl: '', expiresAt: '' }
+  const emptyDoc = {
+    fileName: '',
+    fileBase64: '',
+    fileUrl: '',
+    expiresAt: '',
+    rtoProvincial: false,
+    rtoNacional: false,
+  }
   const emptyDocs = {
     rto: emptyDoc,
     insurance: emptyDoc,
@@ -432,6 +439,32 @@ export const FleetDetailPage = () => {
       }
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleRtoJurisdictionChange = (target: 'rtoProvincial' | 'rtoNacional', checked: boolean) => {
+    const nextRto = {
+      ...((selectedUnit?.documents ?? emptyDocs).rto ?? emptyDoc),
+      [target]: checked,
+      ...(target === 'rtoProvincial' && checked ? { rtoNacional: false } : {}),
+      ...(target === 'rtoNacional' && checked ? { rtoProvincial: false } : {}),
+    }
+    const nextDocuments = {
+      ...(selectedUnit?.documents ?? emptyDocs),
+      rto: nextRto,
+    }
+    const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
+    const nextOperationalStatus = resolveOperationalStatus(invalidDocs)
+    updateUnit((unit) => ({
+      ...unit,
+      documents: nextDocuments,
+      operationalStatus: nextOperationalStatus,
+    }))
+    if (typeof navigator !== 'undefined' && navigator.onLine && selectedUnit) {
+      apiRequest(`/fleet/${selectedUnit.id}`, {
+        method: 'PATCH',
+        body: { documents: nextDocuments, operationalStatus: nextOperationalStatus },
+      }).catch(() => null)
+    }
   }
 
   const openDocument = (docKey: 'rto' | 'insurance' | 'hoist' | 'title' | 'registration') => {
@@ -872,6 +905,29 @@ export const FleetDetailPage = () => {
                       onChange={(event) => handleDocumentExpirationChange(doc.key, event.target.value)}
                       disabled={!canEditFleet || (doc.key === 'hoist' && hoistNotApplicable)}
                     />
+                  ) : null}
+
+                  {doc.key === 'rto' ? (
+                    <div className="mt-3 grid gap-2">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(docData.rtoProvincial)}
+                          onChange={(event) => handleRtoJurisdictionChange('rtoProvincial', event.target.checked)}
+                          disabled={!canEditFleet}
+                        />
+                        RTO provincial
+                      </label>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(docData.rtoNacional)}
+                          onChange={(event) => handleRtoJurisdictionChange('rtoNacional', event.target.checked)}
+                          disabled={!canEditFleet}
+                        />
+                        RTO nacional
+                      </label>
+                    </div>
                   ) : null}
 
                   {doc.key === 'hoist' ? (

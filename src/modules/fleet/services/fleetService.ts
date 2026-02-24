@@ -90,6 +90,8 @@ const createEmptyDocument = (): FleetUnitDocuments['rto'] => ({
   fileBase64: '',
   fileUrl: '',
   expiresAt: '',
+  rtoProvincial: false,
+  rtoNacional: false,
 })
 
 const createEmptyDocuments = (): FleetUnitDocuments => ({
