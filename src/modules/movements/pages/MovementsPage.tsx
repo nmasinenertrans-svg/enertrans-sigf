@@ -28,15 +28,31 @@ export const MovementsPage = () => {
   const [errors, setErrors] = useState<Partial<Record<keyof MovementFormData, string>>>({})
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [unitSearch, setUnitSearch] = useState('')
 
   const unitsOptions = useMemo(
     () =>
       fleetUnits.map((unit) => ({
         id: unit.id,
         label: `${unit.internalCode} - ${unit.ownerCompany}`,
+        searchText: `${unit.internalCode} ${unit.ownerCompany} ${unit.clientName} ${unit.brand} ${unit.model}`.toLowerCase(),
       })),
     [fleetUnits],
   )
+
+  const selectedUnitOptions = useMemo(
+    () => unitsOptions.filter((unit) => formData.unitIds.includes(unit.id)),
+    [formData.unitIds, unitsOptions],
+  )
+
+  const filteredUnitOptions = useMemo(() => {
+    const query = unitSearch.trim().toLowerCase()
+    const available = unitsOptions.filter((unit) => !formData.unitIds.includes(unit.id))
+    if (!query) {
+      return available.slice(0, 12)
+    }
+    return available.filter((unit) => unit.searchText.includes(query)).slice(0, 12)
+  }, [unitSearch, unitsOptions, formData.unitIds])
 
   if (!featureFlags.showReportsModule) {
     return (
@@ -76,7 +92,7 @@ export const MovementsPage = () => {
         },
       })
 
-      setFormData((previous) => applyParsedPayload(previous, parsed ?? {}))
+      setFormData((previous) => applyParsedPayload(previous, parsed ?? {}, fleetUnits))
     } catch (error) {
       setAppError('No se pudo leer el PDF automáticamente. Completa los datos manualmente.')
     } finally {
@@ -126,6 +142,17 @@ export const MovementsPage = () => {
     }
   }
 
+  const addUnitId = (unitId: string) => {
+    handleFieldChange('unitIds', Array.from(new Set([...formData.unitIds, unitId])))
+  }
+
+  const removeUnitId = (unitId: string) => {
+    handleFieldChange(
+      'unitIds',
+      formData.unitIds.filter((id) => id !== unitId),
+    )
+  }
+
   return (
     <section className="space-y-6">
       <header>
@@ -141,6 +168,31 @@ export const MovementsPage = () => {
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Unidades
+            <input
+              value={unitSearch}
+              onChange={(event) => setUnitSearch(event.target.value)}
+              placeholder="Buscar por dominio, cliente, marca, modelo..."
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+            <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+              {filteredUnitOptions.length === 0 ? (
+                <p className="text-xs text-slate-500">Sin resultados.</p>
+              ) : (
+                <div className="space-y-1">
+                  {filteredUnitOptions.map((unit) => (
+                    <button
+                      key={`${unit.id}-add`}
+                      type="button"
+                      onClick={() => addUnitId(unit.id)}
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm text-slate-900 hover:bg-white"
+                    >
+                      <span>{unit.label}</span>
+                      <span className="text-xs font-semibold text-amber-700">Agregar</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <select
               multiple
               value={formData.unitIds}
@@ -150,14 +202,29 @@ export const MovementsPage = () => {
                   Array.from(event.target.selectedOptions).map((option) => option.value),
                 )
               }
-              className="min-h-[120px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              className="hidden"
             >
-              {unitsOptions.map((unit) => (
+              {filteredUnitOptions.map((unit) => (
                 <option key={unit.id} value={unit.id}>
                   {unit.label}
                 </option>
               ))}
             </select>
+            {selectedUnitOptions.length > 0 ? (
+              <div className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                {selectedUnitOptions.map((unit) => (
+                  <button
+                    key={unit.id}
+                    type="button"
+                    onClick={() => removeUnitId(unit.id)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    <span>{unit.label}</span>
+                    <span className="text-rose-600">x</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <span className="text-xs text-slate-500">Seleccioná una o más unidades.</span>
             {errors.unitIds ? <span className="text-xs text-rose-700">{errors.unitIds}</span> : null}
           </label>
