@@ -195,7 +195,8 @@ router.post('/parse', async (req, res) => {
 })
 
 router.delete('/:id', async (req: AuthenticatedRequest, res) => {
-  const movementId = req.params.id
+  const rawMovementId = req.params.id
+  const movementId = Array.isArray(rawMovementId) ? rawMovementId[0] : rawMovementId
   if (!movementId) {
     return res.status(400).json({ message: 'Id de movimiento requerido.' })
   }
