@@ -159,6 +159,7 @@ router.post('/', async (req, res) => {
       unitIds: created.units.map((unit) => unit.unitId),
     })
   } catch (error) {
+    console.error('Movements POST error:', error)
     return res.status(500).json({ message: 'No se pudo crear el movimiento.' })
   }
 })
