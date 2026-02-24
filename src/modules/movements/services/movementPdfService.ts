@@ -152,8 +152,15 @@ export const exportMovementPdf = async ({ movement, units }: MovementPdfPayload)
   if (mainDesc) descriptionLines.push(mainDesc)
   selectedUnits.forEach((unit) => {
     descriptionLines.push(`Dominio: ${unit.internalCode}`)
-    if (safeText(unit.chassisNumber)) descriptionLines.push(`N° Chasis: ${unit.chassisNumber}`)
-    if (safeText(unit.engineNumber)) descriptionLines.push(`N° Motor: ${unit.engineNumber}`)
+    if (safeText(unit.chassisNumber)) descriptionLines.push(`Nro Chasis: ${unit.chassisNumber}`)
+    if (safeText(unit.engineNumber)) descriptionLines.push(`Nro Motor: ${unit.engineNumber}`)
+    if (unit.hasHydroCrane) {
+      const hydroLabel = [safeText(unit.hydroCraneBrand), safeText(unit.hydroCraneModel)].filter(Boolean).join(' ')
+      descriptionLines.push(`Hidrogrua: ${hydroLabel || 'Si'}`)
+      if (safeText(unit.hydroCraneSerialNumber)) {
+        descriptionLines.push(`Nro Serie Hidrogrua: ${unit.hydroCraneSerialNumber}`)
+      }
+    }
   })
   if (!descriptionLines.length) {
     descriptionLines.push('Sin descripcion')
@@ -194,10 +201,6 @@ export const exportMovementPdf = async ({ movement, units }: MovementPdfPayload)
   pdf.text(`DNI: ${safeText(movement.receiverContactDni) || '-'}`, rightX, leftY + 5)
   pdf.text(`Sector: ${safeText(movement.receiverContactSector) || '-'}`, rightX, leftY + 10)
   pdf.text(`Cargo: ${safeText(movement.receiverContactRole) || '-'}`, rightX, leftY + 15)
-
-  pdf.setFontSize(7)
-  pdf.setTextColor(90, 90, 90)
-  pdf.text('Hidrogrias y Logistica - Servicio Integral de Elevacion y Traslado de Equipos', 10, pageHeight - 6)
 
   const fileCode = safeText(movement.remitoNumber) || movement.id.slice(0, 8)
   pdf.save(`Remito_${fileCode}.pdf`)
