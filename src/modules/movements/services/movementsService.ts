@@ -16,6 +16,14 @@ export interface MovementFormData {
   workLocation: string
   equipmentDescription: string
   observations: string
+  deliveryContactName: string
+  deliveryContactDni: string
+  deliveryContactSector: string
+  deliveryContactRole: string
+  receiverContactName: string
+  receiverContactDni: string
+  receiverContactSector: string
+  receiverContactRole: string
   pdfFileName: string
   pdfFileBase64: string
   pdfFileUrl: string
@@ -33,6 +41,14 @@ export const createEmptyMovementFormData = (unitId?: string): MovementFormData =
   workLocation: '',
   equipmentDescription: '',
   observations: '',
+  deliveryContactName: '',
+  deliveryContactDni: '',
+  deliveryContactSector: '',
+  deliveryContactRole: '',
+  receiverContactName: '',
+  receiverContactDni: '',
+  receiverContactSector: '',
+  receiverContactRole: '',
   pdfFileName: '',
   pdfFileBase64: '',
   pdfFileUrl: '',
@@ -77,6 +93,14 @@ export const toFleetMovement = (formData: MovementFormData): FleetMovement => ({
   workLocation: formData.workLocation.trim(),
   equipmentDescription: formData.equipmentDescription.trim(),
   observations: formData.observations.trim(),
+  deliveryContactName: formData.deliveryContactName.trim(),
+  deliveryContactDni: formData.deliveryContactDni.trim(),
+  deliveryContactSector: formData.deliveryContactSector.trim(),
+  deliveryContactRole: formData.deliveryContactRole.trim(),
+  receiverContactName: formData.receiverContactName.trim(),
+  receiverContactDni: formData.receiverContactDni.trim(),
+  receiverContactSector: formData.receiverContactSector.trim(),
+  receiverContactRole: formData.receiverContactRole.trim(),
   pdfFileName: formData.pdfFileName || undefined,
   pdfFileUrl: formData.pdfFileUrl || undefined,
   parsedPayload: formData.parsedPayload,

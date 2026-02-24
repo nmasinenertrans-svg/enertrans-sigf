@@ -300,6 +300,14 @@ export interface FleetMovement {
   workLocation: string
   equipmentDescription: string
   observations: string
+  deliveryContactName?: string
+  deliveryContactDni?: string
+  deliveryContactSector?: string
+  deliveryContactRole?: string
+  receiverContactName?: string
+  receiverContactDni?: string
+  receiverContactSector?: string
+  receiverContactRole?: string
   pdfFileName?: string
   pdfFileUrl?: string
   parsedPayload?: Record<string, unknown>

@@ -10,6 +10,7 @@ import {
   validateMovementFormData,
   type MovementFormData,
 } from '../services/movementsService'
+import { exportMovementPdf } from '../services/movementPdfService'
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -151,6 +152,19 @@ export const MovementsPage = () => {
       'unitIds',
       formData.unitIds.filter((id) => id !== unitId),
     )
+  }
+
+  const handleExportMovementPdf = async (movementId: string) => {
+    const movement = movements.find((item) => item.id === movementId)
+    if (!movement) {
+      setAppError('No se encontro el remito para generar el PDF.')
+      return
+    }
+    try {
+      await exportMovementPdf({ movement, units: fleetUnits })
+    } catch {
+      setAppError('No se pudo generar el PDF del remito.')
+    }
   }
 
   return (
@@ -302,6 +316,82 @@ export const MovementsPage = () => {
             />
           </label>
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 lg:col-span-2">
+            <h4 className="text-sm font-semibold text-slate-800">Entrega (informativo)</h4>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                Nombre y apellido
+                <input
+                  value={formData.deliveryContactName}
+                  onChange={(event) => handleFieldChange('deliveryContactName', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                DNI
+                <input
+                  value={formData.deliveryContactDni}
+                  onChange={(event) => handleFieldChange('deliveryContactDni', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                Sector
+                <input
+                  value={formData.deliveryContactSector}
+                  onChange={(event) => handleFieldChange('deliveryContactSector', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                Cargo
+                <input
+                  value={formData.deliveryContactRole}
+                  onChange={(event) => handleFieldChange('deliveryContactRole', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 lg:col-span-2">
+            <h4 className="text-sm font-semibold text-slate-800">Recepcion (informativo)</h4>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                Nombre y apellido
+                <input
+                  value={formData.receiverContactName}
+                  onChange={(event) => handleFieldChange('receiverContactName', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                DNI
+                <input
+                  value={formData.receiverContactDni}
+                  onChange={(event) => handleFieldChange('receiverContactDni', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                Sector
+                <input
+                  value={formData.receiverContactSector}
+                  onChange={(event) => handleFieldChange('receiverContactSector', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+                Cargo
+                <input
+                  value={formData.receiverContactRole}
+                  onChange={(event) => handleFieldChange('receiverContactRole', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+              </label>
+            </div>
+          </div>
+
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 lg:col-span-2">
             Remito (PDF)
             <input type="file" accept="application/pdf" onChange={handleFileSelection} />
@@ -345,6 +435,7 @@ export const MovementsPage = () => {
                   <th className="px-3 py-2">Unidad</th>
                   <th className="px-3 py-2">Cliente</th>
                   <th className="px-3 py-2">Tipo</th>
+                  <th className="px-3 py-2">PDF app</th>
                   <th className="px-3 py-2">PDF</th>
                 </tr>
               </thead>
@@ -358,6 +449,15 @@ export const MovementsPage = () => {
                       <td className="px-3 py-2">{unit?.internalCode ?? 'Unidad'}</td>
                       <td className="px-3 py-2">{movement.clientName || unit?.clientName || 'Sin cliente'}</td>
                       <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'Entrada' : 'Devolución'}</td>
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => handleExportMovementPdf(movement.id)}
+                          className="text-emerald-700 hover:underline"
+                        >
+                          Generar PDF
+                        </button>
+                      </td>
                       <td className="px-3 py-2">
                         {movement.pdfFileUrl ? (
                           <a
