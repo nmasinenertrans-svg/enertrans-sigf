@@ -21,7 +21,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 
 export const MovementsPage = () => {
   const {
-    state: { fleetUnits, movements, featureFlags },
+    state: { fleetUnits, movements },
     actions: { setMovements, setAppError },
   } = useAppContext()
   const [formData, setFormData] = useState<MovementFormData>(createEmptyMovementFormData())
@@ -49,7 +49,7 @@ export const MovementsPage = () => {
     const query = unitSearch.trim().toLowerCase()
     const available = unitsOptions.filter((unit) => !formData.unitIds.includes(unit.id))
     if (!query) {
-      return available.slice(0, 12)
+      return []
     }
     return available.filter((unit) => unit.searchText.includes(query)).slice(0, 12)
   }, [unitSearch, unitsOptions, formData.unitIds])
@@ -174,10 +174,12 @@ export const MovementsPage = () => {
               placeholder="Buscar por dominio, cliente, marca, modelo..."
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             />
-            <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
-              {filteredUnitOptions.length === 0 ? (
-                <p className="text-xs text-slate-500">Sin resultados.</p>
-              ) : (
+              <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+                {!unitSearch.trim() ? (
+                  <p className="text-xs text-slate-500">Escribi para buscar y agregar unidades.</p>
+                ) : filteredUnitOptions.length === 0 ? (
+                  <p className="text-xs text-slate-500">Sin resultados.</p>
+                ) : (
                 <div className="space-y-1">
                   {filteredUnitOptions.map((unit) => (
                     <button

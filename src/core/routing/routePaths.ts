@@ -11,6 +11,7 @@
   },
   maintenance: '/maintenance',
   audits: '/audits',
+  movements: '/movements',
   workOrders: '/work-orders',
   externalRequests: '/work-orders/external-requests',
   repairs: '/repairs',

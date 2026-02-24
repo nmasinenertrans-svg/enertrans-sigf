@@ -10,6 +10,7 @@ import { FleetListPage } from '../../modules/fleet/pages/FleetListPage'
 import { InventoryPage } from '../../modules/inventory/pages/InventoryPage'
 import { MaintenancePage } from '../../modules/maintenance/pages/MaintenancePage'
 import { RepairsPage } from '../../modules/repairs/pages/RepairsPage'
+import { MovementsPage } from '../../modules/movements/pages/MovementsPage'
 import { WorkOrdersPage } from '../../modules/workOrders/pages/WorkOrdersPage'
 import { ExternalRequestsPage } from '../../modules/externalRequests/pages/ExternalRequestsPage'
 import { LoginPage } from '../../modules/auth/pages/LoginPage'
@@ -85,6 +86,14 @@ export const AppRouter = () => (
           element={
             <RequirePermission module="AUDITS" action="view">
               <AuditsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.movements}
+          element={
+            <RequirePermission module="FLEET" action="view">
+              <MovementsPage />
             </RequirePermission>
           }
         />

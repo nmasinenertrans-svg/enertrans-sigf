@@ -125,7 +125,7 @@ export const FleetDetailPage = () => {
 
   const {
     state: { fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements },
-    actions: { setFleetUnits, setMovements, setAppError },
+    actions: { setFleetUnits },
   } = useAppContext()
 
   const canEditFleet = can('FLEET', 'edit')
@@ -1255,8 +1255,6 @@ export const FleetDetailPage = () => {
               unitId={selectedUnit.id}
               fleetUnits={fleetUnits}
               movements={movements}
-              onMovementsChange={setMovements}
-              onError={setAppError}
             />
           ) : null}
 
