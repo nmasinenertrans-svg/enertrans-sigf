@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import pdfParse from 'pdf-parse'
 import { prisma } from '../db.js'
+import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -190,6 +191,42 @@ router.post('/parse', async (req, res) => {
       rawText: '',
       error: 'No se pudo leer el PDF automáticamente.',
     })
+  }
+})
+
+router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+  const movementId = req.params.id
+  if (!movementId) {
+    return res.status(400).json({ message: 'Id de movimiento requerido.' })
+  }
+
+  try {
+    const userId = req.userId
+    if (!userId) {
+      return res.status(401).json({ message: 'Token invalido.' })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    })
+
+    if (!user) {
+      return res.status(401).json({ message: 'Usuario no encontrado.' })
+    }
+
+    if (user.role !== 'GERENTE') {
+      return res.status(403).json({ message: 'Solo gerencia puede eliminar remitos.' })
+    }
+
+    await prisma.fleetMovement.delete({
+      where: { id: movementId },
+    })
+
+    return res.status(204).send()
+  } catch (error) {
+    console.error('Movements DELETE error:', error)
+    return res.status(500).json({ message: 'No se pudo eliminar el movimiento.' })
   }
 })
 
