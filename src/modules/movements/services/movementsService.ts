@@ -32,6 +32,28 @@ export interface MovementFormData {
 
 export type MovementFormErrors = Partial<Record<keyof MovementFormData, string>>
 
+const uniqueIds = (ids: string[]): string[] => Array.from(new Set(ids))
+
+export const expandMovementUnitIdsWithAssociations = (unitIds: string[], fleetUnits: FleetUnit[]): string[] => {
+  const unitById = new Map(fleetUnits.map((unit) => [unit.id, unit] as const))
+  const nextIds = new Set(unitIds)
+  const queue = [...unitIds]
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()
+    if (!currentId) continue
+    const unit = unitById.get(currentId)
+    if (!unit) continue
+
+    if (unit.hasSemiTrailer && unit.semiTrailerUnitId && unitById.has(unit.semiTrailerUnitId) && !nextIds.has(unit.semiTrailerUnitId)) {
+      nextIds.add(unit.semiTrailerUnitId)
+      queue.push(unit.semiTrailerUnitId)
+    }
+  }
+
+  return [...nextIds]
+}
+
 export const createEmptyMovementFormData = (unitId?: string): MovementFormData => ({
   unitIds: unitId ? [unitId] : [],
   movementType: 'ENTRY',
@@ -168,8 +190,10 @@ export const applyParsedPayload = (
     .filter((id): id is string => Boolean(id))
 
   const mergedUnitIds = detectedUnitIds.length
-    ? Array.from(new Set([...next.unitIds, ...detectedUnitIds]))
+    ? uniqueIds([...next.unitIds, ...detectedUnitIds])
     : next.unitIds
+
+  const expandedUnitIds = expandMovementUnitIdsWithAssociations(mergedUnitIds, fleetUnits)
 
   return {
     ...next,
@@ -179,6 +203,6 @@ export const applyParsedPayload = (
     workLocation: workLocation || next.workLocation,
     equipmentDescription: equipmentDescription || next.equipmentDescription,
     observations: observations || next.observations,
-    unitIds: mergedUnitIds,
+    unitIds: expandedUnitIds,
   }
 }

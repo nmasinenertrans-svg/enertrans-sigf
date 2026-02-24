@@ -7,6 +7,7 @@ import type { FleetMovement } from '../../../types/domain'
 import {
   applyParsedPayload,
   createEmptyMovementFormData,
+  expandMovementUnitIdsWithAssociations,
   validateMovementFormData,
   type MovementFormData,
 } from '../services/movementsService'
@@ -126,6 +127,7 @@ export const MovementsPage = () => {
 
       const payload = {
         ...formData,
+        unitIds: expandMovementUnitIdsWithAssociations(formData.unitIds, fleetUnits),
         pdfFileUrl: pdfUrl,
       }
 
@@ -144,7 +146,8 @@ export const MovementsPage = () => {
   }
 
   const addUnitId = (unitId: string) => {
-    handleFieldChange('unitIds', Array.from(new Set([...formData.unitIds, unitId])))
+    const nextUnitIds = expandMovementUnitIdsWithAssociations([...formData.unitIds, unitId], fleetUnits)
+    handleFieldChange('unitIds', nextUnitIds)
   }
 
   const removeUnitId = (unitId: string) => {
