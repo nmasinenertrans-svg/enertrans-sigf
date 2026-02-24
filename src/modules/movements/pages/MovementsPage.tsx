@@ -23,7 +23,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 
 export const MovementsPage = () => {
   const {
-    state: { fleetUnits, movements, featureFlags },
+    state: { fleetUnits, movements, featureFlags, currentUser },
     actions: { setMovements, setAppError },
   } = useAppContext()
   const [formData, setFormData] = useState<MovementFormData>(createEmptyMovementFormData())
@@ -55,6 +55,8 @@ export const MovementsPage = () => {
     }
     return available.filter((unit) => unit.searchText.includes(query)).slice(0, 12)
   }, [unitSearch, unitsOptions, formData.unitIds])
+
+  const canDeleteMovements = currentUser?.role === 'GERENTE'
 
   if (!featureFlags.showReportsModule) {
     return (
@@ -167,6 +169,20 @@ export const MovementsPage = () => {
       await exportMovementPdf({ movement, units: fleetUnits })
     } catch {
       setAppError('No se pudo generar el PDF del remito.')
+    }
+  }
+
+  const handleDeleteMovement = async (movementId: string) => {
+    const confirmed = window.confirm('¿Eliminar este remito? Esta acción no se puede deshacer.')
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await apiRequest(`/movements/${movementId}`, { method: 'DELETE' })
+      setMovements(movements.filter((movement) => movement.id !== movementId))
+    } catch {
+      setAppError('No se pudo eliminar el remito.')
     }
   }
 
@@ -440,6 +456,7 @@ export const MovementsPage = () => {
                   <th className="px-3 py-2">Tipo</th>
                   <th className="px-3 py-2">PDF app</th>
                   <th className="px-3 py-2">PDF</th>
+                  {canDeleteMovements ? <th className="px-3 py-2">Acciones</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -475,6 +492,17 @@ export const MovementsPage = () => {
                           'Sin adjunto'
                         )}
                       </td>
+                      {canDeleteMovements ? (
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMovement(movement.id)}
+                            className="text-rose-700 hover:underline"
+                          >
+                            Eliminar
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   )
                 })}
