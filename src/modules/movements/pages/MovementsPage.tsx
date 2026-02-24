@@ -21,7 +21,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 
 export const MovementsPage = () => {
   const {
-    state: { fleetUnits, movements },
+    state: { fleetUnits, movements, featureFlags },
     actions: { setMovements, setAppError },
   } = useAppContext()
   const [formData, setFormData] = useState<MovementFormData>(createEmptyMovementFormData())
