@@ -35,6 +35,7 @@ export const FleetMovementsPanel = ({
   const [errors, setErrors] = useState<Partial<Record<keyof MovementFormData, string>>>({})
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [unitSearch, setUnitSearch] = useState('')
 
   const unitsOptions = useMemo(
     () =>
@@ -44,6 +45,20 @@ export const FleetMovementsPanel = ({
       })),
     [fleetUnits],
   )
+
+  const selectedUnitOptions = useMemo(
+    () => unitsOptions.filter((unit) => formData.unitIds.includes(unit.id)),
+    [formData.unitIds, unitsOptions],
+  )
+
+  const filteredUnitOptions = useMemo(() => {
+    const term = unitSearch.trim().toLowerCase()
+    const available = unitsOptions.filter((unit) => !formData.unitIds.includes(unit.id))
+    if (!term) return available.slice(0, 12)
+    return available
+      .filter((unit) => unit.label.toLowerCase().includes(term))
+      .slice(0, 12)
+  }, [formData.unitIds, unitSearch, unitsOptions])
 
   const unitMovements = useMemo(
     () => movements.filter((movement) => movement.unitIds.includes(unitId)),
@@ -61,6 +76,22 @@ export const FleetMovementsPanel = ({
       const next = exists
         ? previous.unitIds.filter((id: string) => id !== targetUnitId)
         : [...previous.unitIds, targetUnitId]
+      return { ...previous, unitIds: next.length ? next : [unitId] }
+    })
+  }
+
+  const addUnit = (targetUnitId: string) => {
+    setFormData((previous: MovementFormData) => {
+      if (previous.unitIds.includes(targetUnitId)) return previous
+      return { ...previous, unitIds: [...previous.unitIds, targetUnitId] }
+    })
+    setErrors((previous: Partial<Record<keyof MovementFormData, string>>) => ({ ...previous, unitIds: undefined }))
+    setUnitSearch('')
+  }
+
+  const removeUnit = (targetUnitId: string) => {
+    setFormData((previous: MovementFormData) => {
+      const next = previous.unitIds.filter((id) => id !== targetUnitId)
       return { ...previous, unitIds: next.length ? next : [unitId] }
     })
   }
@@ -89,7 +120,7 @@ export const FleetMovementsPanel = ({
         },
       })
 
-      setFormData((previous: MovementFormData) => applyParsedPayload(previous, parsed ?? {}))
+      setFormData((previous: MovementFormData) => applyParsedPayload(previous, parsed ?? {}, fleetUnits))
     } catch {
       onError('No se pudo leer el PDF automáticamente. Completa los datos manualmente.')
     } finally {
@@ -144,20 +175,71 @@ export const FleetMovementsPanel = ({
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="flex flex-col gap-2 text-sm font-semibold text-slate-700 lg:col-span-2">
             Unidades incluidas
-            <div className="grid gap-2 sm:grid-cols-2">
-              {unitsOptions.map((unit) => {
-                const checked = formData.unitIds.includes(unit.id)
-                return (
-                  <label key={unit.id} className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => handleToggleUnit(unit.id)}
-                    />
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <input
+                value={unitSearch}
+                onChange={(event) => setUnitSearch(event.target.value)}
+                placeholder="Buscar por dominio, empresa, marca o modelo..."
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+              />
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedUnitOptions.map((unit) => (
+                  <span
+                    key={unit.id}
+                    className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-slate-800"
+                  >
                     {unit.label}
-                  </label>
-                )
-              })}
+                    <button
+                      type="button"
+                      onClick={() => removeUnit(unit.id)}
+                      className="rounded-full px-1 text-slate-600 hover:bg-amber-100 hover:text-slate-900"
+                      aria-label={`Quitar ${unit.label}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {filteredUnitOptions.map((unit) => (
+                  <div
+                    key={unit.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                  >
+                    <span className="text-xs font-normal text-slate-700">{unit.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => addUnit(unit.id)}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                ))}
+                {filteredUnitOptions.length === 0 ? (
+                  <p className="text-xs font-normal text-slate-500 sm:col-span-2">
+                    No hay unidades coincidentes.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="hidden">
+                {unitsOptions.map((unit) => {
+                  const checked = formData.unitIds.includes(unit.id)
+                  return (
+                    <label key={unit.id} className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => handleToggleUnit(unit.id)}
+                      />
+                      {unit.label}
+                    </label>
+                  )
+                })}
+              </div>
             </div>
             {errors.unitIds ? <span className="text-xs text-rose-700">{errors.unitIds}</span> : null}
           </div>
