@@ -1,4 +1,5 @@
-﻿import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import type { ReactElement } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '../layout/AppLayout'
 import { ROUTE_PATHS } from './routePaths'
 import { AuditsPage } from '../../modules/audits/pages/AuditsPage'
@@ -29,7 +30,7 @@ const RequireFeatureFlag = ({
   children,
 }: {
   flag: keyof FeatureFlags
-  children: JSX.Element
+  children: ReactElement
 }) => {
   const {
     state: { featureFlags },
@@ -216,3 +217,4 @@ export const AppRouter = () => (
     </Routes>
   </BrowserRouter>
 )
+
