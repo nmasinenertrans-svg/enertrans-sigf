@@ -245,9 +245,6 @@ export const TasksPage = () => {
       <div className="grid gap-4 xl:grid-cols-3">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
           <h3 className="text-lg font-bold text-slate-900">{editingTaskId ? 'Editar tarea' : 'Nueva tarea'}</h3>
-          <p className="mt-1 text-sm text-slate-600">
-            {isManager ? 'Solo DEV y GERENTE pueden crear/asignar tareas.' : 'Vista solo lectura para tu rol.'}
-          </p>
 
           {isManager ? (
             <>
