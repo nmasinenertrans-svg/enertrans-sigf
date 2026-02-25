@@ -252,9 +252,14 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
   if (!actor) {
     return res.status(401).json({ message: 'No autorizado.' })
   }
+  const rawTaskId = req.params.id
+  const taskId = Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId
+  if (!taskId) {
+    return res.status(400).json({ message: 'Id de tarea requerido.' })
+  }
 
   try {
-    const current = await prisma.task.findUnique({ where: { id: req.params.id } })
+    const current = await prisma.task.findUnique({ where: { id: taskId } })
     if (!current) {
       return res.status(404).json({ message: 'Tarea no encontrada.' })
     }
@@ -308,7 +313,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
 
     const task = await prisma.$transaction(async (tx) => {
       const updated = await tx.task.update({
-        where: { id: req.params.id },
+        where: { id: taskId },
         data: {
           title: nextTitle,
           description: nextDescription,
@@ -386,10 +391,15 @@ router.post('/:id/take', async (req: AuthenticatedRequest, res) => {
   if (!canTakeFromBankRole(actor.role)) {
     return res.status(403).json({ message: 'Solo auditores o mecanicos pueden tomar tareas del banco.' })
   }
+  const rawTaskId = req.params.id
+  const taskId = Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId
+  if (!taskId) {
+    return res.status(400).json({ message: 'Id de tarea requerido.' })
+  }
 
   try {
     const task = await prisma.$transaction(async (tx) => {
-      const current = await tx.task.findUnique({ where: { id: req.params.id } })
+      const current = await tx.task.findUnique({ where: { id: taskId } })
       if (!current) {
         throw new Error('TASK_NOT_FOUND')
       }
