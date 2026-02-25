@@ -237,9 +237,6 @@ export const TasksPage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Tareas</h2>
-        <p className="text-sm text-slate-600">
-          Asignacion manual por gerencia/DEV, banco de tareas para auditores y mecanicos, e historico de cambios.
-        </p>
       </header>
 
       <div className="grid gap-4 xl:grid-cols-3">
