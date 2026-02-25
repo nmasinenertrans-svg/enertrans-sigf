@@ -58,6 +58,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'AUDITS', ['view', 'create'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'TASKS', ['view'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view', 'create', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
@@ -67,6 +68,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
   if (role === 'AUDITOR') {
     allowModule(permissions, 'FLEET', ['view'])
     allowModule(permissions, 'AUDITS', ['view', 'create'])
+    allowModule(permissions, 'TASKS', ['view', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
     return permissions
   }
@@ -74,6 +76,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
   if (role === 'MECANICO') {
     allowModule(permissions, 'FLEET', ['view'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'TASKS', ['view', 'edit'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view'])
@@ -96,7 +99,15 @@ const isOverrideActive = (override: PermissionOverride): boolean => {
 }
 
 export const resolveUserPermissions = (user: AppUser | null): UserPermissions => {
-  const base = user?.permissions ?? (user ? getRolePermissions(user.role) : buildEmptyPermissions())
+  const roleDefaults = user ? getRolePermissions(user.role) : buildEmptyPermissions()
+  const stored = user?.permissions
+  const base = permissionModules.reduce((accumulator, moduleKey) => {
+    accumulator[moduleKey] = {
+      ...roleDefaults[moduleKey],
+      ...(stored?.[moduleKey] ?? {}),
+    }
+    return accumulator
+  }, {} as UserPermissions)
   const overrides = (user?.permissionOverrides ?? []).filter((override) => isOverrideActive(override))
 
   const resolved = permissionModules.reduce((accumulator, moduleKey) => {

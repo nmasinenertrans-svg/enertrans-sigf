@@ -9,6 +9,7 @@ export const permissionModules = [
   'MAINTENANCE',
   'AUDITS',
   'WORK_ORDERS',
+  'TASKS',
   'REPAIRS',
   'INVENTORY',
   'REPORTS',
@@ -56,6 +57,24 @@ export type FleetUnitType = (typeof fleetUnitTypes)[number]
 
 export const fleetMovementTypes = ['ENTRY', 'RETURN'] as const
 export type FleetMovementType = (typeof fleetMovementTypes)[number]
+
+export const taskStatuses = ['UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELED'] as const
+export type TaskStatus = (typeof taskStatuses)[number]
+
+export const taskPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const
+export type TaskPriority = (typeof taskPriorities)[number]
+
+export const taskEventTypes = [
+  'CREATED',
+  'UPDATED',
+  'ASSIGNED',
+  'UNASSIGNED',
+  'MOVED_TO_BANK',
+  'REMOVED_FROM_BANK',
+  'TAKEN_FROM_BANK',
+  'STATUS_CHANGED',
+] as const
+export type TaskEventType = (typeof taskEventTypes)[number]
 
 export interface AppUser {
   id: string
@@ -314,4 +333,36 @@ export interface FleetMovement {
   pdfFileUrl?: string
   parsedPayload?: Record<string, unknown>
   createdAt?: string
+}
+
+export interface TaskEventRecord {
+  id: string
+  taskId: string
+  type: TaskEventType
+  actorUserId: string
+  actorName?: string
+  notes?: string
+  fromStatus?: TaskStatus | ''
+  toStatus?: TaskStatus | ''
+  fromAssignedToUserId?: string | null
+  toAssignedToUserId?: string | null
+  createdAt?: string
+}
+
+export interface TaskRecord {
+  id: string
+  title: string
+  description: string
+  status: TaskStatus
+  priority: TaskPriority
+  assignedToUserId?: string | null
+  assignedToUserName?: string
+  assignedByUserId?: string | null
+  createdByUserId: string
+  createdByUserName?: string
+  isInTaskBank: boolean
+  createdAt?: string
+  updatedAt?: string
+  closedAt?: string | null
+  events: TaskEventRecord[]
 }

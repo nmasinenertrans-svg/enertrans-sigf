@@ -8,6 +8,20 @@ import { getRolePermissions } from '../../../core/auth/permissions'
 
 const buildEmptyPermissions = (): UserPermissions => getRolePermissions('AUDITOR')
 
+const normalizePermissions = (permissions: UserPermissions | undefined, role: UserRole): UserPermissions => {
+  const base = getRolePermissions(role)
+  if (!permissions) {
+    return base
+  }
+  return permissionModules.reduce((accumulator, moduleKey) => {
+    accumulator[moduleKey] = {
+      ...base[moduleKey],
+      ...(permissions[moduleKey] ?? {}),
+    }
+    return accumulator
+  }, {} as UserPermissions)
+}
+
 const createUserId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -59,7 +73,7 @@ export const UsersPage = () => {
       fullName: user.fullName,
       role: user.role,
       password: user.password,
-      permissions: user.permissions ?? getRolePermissions(user.role),
+      permissions: normalizePermissions(user.permissions, user.role),
       permissionOverrides:
         user.permissionOverrides?.map((override) => ({
           module: override.module,
