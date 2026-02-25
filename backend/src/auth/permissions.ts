@@ -5,6 +5,7 @@ export type PermissionModule =
   | 'MAINTENANCE'
   | 'AUDITS'
   | 'WORK_ORDERS'
+  | 'TASKS'
   | 'REPAIRS'
   | 'INVENTORY'
   | 'REPORTS'
@@ -21,6 +22,7 @@ const permissionModules: PermissionModule[] = [
   'MAINTENANCE',
   'AUDITS',
   'WORK_ORDERS',
+  'TASKS',
   'REPAIRS',
   'INVENTORY',
   'REPORTS',
@@ -79,6 +81,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'AUDITS', ['view', 'create'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'TASKS', ['view'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view', 'create', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
@@ -88,6 +91,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
   if (role === 'AUDITOR') {
     allowModule(permissions, 'FLEET', ['view'])
     allowModule(permissions, 'AUDITS', ['view', 'create'])
+    allowModule(permissions, 'TASKS', ['view', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
     return permissions
   }
@@ -95,6 +99,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
   if (role === 'MECANICO') {
     allowModule(permissions, 'FLEET', ['view'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'TASKS', ['view', 'edit'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view'])
@@ -117,7 +122,15 @@ const isOverrideActive = (override: { expiresAt?: string }) => {
 }
 
 export const resolveUserPermissions = (user: User | null): UserPermissions => {
-  const base = (user?.permissions as UserPermissions | undefined) ?? (user ? getRolePermissions(user.role) : buildEmptyPermissions())
+  const roleDefaults = user ? getRolePermissions(user.role) : buildEmptyPermissions()
+  const stored = user?.permissions as UserPermissions | undefined
+  const base = permissionModules.reduce((acc, moduleKey) => {
+    acc[moduleKey] = {
+      ...roleDefaults[moduleKey],
+      ...(stored?.[moduleKey] ?? {}),
+    }
+    return acc
+  }, {} as UserPermissions)
   const overrides = ((user?.permissionOverrides as Array<{ module: PermissionModule; action: PermissionAction; allow: boolean; expiresAt?: string }> | undefined) ?? [])
     .filter((override) => isOverrideActive(override))
 

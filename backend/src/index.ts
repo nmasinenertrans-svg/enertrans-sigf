@@ -13,6 +13,7 @@ import inventoryRoutes from './routes/inventory.js'
 import filesRoutes from './routes/files.js'
 import externalRequestsRoutes from './routes/externalRequests.js'
 import movementsRoutes from './routes/movements.js'
+import tasksRoutes from './routes/tasks.js'
 import settingsRoutes from './routes/settings.js'
 import profileRoutes from './routes/profile.js'
 import { hashPassword } from './utils/password.js'
@@ -42,6 +43,7 @@ app.use('/external-requests', requireAuth, requirePermission('WORK_ORDERS', 'vie
 app.use('/repairs', requireAuth, requirePermission('REPAIRS', 'view'), repairsRoutes)
 app.use('/inventory', requireAuth, requirePermission('INVENTORY', 'view'), inventoryRoutes)
 app.use('/movements', requireAuth, requirePermission('FLEET', 'view'), movementsRoutes)
+app.use('/tasks', requireAuth, requirePermission('TASKS', 'view'), tasksRoutes)
 app.use('/files', requireAuth, filesRoutes)
 
 const ensureDevUser = async () => {

@@ -54,6 +54,33 @@ enum FleetMovementType {
   RETURN
 }
 
+enum TaskStatus {
+  UNASSIGNED
+  ASSIGNED
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskEventType {
+  CREATED
+  UPDATED
+  ASSIGNED
+  UNASSIGNED
+  MOVED_TO_BANK
+  REMOVED_FROM_BANK
+  TAKEN_FROM_BANK
+  STATUS_CHANGED
+}
+
 model User {
   id                  String   @id @default(uuid())
   username            String   @unique
@@ -67,6 +94,10 @@ model User {
   updatedAt           DateTime @updatedAt
 
   audits              AuditRecord[]
+  tasksCreated        Task[]      @relation("TaskCreatedBy")
+  tasksAssigned       Task[]      @relation("TaskAssignedTo")
+  tasksAssignedBy     Task[]      @relation("TaskAssignedBy")
+  taskEvents          TaskEvent[] @relation("TaskEventActor")
 }
 
 model FleetUnit {
@@ -254,6 +285,50 @@ model FleetMovementUnit {
   unit     FleetUnit     @relation(fields: [unitId], references: [id])
 
   @@id([movementId, unitId])
+}
+
+model Task {
+  id               String       @id @default(uuid())
+  title            String       @default("")
+  description      String
+  status           TaskStatus   @default(UNASSIGNED)
+  priority         TaskPriority @default(MEDIUM)
+  assignedToUserId String?
+  assignedByUserId String?
+  createdByUserId  String
+  isInTaskBank     Boolean      @default(false)
+  closedAt         DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  assignedTo User?      @relation("TaskAssignedTo", fields: [assignedToUserId], references: [id])
+  assignedBy User?      @relation("TaskAssignedBy", fields: [assignedByUserId], references: [id])
+  createdBy  User       @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
+  events     TaskEvent[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([assignedToUserId])
+  @@index([isInTaskBank])
+}
+
+model TaskEvent {
+  id                   String        @id @default(uuid())
+  taskId               String
+  type                 TaskEventType
+  actorUserId          String
+  notes                String        @default("")
+  fromStatus           TaskStatus?
+  toStatus             TaskStatus?
+  fromAssignedToUserId String?
+  toAssignedToUserId   String?
+  createdAt            DateTime      @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id])
+  actor  User @relation("TaskEventActor", fields: [actorUserId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@index([actorUserId])
 }
 
 model Sequence {
