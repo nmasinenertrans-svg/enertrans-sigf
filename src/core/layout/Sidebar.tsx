@@ -2,20 +2,20 @@
 import { ROUTE_PATHS } from '../routing/routePaths'
 import { usePermissions } from '../auth/usePermissions'
 import { useAppContext } from '../hooks/useAppContext'
-import type { PermissionModule } from '../../types/domain'
+import type { FeatureFlags, PermissionModule } from '../../types/domain'
 
-const navigationItems: Array<{ path: string; label: string; module: PermissionModule }> = [
-  { path: ROUTE_PATHS.fleet.list, label: 'Flota', module: 'FLEET' },
-  { path: ROUTE_PATHS.maintenance, label: 'Plan de Mantenimiento', module: 'MAINTENANCE' },
-  { path: ROUTE_PATHS.audits, label: 'Auditorias', module: 'AUDITS' },
-  { path: ROUTE_PATHS.tasks, label: 'Tareas', module: 'TASKS' },
-  { path: ROUTE_PATHS.movements, label: 'Remitos', module: 'FLEET' },
-  { path: ROUTE_PATHS.workOrders, label: 'Ordenes de Trabajo', module: 'WORK_ORDERS' },
-  { path: ROUTE_PATHS.externalRequests, label: 'Notas de pedido externo', module: 'WORK_ORDERS' },
-  { path: ROUTE_PATHS.repairs, label: 'Reparaciones', module: 'REPAIRS' },
-  { path: ROUTE_PATHS.inventory, label: 'Inventario', module: 'INVENTORY' },
-  { path: ROUTE_PATHS.reports, label: 'Reportes', module: 'REPORTS' },
-  { path: ROUTE_PATHS.users, label: 'Usuarios', module: 'USERS' },
+const navigationItems: Array<{ path: string; label: string; module: PermissionModule; flagKey?: keyof FeatureFlags }> = [
+  { path: ROUTE_PATHS.fleet.list, label: 'Flota', module: 'FLEET', flagKey: 'showFleetModule' },
+  { path: ROUTE_PATHS.maintenance, label: 'Plan de Mantenimiento', module: 'MAINTENANCE', flagKey: 'showMaintenanceModule' },
+  { path: ROUTE_PATHS.audits, label: 'Auditorias', module: 'AUDITS', flagKey: 'showAuditsModule' },
+  { path: ROUTE_PATHS.tasks, label: 'Tareas', module: 'TASKS', flagKey: 'showTasksModule' },
+  { path: ROUTE_PATHS.movements, label: 'Remitos', module: 'FLEET', flagKey: 'showMovementsModule' },
+  { path: ROUTE_PATHS.workOrders, label: 'Ordenes de Trabajo', module: 'WORK_ORDERS', flagKey: 'showWorkOrdersModule' },
+  { path: ROUTE_PATHS.externalRequests, label: 'Notas de pedido externo', module: 'WORK_ORDERS', flagKey: 'showExternalRequestsModule' },
+  { path: ROUTE_PATHS.repairs, label: 'Reparaciones', module: 'REPAIRS', flagKey: 'showRepairsModule' },
+  { path: ROUTE_PATHS.inventory, label: 'Inventario', module: 'INVENTORY', flagKey: 'showInventoryModule' },
+  { path: ROUTE_PATHS.reports, label: 'Reportes', module: 'REPORTS', flagKey: 'showReportsModule' },
+  { path: ROUTE_PATHS.users, label: 'Usuarios', module: 'USERS', flagKey: 'showUsersModule' },
   { path: ROUTE_PATHS.maintenanceMode, label: 'Mantenimiento app', module: 'MAINTENANCE_MODE' },
 ]
 
@@ -42,13 +42,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     if (!can(item.module, 'view')) {
       return false
     }
-    if (item.path === ROUTE_PATHS.externalRequests && !featureFlags.showExternalRequestsModule) {
-      return false
-    }
-    if (item.path === ROUTE_PATHS.reports && !featureFlags.showReportsModule) {
-      return false
-    }
-    if (item.path === ROUTE_PATHS.inventory && !featureFlags.showInventoryModule) {
+    if (item.flagKey && !featureFlags[item.flagKey]) {
       return false
     }
     return true

@@ -21,6 +21,26 @@ import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { RequireAuth } from './RequireAuth'
 import { RequirePermission } from './RequirePermission'
+import { useAppContext } from '../hooks/useAppContext'
+import type { FeatureFlags } from '../../types/domain'
+
+const RequireFeatureFlag = ({
+  flag,
+  children,
+}: {
+  flag: keyof FeatureFlags
+  children: JSX.Element
+}) => {
+  const {
+    state: { featureFlags },
+  } = useAppContext()
+
+  if (!featureFlags[flag]) {
+    return <Navigate to={ROUTE_PATHS.dashboard} replace />
+  }
+
+  return children
+}
 
 export const AppRouter = () => (
   <BrowserRouter>
@@ -45,113 +65,141 @@ export const AppRouter = () => (
         <Route
           path={ROUTE_PATHS.fleet.list}
           element={
-            <RequirePermission module="FLEET" action="view">
-              <FleetListPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showFleetModule">
+              <RequirePermission module="FLEET" action="view">
+                <FleetListPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.fleet.create}
           element={
-            <RequirePermission module="FLEET" action="create">
-              <FleetCreatePage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showFleetModule">
+              <RequirePermission module="FLEET" action="create">
+                <FleetCreatePage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.fleet.edit}
           element={
-            <RequirePermission module="FLEET" action="edit">
-              <FleetEditPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showFleetModule">
+              <RequirePermission module="FLEET" action="edit">
+                <FleetEditPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.fleet.detail}
           element={
-            <RequirePermission module="FLEET" action="view">
-              <FleetDetailPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showFleetModule">
+              <RequirePermission module="FLEET" action="view">
+                <FleetDetailPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.maintenance}
           element={
-            <RequirePermission module="MAINTENANCE" action="view">
-              <MaintenancePage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showMaintenanceModule">
+              <RequirePermission module="MAINTENANCE" action="view">
+                <MaintenancePage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.audits}
           element={
-            <RequirePermission module="AUDITS" action="view">
-              <AuditsPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showAuditsModule">
+              <RequirePermission module="AUDITS" action="view">
+                <AuditsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.tasks}
           element={
-            <RequirePermission module="TASKS" action="view">
-              <TasksPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showTasksModule">
+              <RequirePermission module="TASKS" action="view">
+                <TasksPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.movements}
           element={
-            <RequirePermission module="FLEET" action="view">
-              <MovementsPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showMovementsModule">
+              <RequirePermission module="FLEET" action="view">
+                <MovementsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.workOrders}
           element={
-            <RequirePermission module="WORK_ORDERS" action="view">
-              <WorkOrdersPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showWorkOrdersModule">
+              <RequirePermission module="WORK_ORDERS" action="view">
+                <WorkOrdersPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.externalRequests}
           element={
-            <RequirePermission module="WORK_ORDERS" action="view">
-              <ExternalRequestsPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showExternalRequestsModule">
+              <RequirePermission module="WORK_ORDERS" action="view">
+                <ExternalRequestsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.repairs}
           element={
-            <RequirePermission module="REPAIRS" action="view">
-              <RepairsPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showRepairsModule">
+              <RequirePermission module="REPAIRS" action="view">
+                <RepairsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.inventory}
           element={
-            <RequirePermission module="INVENTORY" action="view">
-              <InventoryPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showInventoryModule">
+              <RequirePermission module="INVENTORY" action="view">
+                <InventoryPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.reports}
           element={
-            <RequirePermission module="REPORTS" action="view">
-              <ReportsPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showReportsModule">
+              <RequirePermission module="REPORTS" action="view">
+                <ReportsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route
           path={ROUTE_PATHS.users}
           element={
-            <RequirePermission module="USERS" action="view">
-              <UsersPage />
-            </RequirePermission>
+            <RequireFeatureFlag flag="showUsersModule">
+              <RequirePermission module="USERS" action="view">
+                <UsersPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
           }
         />
         <Route path={ROUTE_PATHS.profile} element={<ProfilePage />} />

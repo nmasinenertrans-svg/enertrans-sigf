@@ -8,6 +8,19 @@ import { getRolePermissions } from '../../../core/auth/permissions'
 
 const buildEmptyPermissions = (): UserPermissions => getRolePermissions('AUDITOR')
 
+const permissionModuleLabelMap: Record<PermissionModule, string> = {
+  FLEET: 'Flota',
+  MAINTENANCE: 'Plan de mantenimiento',
+  AUDITS: 'Auditorias',
+  WORK_ORDERS: 'Ordenes de trabajo',
+  TASKS: 'Tareas',
+  REPAIRS: 'Reparaciones',
+  INVENTORY: 'Inventario',
+  REPORTS: 'Reportes',
+  USERS: 'Usuarios',
+  MAINTENANCE_MODE: 'Mantenimiento app',
+}
+
 const normalizePermissions = (permissions: UserPermissions | undefined, role: UserRole): UserPermissions => {
   const base = getRolePermissions(role)
   if (!permissions) {
@@ -332,7 +345,7 @@ export const UsersPage = () => {
               </div>
               {permissionModules.map((moduleKey) => (
                 <div key={moduleKey} className="grid grid-cols-[180px_repeat(4,1fr)] gap-2 border-b border-slate-200 px-3 py-2 text-sm">
-                  <span className="font-semibold text-slate-700">{moduleKey}</span>
+                  <span className="font-semibold text-slate-700">{permissionModuleLabelMap[moduleKey]}</span>
                   {permissionActions.map((action) => (
                     <button
                       key={`${moduleKey}-${action}`}
@@ -380,7 +393,7 @@ export const UsersPage = () => {
                     >
                       {permissionModules.map((moduleKey) => (
                         <option key={moduleKey} value={moduleKey}>
-                          {moduleKey}
+                          {permissionModuleLabelMap[moduleKey]}
                         </option>
                       ))}
                     </select>

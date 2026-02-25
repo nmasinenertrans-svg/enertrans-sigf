@@ -191,6 +191,60 @@ export const MaintenanceModePage = () => {
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Flota
+            <input
+              type="checkbox"
+              checked={flags.showFleetModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showFleetModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Plan de mantenimiento
+            <input
+              type="checkbox"
+              checked={flags.showMaintenanceModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showMaintenanceModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Auditorias
+            <input
+              type="checkbox"
+              checked={flags.showAuditsModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showAuditsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Remitos
+            <input
+              type="checkbox"
+              checked={flags.showMovementsModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showMovementsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Ordenes de Trabajo
+            <input
+              type="checkbox"
+              checked={flags.showWorkOrdersModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showWorkOrdersModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Tareas
+            <input
+              type="checkbox"
+              checked={flags.showTasksModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showTasksModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
             Mostrar botón “Cargar unidad demo”
             <input
               type="checkbox"
@@ -223,6 +277,24 @@ export const MaintenanceModePage = () => {
               type="checkbox"
               checked={flags.showExternalRequestsModule}
               onChange={(event) => setFlags((prev) => ({ ...prev, showExternalRequestsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Reparaciones
+            <input
+              type="checkbox"
+              checked={flags.showRepairsModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showRepairsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Usuarios
+            <input
+              type="checkbox"
+              checked={flags.showUsersModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showUsersModule: event.target.checked }))}
               className="h-4 w-4"
             />
           </label>

@@ -73,9 +73,17 @@ const defaultUsers: AppUser[] = [
 
 const defaultFeatureFlags: FeatureFlags = {
   showDemoUnitButton: true,
+  showFleetModule: true,
+  showMaintenanceModule: true,
+  showAuditsModule: true,
+  showMovementsModule: true,
+  showWorkOrdersModule: true,
+  showTasksModule: true,
   showExternalRequestsModule: true,
+  showRepairsModule: true,
   showReportsModule: true,
   showInventoryModule: true,
+  showUsersModule: true,
 }
 
 const defaultPersistedState: PersistedAppState = {
@@ -139,7 +147,7 @@ export const getInitialAppState = (): AppState => {
     externalRequests: persistedState.externalRequests ?? [],
     movements: persistedState.movements ?? [],
     inventoryItems: persistedState.inventoryItems ?? [],
-    featureFlags: persistedState.featureFlags ?? defaultFeatureFlags,
+    featureFlags: { ...defaultFeatureFlags, ...(persistedState.featureFlags ?? {}) },
   }
   const fallbackUserId = typeof window !== 'undefined' ? window.localStorage.getItem(CURRENT_USER_KEY) : null
   const sessionUserId =

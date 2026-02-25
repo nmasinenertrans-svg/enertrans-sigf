@@ -94,9 +94,17 @@ export interface MaintenanceStatus {
 
 export interface FeatureFlags {
   showDemoUnitButton: boolean
+  showFleetModule: boolean
+  showMaintenanceModule: boolean
+  showAuditsModule: boolean
+  showMovementsModule: boolean
+  showWorkOrdersModule: boolean
+  showTasksModule: boolean
   showExternalRequestsModule: boolean
+  showRepairsModule: boolean
   showReportsModule: boolean
   showInventoryModule: boolean
+  showUsersModule: boolean
 }
 
 export interface FleetUnit {

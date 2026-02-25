@@ -12,16 +12,32 @@ const maintenanceSchema = z.object({
 
 const featureFlagsSchema = z.object({
   showDemoUnitButton: z.boolean().optional(),
+  showFleetModule: z.boolean().optional(),
+  showMaintenanceModule: z.boolean().optional(),
+  showAuditsModule: z.boolean().optional(),
+  showMovementsModule: z.boolean().optional(),
+  showWorkOrdersModule: z.boolean().optional(),
+  showTasksModule: z.boolean().optional(),
   showExternalRequestsModule: z.boolean().optional(),
+  showRepairsModule: z.boolean().optional(),
   showReportsModule: z.boolean().optional(),
   showInventoryModule: z.boolean().optional(),
+  showUsersModule: z.boolean().optional(),
 })
 
 const defaultFeatureFlags = {
   showDemoUnitButton: true,
+  showFleetModule: true,
+  showMaintenanceModule: true,
+  showAuditsModule: true,
+  showMovementsModule: true,
+  showWorkOrdersModule: true,
+  showTasksModule: true,
   showExternalRequestsModule: true,
+  showRepairsModule: true,
   showReportsModule: true,
   showInventoryModule: true,
+  showUsersModule: true,
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
