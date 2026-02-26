@@ -55,6 +55,14 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     [notifications, readNotificationIds],
   )
   const unreadCount = unreadNotifications.length
+  const dropdownNotifications = unreadNotifications.slice(0, 8)
+
+  const markDropdownNotificationsAsRead = () => {
+    if (dropdownNotifications.length === 0) {
+      return
+    }
+    setReadNotificationIds((prev) => Array.from(new Set([...prev, ...dropdownNotifications.map((item) => item.id)])))
+  }
 
   const notificationBadgeClass = (severity: AppNotification['severity']) => {
     if (severity === 'danger') {
@@ -130,7 +138,14 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
         <div className="relative">
           <button
             type="button"
-            onClick={() => setIsNotificationsOpen((prev) => !prev)}
+            onClick={() =>
+              setIsNotificationsOpen((prev) => {
+                if (prev) {
+                  markDropdownNotificationsAsRead()
+                }
+                return !prev
+              })
+            }
             className="relative rounded-lg border border-slate-900/20 bg-white/70 p-2 text-slate-700 transition hover:bg-white"
             aria-label="Notificaciones"
           >
@@ -165,7 +180,10 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => setIsNotificationsOpen(false)}
+                    onClick={() => {
+                      markDropdownNotificationsAsRead()
+                      setIsNotificationsOpen(false)
+                    }}
                     className="text-xs font-semibold text-slate-500 hover:text-slate-700"
                   >
                     Cerrar
@@ -178,12 +196,12 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                     No hay alertas pendientes.
                   </p>
                 ) : (
-                  unreadNotifications.slice(0, 8).map((item) => (
+                  dropdownNotifications.map((item) => (
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => {
-                        setReadNotificationIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]))
+                    onClick={() => {
+                      setReadNotificationIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]))
                         if (item.target) {
                           navigate(item.target)
                           setIsNotificationsOpen(false)
