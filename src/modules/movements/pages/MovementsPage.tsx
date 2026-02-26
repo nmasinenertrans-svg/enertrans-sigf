@@ -58,7 +58,7 @@ export const MovementsPage = () => {
 
   const canDeleteMovements = currentUser?.role === 'GERENTE'
 
-  if (!featureFlags.showReportsModule) {
+  if (!featureFlags.showMovementsModule) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-900">Entradas y devoluciones</h2>
