@@ -19,7 +19,6 @@ import type {
 } from '../../types/domain'
 import { useAppContext } from '../hooks/useAppContext'
 import { useOfflineSync } from '../hooks/useOfflineSync'
-import { buildFleetDetailPath, ROUTE_PATHS } from '../routing/routePaths'
 import { canUser } from '../auth/permissions'
 import { Sidebar } from './Sidebar'
 import { TopHeader } from './TopHeader'
