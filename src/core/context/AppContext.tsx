@@ -58,7 +58,8 @@ export const AppProvider = ({ children }: AppProviderProps) => {
       },
       setAudits: (audits) => {
         setState((previousState) => {
-          const nextState = { ...previousState, audits }
+          const resolvedAudits = typeof audits === 'function' ? audits(previousState.audits) : audits
+          const nextState = { ...previousState, audits: resolvedAudits }
           persistAppState(nextState)
           return nextState
         })

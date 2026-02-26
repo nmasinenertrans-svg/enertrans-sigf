@@ -252,6 +252,8 @@ export interface AuditRecord {
   unitKilometers: number
   engineHours: number
   hydroHours: number
+  syncState?: 'SYNCED' | 'PENDING' | 'LOCAL_ONLY' | 'ERROR'
+  syncError?: string
 }
 
 export type WorkOrderDeviationStatus = 'PENDING' | 'RESOLVED'

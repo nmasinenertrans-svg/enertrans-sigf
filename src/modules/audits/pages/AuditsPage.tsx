@@ -20,6 +20,7 @@ import {
 } from '../services/auditsService'
 import type { AuditFormData, AuditFormErrors } from '../types'
 import { enqueueAndSync } from '../../../services/offline/sync'
+import { getQueueItems } from '../../../services/offline/queue'
 import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
 
@@ -334,7 +335,14 @@ export const AuditsPage = () => {
     const unitCode = selectedUnit?.internalCode ?? ''
     const selectedExternalRequest = externalRequests.find((item) => item.id === formData.externalRequestId)
     const externalRequestCode = selectedExternalRequest?.code
-    const createdAudit = toAuditRecord(formData, auditorId, auditorName, workOrders, unitCode, externalRequestCode)
+    const createdAuditBase = toAuditRecord(formData, auditorId, auditorName, workOrders, unitCode, externalRequestCode)
+    const createdAudit = {
+      ...createdAuditBase,
+      syncState:
+        typeof navigator !== 'undefined' && navigator.onLine
+          ? ('PENDING' as const)
+          : ('LOCAL_ONLY' as const),
+    }
 
     const updatedFleetUnits = fleetUnits.map((unit) =>
       unit.id === createdAudit.unitId
@@ -392,11 +400,27 @@ export const AuditsPage = () => {
         ),
       )
 
-      enqueueAndSync({
+      void enqueueAndSync({
         id: `audit.create.${createdAudit.id}`,
         type: 'audit.create',
         payload: { ...createdAudit, workOrderId: createdWorkOrder.id, workOrderCode: createdWorkOrder.code },
         createdAt: new Date().toISOString(),
+      }).then(async () => {
+        const queueItems = await getQueueItems().catch(() => [])
+        const stillQueued = queueItems.some((item) => item.id === `audit.create.${createdAudit.id}`)
+        setAudits((previousAudits) =>
+          previousAudits.map((audit) =>
+            audit.id === createdAudit.id
+              ? {
+                  ...audit,
+                  syncState: stillQueued ? ('PENDING' as const) : ('SYNCED' as const),
+                }
+              : audit,
+          ),
+        )
+        if (stillQueued) {
+          setAppError('Auditoria guardada localmente. Pendiente de sincronizacion.')
+        }
       })
     } else {
       const hasOpenWorkOrders = workOrders.some(
@@ -419,11 +443,27 @@ export const AuditsPage = () => {
         ),
       )
 
-      enqueueAndSync({
+      void enqueueAndSync({
         id: `audit.create.${createdAudit.id}`,
         type: 'audit.create',
         payload: { ...createdAudit, ...workOrderPayload },
         createdAt: new Date().toISOString(),
+      }).then(async () => {
+        const queueItems = await getQueueItems().catch(() => [])
+        const stillQueued = queueItems.some((item) => item.id === `audit.create.${createdAudit.id}`)
+        setAudits((previousAudits) =>
+          previousAudits.map((audit) =>
+            audit.id === createdAudit.id
+              ? {
+                  ...audit,
+                  syncState: stillQueued ? ('PENDING' as const) : ('SYNCED' as const),
+                }
+              : audit,
+          ),
+        )
+        if (stillQueued) {
+          setAppError('Auditoria guardada localmente. Pendiente de sincronizacion.')
+        }
       })
 
       if (pendingWorkOrder && typeof navigator !== 'undefined' && navigator.onLine) {

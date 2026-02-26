@@ -49,4 +49,6 @@ export interface AuditHistoryViewItem {
   observations: string
   photoCount: number
   sections: AuditChecklistSection[]
+  syncState?: 'SYNCED' | 'PENDING' | 'LOCAL_ONLY' | 'ERROR'
+  syncError?: string
 }

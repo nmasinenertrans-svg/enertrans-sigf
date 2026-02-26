@@ -44,7 +44,7 @@ export interface AppActions {
   setUsers: (users: AppUser[]) => void
   setFleetUnits: (units: FleetUnit[]) => void
   setMaintenancePlans: (plans: MaintenancePlan[]) => void
-  setAudits: (audits: AuditRecord[]) => void
+  setAudits: (audits: AuditRecord[] | ((previousAudits: AuditRecord[]) => AuditRecord[])) => void
   setWorkOrders: (orders: WorkOrder[]) => void
   setRepairs: (repairs: RepairRecord[]) => void
   setExternalRequests: (requests: ExternalRequest[]) => void

@@ -416,6 +416,8 @@ export const buildAuditHistoryView = (
         observations: audit.observations,
         photoCount: audit.photoBase64List.length,
         sections: audit.checklistSections,
+        syncState: audit.syncState,
+        syncError: audit.syncError,
       }
     })
     .sort((left, right) => new Date(right.performedAt).getTime() - new Date(left.performedAt).getTime())

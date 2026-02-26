@@ -289,9 +289,18 @@ export const AppLayout = () => {
           )
         }
         if (mappedAudits) {
-          setAudits(
-            mergeByIdWithLocal(mappedAudits, auditsRef.current, getQueuedPayloads('audit.create')) ?? mappedAudits,
-          )
+          const queuedAuditPayloads = getQueuedPayloads<AuditRecord>('audit.create')
+          const remoteAuditIds = new Set(mappedAudits.map((audit) => audit.id))
+          const pendingQueuedAudits = queuedAuditPayloads
+            .filter((audit) => audit?.id && !remoteAuditIds.has(audit.id))
+            .map((audit) => ({
+              ...audit,
+              syncState: (syncStatus.isOnline ? 'PENDING' : 'LOCAL_ONLY') as AuditRecord['syncState'],
+            }))
+
+          // For audits we intentionally avoid merging arbitrary local persisted items:
+          // if an item is not in backend and not in offline queue, it is a local ghost.
+          setAudits([...mappedAudits, ...pendingQueuedAudits])
         }
         if (workOrdersResponse) {
           setWorkOrders(

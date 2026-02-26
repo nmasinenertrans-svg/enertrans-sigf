@@ -45,6 +45,24 @@ export const AuditHistoryList = ({ items, onViewAudit, onExportPdf, onRequestDel
             Secciones: {item.sections.length}
           </div>
 
+          {item.syncState && item.syncState !== 'SYNCED' ? (
+            <div
+              className={`mt-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                item.syncState === 'ERROR'
+                  ? 'border-rose-300 bg-rose-50 text-rose-700'
+                  : item.syncState === 'LOCAL_ONLY'
+                    ? 'border-amber-300 bg-amber-50 text-amber-700'
+                    : 'border-sky-300 bg-sky-50 text-sky-700'
+              }`}
+            >
+              {item.syncState === 'PENDING'
+                ? 'Pendiente de sincronizacion (solo visible hasta confirmar servidor).'
+                : item.syncState === 'LOCAL_ONLY'
+                  ? 'Guardada solo en este dispositivo (sincronizacion pendiente).'
+                  : `Error de sincronizacion${item.syncError ? `: ${item.syncError}` : '.'}`}
+            </div>
+          ) : null}
+
           <div className="mt-4 flex gap-2">
             <button
               type="button"
