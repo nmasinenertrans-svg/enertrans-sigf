@@ -76,7 +76,7 @@ export const AuditsPage = () => {
   const [formData, setFormData] = useState<AuditFormData>(() => createEmptyAuditFormData(preferredUnitId))
   const [errors, setErrors] = useState<AuditFormErrors>({})
   const [isFormOpen, setIsFormOpen] = useState(false)
-  const [unitFilter, setUnitFilter] = useState<string>(preferredUnitId || allUnitsFilter)
+  const [unitFilter, setUnitFilter] = useState<string>(allUnitsFilter)
   const [searchTerm, setSearchTerm] = useState('')
   const [resultFilter, setResultFilter] = useState<'ALL' | 'APPROVED' | 'REJECTED'>('ALL')
   const [auditIdPendingDelete, setAuditIdPendingDelete] = useState<string | null>(null)
@@ -195,7 +195,17 @@ export const AuditsPage = () => {
       engineHours: selectedUnit?.currentEngineHours ?? 0,
       hydroHours: selectedUnit?.currentHydroHours ?? 0,
     }))
-    setUnitFilter(preferredUnitId)
+    setUnitFilter((previousFilter) => {
+      if (previousFilter === allUnitsFilter) {
+        return previousFilter
+      }
+
+      if (fleetUnits.some((unit) => unit.id === previousFilter)) {
+        return previousFilter
+      }
+
+      return preferredUnitId || allUnitsFilter
+    })
   }, [preferredUnitId, fleetUnits])
 
   useEffect(() => {
