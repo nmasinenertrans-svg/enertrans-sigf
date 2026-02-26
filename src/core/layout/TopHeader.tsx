@@ -57,11 +57,11 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   const unreadCount = unreadNotifications.length
   const dropdownNotifications = unreadNotifications.slice(0, 8)
 
-  const markDropdownNotificationsAsRead = () => {
-    if (dropdownNotifications.length === 0) {
+  const markAllUnreadNotificationsAsRead = () => {
+    if (unreadNotifications.length === 0) {
       return
     }
-    setReadNotificationIds((prev) => Array.from(new Set([...prev, ...dropdownNotifications.map((item) => item.id)])))
+    setReadNotificationIds((prev) => Array.from(new Set([...prev, ...unreadNotifications.map((item) => item.id)])))
   }
 
   const notificationBadgeClass = (severity: AppNotification['severity']) => {
@@ -141,7 +141,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
             onClick={() =>
               setIsNotificationsOpen((prev) => {
                 if (prev) {
-                  markDropdownNotificationsAsRead()
+                  markAllUnreadNotificationsAsRead()
                 }
                 return !prev
               })
@@ -181,7 +181,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                   <button
                     type="button"
                     onClick={() => {
-                      markDropdownNotificationsAsRead()
+                      markAllUnreadNotificationsAsRead()
                       setIsNotificationsOpen(false)
                     }}
                     className="text-xs font-semibold text-slate-500 hover:text-slate-700"
