@@ -30,10 +30,8 @@ export const NotificationsPage = () => {
     persistReadNotifications(readNotificationIds)
   }, [readNotificationIds])
 
-  useEffect(() => {
-    const activeIds = new Set(notifications.map((item) => item.id))
-    setReadNotificationIds((prev) => prev.filter((id) => activeIds.has(id)))
-  }, [notifications])
+  // Do not auto-prune read IDs on notifications refresh:
+  // transient reloads can empty notifications and incorrectly reset all read markers.
 
   const filteredNotifications = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()

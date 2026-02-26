@@ -40,10 +40,8 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     persistReadNotifications(readNotificationIds)
   }, [readNotificationIds])
 
-  useEffect(() => {
-    const activeIds = new Set(notifications.map((item) => item.id))
-    setReadNotificationIds((prev) => prev.filter((id) => activeIds.has(id)))
-  }, [notifications])
+  // Do not auto-prune read IDs on notifications refresh:
+  // during reload/sync the list can be transiently empty and that resets all "read" state.
 
   const statusLabel = syncStatus.isOnline ? 'Online' : 'Offline'
   const statusClass = syncStatus.isOnline
