@@ -20,6 +20,7 @@ import { UsersPage } from '../../modules/users/pages/UsersPage'
 import { ReportsPage } from '../../modules/reports/pages/ReportsPage'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
+import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
 import { RequireAuth } from './RequireAuth'
 import { RequirePermission } from './RequirePermission'
 import { useAppContext } from '../hooks/useAppContext'
@@ -204,6 +205,7 @@ export const AppRouter = () => (
           }
         />
         <Route path={ROUTE_PATHS.profile} element={<ProfilePage />} />
+        <Route path={ROUTE_PATHS.notifications} element={<NotificationsPage />} />
         <Route
           path={ROUTE_PATHS.maintenanceMode}
           element={

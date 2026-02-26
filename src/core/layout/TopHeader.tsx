@@ -6,6 +6,12 @@ import { getQueueItems, type OfflineQueueItem } from '../../services/offline/que
 import { syncQueue } from '../../services/offline/sync'
 import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
+import {
+  formatNotificationDateTime,
+  persistReadNotifications,
+  readStoredNotifications,
+  type AppNotification,
+} from '../notifications/notifications'
 
 interface TopHeaderProps {
   onToggleSidebar: () => void
@@ -17,43 +23,6 @@ interface TopHeaderProps {
   notifications: AppNotification[]
 }
 
-type AppNotification = {
-  id: string
-  title: string
-  description: string
-  severity: 'info' | 'warning' | 'danger'
-  target?: string
-}
-
-const NOTIFICATIONS_READ_KEY = 'enertrans.notifications.read'
-
-const readStoredNotifications = (): string[] => {
-  if (typeof window === 'undefined') {
-    return []
-  }
-  try {
-    const raw = window.localStorage.getItem(NOTIFICATIONS_READ_KEY)
-    if (!raw) {
-      return []
-    }
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-const persistReadNotifications = (ids: string[]) => {
-  if (typeof window === 'undefined') {
-    return
-  }
-  try {
-    window.localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(ids))
-  } catch {
-    // ignore
-  }
-}
-
 export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHeaderProps) => {
   const navigate = useNavigate()
   const {
@@ -61,7 +30,6 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     actions: { setCurrentUser, setAppError },
   } = useAppContext()
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-  const [showAllNotifications, setShowAllNotifications] = useState(false)
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(readStoredNotifications)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isQueueOpen, setIsQueueOpen] = useState(false)
@@ -86,7 +54,6 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     () => notifications.filter((item) => !readNotificationIds.includes(item.id)),
     [notifications, readNotificationIds],
   )
-  const visibleNotifications = showAllNotifications ? notifications : unreadNotifications
   const unreadCount = unreadNotifications.length
 
   const notificationBadgeClass = (severity: AppNotification['severity']) => {
@@ -206,12 +173,12 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                 </div>
               </div>
               <div className="mt-3 max-h-[55vh] space-y-2 overflow-auto md:max-h-[380px]">
-                {visibleNotifications.length === 0 ? (
+                {unreadNotifications.length === 0 ? (
                   <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
                     No hay alertas pendientes.
                   </p>
                 ) : (
-                  visibleNotifications.slice(0, 8).map((item) => (
+                  unreadNotifications.slice(0, 8).map((item) => (
                     <button
                       key={item.id}
                       type="button"
@@ -228,6 +195,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                         <div>
                           <p className="text-xs font-semibold text-slate-900">{item.title}</p>
                           <p className="text-xs text-slate-600">{item.description}</p>
+                          <p className="mt-1 text-[11px] text-slate-500">{formatNotificationDateTime(item.createdAt)}</p>
                         </div>
                         <span
                           className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${notificationBadgeClass(
@@ -244,15 +212,17 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
               {notifications.length > 0 ? (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                   <p>
-                    Mostrando {Math.min(8, visibleNotifications.length)} de{' '}
-                    {showAllNotifications ? notifications.length : unreadNotifications.length}
+                    Mostrando {Math.min(8, unreadNotifications.length)} de {unreadNotifications.length} no leidas
                   </p>
                   <button
                     type="button"
-                    onClick={() => setShowAllNotifications((prev) => !prev)}
+                    onClick={() => {
+                      navigate(ROUTE_PATHS.notifications)
+                      setIsNotificationsOpen(false)
+                    }}
                     className="font-semibold text-amber-600 hover:text-amber-700"
                   >
-                    {showAllNotifications ? 'Ver no leidas' : 'Ver todas'}
+                    Ver todas
                   </button>
                 </div>
               ) : null}

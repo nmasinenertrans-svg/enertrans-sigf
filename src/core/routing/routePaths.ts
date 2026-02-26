@@ -18,6 +18,7 @@
   repairs: '/repairs',
   inventory: '/inventory',
   reports: '/reports',
+  notifications: '/notifications',
   users: '/users',
   profile: '/profile',
   maintenanceMode: '/maintenance-mode',
