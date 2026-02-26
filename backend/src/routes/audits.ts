@@ -107,9 +107,9 @@ router.post('/', async (req, res) => {
     select: { internalCode: true },
   })
   const unitCode = unit?.internalCode ?? ''
-  const code =
-    parsed.data.code ??
-    formatCode(auditKind === 'REAUDIT' ? 'RAU' : 'AU', await getNextSequence(auditKind), unitCode)
+  // Server must be the source of truth for audit codes.
+  // Frontend/local sequence can drift (PWA/offline/cache/reset) and cause collisions.
+  const code = formatCode(auditKind === 'REAUDIT' ? 'RAU' : 'AU', await getNextSequence(auditKind), unitCode)
 
   const data = {
     id: parsed.data.id,
@@ -200,12 +200,8 @@ router.post('/', async (req, res) => {
     return res.status(201).json(item)
   } catch (error: any) {
     if (error?.code === 'P2002') {
-      const existing = parsed.data.code
-        ? await prisma.auditRecord.findUnique({ where: { code: parsed.data.code } })
-        : null
-      if (existing) {
-        return res.json(existing)
-      }
+      // Do not mask collisions by returning a record looked up by code:
+      // that can make the UI show an old audit when creating a new one.
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
     if (error?.code === 'P2003') {

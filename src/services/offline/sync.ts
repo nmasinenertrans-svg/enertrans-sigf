@@ -35,7 +35,6 @@ const syncAudit = async (payload: any) => {
 
   const body = {
     id: payload.id,
-    code: payload.code,
     auditKind: payload.auditKind,
     workOrderId: payload.workOrderId,
     workOrderCode: payload.workOrderCode,
