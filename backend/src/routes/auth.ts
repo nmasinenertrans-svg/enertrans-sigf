@@ -49,7 +49,7 @@ router.post('/login', async (req, res) => {
     return res.status(500).json({ message: 'JWT_SECRET no configurado.' })
   }
 
-  const token = jwt.sign({ sub: user.id, role: user.role }, secret, { expiresIn: '8h' })
+  const token = jwt.sign({ sub: user.id, role: user.role }, secret, { expiresIn: '30d' })
 
   return res.json({
     token,
