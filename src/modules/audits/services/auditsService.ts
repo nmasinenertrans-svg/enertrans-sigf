@@ -16,7 +16,7 @@ import type {
 } from '../types'
 import { formatSequenceCode, getNextSequenceCode, parseSequenceNumber } from '../../../services/sequence'
 
-const MAX_OBSERVATION_LENGTH = 400
+const MAX_OBSERVATION_LENGTH = 2000
 
 const createId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
