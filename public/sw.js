@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'enertrans-sigf-v1'
+const CACHE_VERSION = 'enertrans-sigf-v2'
 const APP_SHELL_CACHE = `${CACHE_VERSION}-app-shell`
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`
 
@@ -84,7 +84,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response
         })
-        .catch(() => caches.match('/index.html').then((fallback) => fallback || Response.error()))
+        .catch(() => Response.error())
     }),
   )
 })
