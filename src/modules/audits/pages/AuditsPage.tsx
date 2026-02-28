@@ -341,7 +341,21 @@ export const AuditsPage = () => {
         hydroHours: audit.hydroHours ?? 0,
         syncState: 'SYNCED' as const,
       }))
-      setAudits(mappedAudits)
+      const remoteIds = new Set(mappedAudits.map((audit) => audit.id))
+      setAudits((previousAudits) => {
+        const localPendingOrError = previousAudits.filter(
+          (audit) =>
+            audit.id &&
+            !remoteIds.has(audit.id) &&
+            (audit.syncState === 'PENDING' ||
+              audit.syncState === 'ERROR' ||
+              audit.syncState === 'LOCAL_ONLY'),
+        )
+
+        return [...mappedAudits, ...localPendingOrError].sort(
+          (left, right) => new Date(right.performedAt).getTime() - new Date(left.performedAt).getTime(),
+        )
+      })
     } catch {
       // keep local state on refresh failures
     }
@@ -534,7 +548,7 @@ export const AuditsPage = () => {
       }
     }
 
-    setAudits([createdAudit, ...audits])
+    setAudits((previousAudits) => [createdAudit, ...previousAudits.filter((audit) => audit.id !== createdAudit.id)])
     resetAuditForm()
     clearDraft()
     if (isFormOpen) {
@@ -568,7 +582,7 @@ export const AuditsPage = () => {
       return
     }
 
-    setAudits(audits.filter((audit) => audit.id !== auditIdPendingDelete))
+    setAudits((previousAudits) => previousAudits.filter((audit) => audit.id !== auditIdPendingDelete))
     setAuditIdPendingDelete(null)
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
