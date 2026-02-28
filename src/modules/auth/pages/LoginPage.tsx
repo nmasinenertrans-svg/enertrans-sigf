@@ -61,6 +61,7 @@ export const LoginPage = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const maintenanceStatus = useMemo<StoredMaintenanceStatus | null>(() => {
     if (typeof window === 'undefined') {
       return null
@@ -107,11 +108,16 @@ export const LoginPage = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (isSubmitting) {
+      return
+    }
+    setIsSubmitting(true)
     setErrorMessage('')
     setAppError(null)
 
     if (maintenanceStatus?.enabled && username.trim().toLowerCase() !== 'nmasin') {
       setErrorMessage(maintenanceStatus.message || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.')
+      setIsSubmitting(false)
       return
     }
 
@@ -121,6 +127,7 @@ export const LoginPage = () => {
           method: 'POST',
           body: { username, password },
           token: null,
+          timeoutMs: 12000,
         })
 
         setAuthToken(response.token)
@@ -138,6 +145,7 @@ export const LoginPage = () => {
         setCurrentUser(nextUser)
         saveLastUser(nextUser)
         navigate(ROUTE_PATHS.dashboard, { replace: true })
+        setIsSubmitting(false)
         return
       } catch (error) {
         const message = String((error as Error)?.message ?? '')
@@ -145,21 +153,26 @@ export const LoginPage = () => {
           setErrorMessage(
             maintenanceStatus?.message || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.',
           )
+          setIsSubmitting(false)
           return
         }
-        setErrorMessage('No se pudo autenticar en el servidor. Probando modo local...')
+        setErrorMessage('No se pudo autenticar en el servidor. Verifica backend/API y volve a intentar.')
+        setIsSubmitting(false)
+        return
       }
     }
 
     const user = authenticateUser(username, password, users)
     if (!user) {
       setErrorMessage('Usuario o contrasena incorrectos.')
+      setIsSubmitting(false)
       return
     }
 
     setCurrentUser(user)
     saveLastUser(user)
     navigate(ROUTE_PATHS.dashboard, { replace: true })
+    setIsSubmitting(false)
   }
 
   return (
@@ -213,9 +226,10 @@ export const LoginPage = () => {
 
         <button
           type="submit"
-          className="mt-6 w-full rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-300"
+          disabled={isSubmitting}
+          className="mt-6 w-full rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-500/20 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          Ingresar
+          {isSubmitting ? 'Ingresando...' : 'Ingresar'}
         </button>
 
         <p className="mt-4 text-center text-xs text-slate-500">Acceso privado Enertrans. Usa tu usuario asignado.</p>
