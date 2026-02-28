@@ -31,3 +31,9 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.register('/sw.js').catch(() => null)
   })
 }
+
+// When a lazy chunk fails after a new deploy, force reload once to pick the new manifest.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault()
+  window.location.reload()
+})

@@ -47,16 +47,9 @@ self.addEventListener('fetch', (event) => {
   if (isNavigationRequest(request)) {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          const clone = response.clone()
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, clone)).catch(() => null)
-          return response
-        })
+        .then((response) => response)
         .catch(async () => {
-          const runtimeMatch = await caches.match(request)
-          if (runtimeMatch) {
-            return runtimeMatch
-          }
+          // Fallback only for offline navigation shell.
           const shellMatch = await caches.match('/index.html')
           if (shellMatch) {
             return shellMatch
