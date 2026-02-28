@@ -11,6 +11,7 @@ export type AppNotification = {
 }
 
 export const NOTIFICATIONS_READ_KEY = 'enertrans.notifications.read'
+export const NOTIFICATIONS_READ_UPDATED_EVENT = 'enertrans:notifications-read-updated'
 
 export const readStoredNotifications = (): string[] => {
   if (typeof window === 'undefined') {
@@ -34,6 +35,7 @@ export const persistReadNotifications = (ids: string[]) => {
   }
   try {
     window.localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(ids))
+    window.dispatchEvent(new CustomEvent(NOTIFICATIONS_READ_UPDATED_EVENT))
   } catch {
     // ignore
   }

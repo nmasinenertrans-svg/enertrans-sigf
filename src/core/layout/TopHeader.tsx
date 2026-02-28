@@ -8,6 +8,7 @@ import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
 import {
   formatNotificationDateTime,
+  NOTIFICATIONS_READ_UPDATED_EVENT,
   persistReadNotifications,
   readStoredNotifications,
   type AppNotification,
@@ -39,6 +40,19 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   useEffect(() => {
     persistReadNotifications(readNotificationIds)
   }, [readNotificationIds])
+
+  useEffect(() => {
+    const syncReadIds = () => {
+      setReadNotificationIds(readStoredNotifications())
+    }
+
+    window.addEventListener(NOTIFICATIONS_READ_UPDATED_EVENT, syncReadIds)
+    window.addEventListener('storage', syncReadIds)
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_READ_UPDATED_EVENT, syncReadIds)
+      window.removeEventListener('storage', syncReadIds)
+    }
+  }, [])
 
   // Do not auto-prune read IDs on notifications refresh:
   // during reload/sync the list can be transiently empty and that resets all "read" state.

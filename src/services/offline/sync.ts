@@ -212,7 +212,7 @@ export const syncQueue = async () => {
           continue
         }
         await markSyncFailure(item, message)
-        break
+        continue
       }
     }
   } finally {

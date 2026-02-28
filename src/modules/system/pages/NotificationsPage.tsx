@@ -5,6 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import {
   buildAppNotifications,
   formatNotificationDateTime,
+  NOTIFICATIONS_READ_UPDATED_EVENT,
   persistReadNotifications,
   readStoredNotifications,
 } from '../../../core/notifications/notifications'
@@ -29,6 +30,19 @@ export const NotificationsPage = () => {
   useEffect(() => {
     persistReadNotifications(readNotificationIds)
   }, [readNotificationIds])
+
+  useEffect(() => {
+    const syncReadIds = () => {
+      setReadNotificationIds(readStoredNotifications())
+    }
+
+    window.addEventListener(NOTIFICATIONS_READ_UPDATED_EVENT, syncReadIds)
+    window.addEventListener('storage', syncReadIds)
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_READ_UPDATED_EVENT, syncReadIds)
+      window.removeEventListener('storage', syncReadIds)
+    }
+  }, [])
 
   // Do not auto-prune read IDs on notifications refresh:
   // transient reloads can empty notifications and incorrectly reset all read markers.
