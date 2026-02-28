@@ -29,8 +29,13 @@ const syncAudit = async (payload: any) => {
 
   for (let index = 0; index < photoList.length; index += 1) {
     const dataUrl = photoList[index]
-    const url = await uploadDataUrl(dataUrl, `audit-${payload.id}-${index}.jpg`, 'audits')
-    photoUrls.push(url)
+    try {
+      const url = await uploadDataUrl(dataUrl, `audit-${payload.id}-${index}.jpg`, 'audits')
+      photoUrls.push(url)
+    } catch {
+      // Keep syncing the audit even if one photo upload fails.
+      // This prevents losing the operational record due to an attachment issue.
+    }
   }
 
   const body = {
