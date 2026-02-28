@@ -317,6 +317,36 @@ export const AuditsPage = () => {
     }))
   }
 
+  const refreshAuditsFromServer = async () => {
+    if (typeof navigator === 'undefined' || !navigator.onLine) {
+      return
+    }
+
+    try {
+      const auditsResponse = await apiRequest<any[]>('/audits')
+      const mappedAudits = (auditsResponse ?? []).map((audit) => ({
+        id: audit.id,
+        code: audit.code,
+        auditKind: audit.auditKind ?? 'AUDIT',
+        unitId: audit.unitId,
+        auditorUserId: audit.auditorUserId,
+        auditorName: audit.auditorName,
+        performedAt: audit.performedAt,
+        result: audit.result,
+        observations: audit.observations ?? '',
+        photoBase64List: Array.isArray(audit.photoUrls) ? audit.photoUrls : [],
+        checklistSections: Array.isArray(audit.checklist?.sections) ? audit.checklist.sections : [],
+        unitKilometers: audit.unitKilometers ?? 0,
+        engineHours: audit.engineHours ?? 0,
+        hydroHours: audit.hydroHours ?? 0,
+        syncState: 'SYNCED' as const,
+      }))
+      setAudits(mappedAudits)
+    } catch {
+      // keep local state on refresh failures
+    }
+  }
+
   const handleSubmitAudit = () => {
     if (!canCreate) {
       return
@@ -420,7 +450,22 @@ export const AuditsPage = () => {
         )
         if (stillQueued) {
           setAppError('Auditoria guardada localmente. Pendiente de sincronizacion.')
+        } else {
+          await refreshAuditsFromServer()
         }
+      }).catch(() => {
+        setAudits((previousAudits) =>
+          previousAudits.map((audit) =>
+            audit.id === createdAudit.id
+              ? {
+                  ...audit,
+                  syncState: 'ERROR',
+                  syncError: 'No se pudo sincronizar.',
+                }
+              : audit,
+          ),
+        )
+        setAppError('No se pudo sincronizar la auditoria. Quedo guardada localmente.')
       })
     } else {
       const hasOpenWorkOrders = workOrders.some(
@@ -463,7 +508,22 @@ export const AuditsPage = () => {
         )
         if (stillQueued) {
           setAppError('Auditoria guardada localmente. Pendiente de sincronizacion.')
+        } else {
+          await refreshAuditsFromServer()
         }
+      }).catch(() => {
+        setAudits((previousAudits) =>
+          previousAudits.map((audit) =>
+            audit.id === createdAudit.id
+              ? {
+                  ...audit,
+                  syncState: 'ERROR',
+                  syncError: 'No se pudo sincronizar.',
+                }
+              : audit,
+          ),
+        )
+        setAppError('No se pudo sincronizar la auditoria. Quedo guardada localmente.')
       })
 
       if (pendingWorkOrder && typeof navigator !== 'undefined' && navigator.onLine) {
