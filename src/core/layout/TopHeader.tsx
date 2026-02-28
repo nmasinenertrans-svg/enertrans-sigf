@@ -58,8 +58,13 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     }
   }, [])
 
-  // Do not auto-prune read IDs on notifications refresh:
-  // during reload/sync the list can be transiently empty and that resets all "read" state.
+  const activeReadNotificationIds = useMemo(() => {
+    if (notifications.length === 0) {
+      return readNotificationIds
+    }
+    const validIds = new Set(notifications.map((item) => item.id))
+    return readNotificationIds.filter((id) => validIds.has(id))
+  }, [notifications, readNotificationIds])
 
   const statusLabel = syncStatus.isOnline ? 'Online' : 'Offline'
   const statusClass = syncStatus.blockedCount > 0
@@ -69,8 +74,8 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
       : 'border-rose-200 bg-rose-50 text-rose-700'
 
   const unreadNotifications = useMemo(
-    () => notifications.filter((item) => !readNotificationIds.includes(item.id)),
-    [notifications, readNotificationIds],
+    () => notifications.filter((item) => !activeReadNotificationIds.includes(item.id)),
+    [notifications, activeReadNotificationIds],
   )
   const unreadCount = unreadNotifications.length
   const dropdownNotifications = unreadNotifications.slice(0, 8)

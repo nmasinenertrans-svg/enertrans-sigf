@@ -43,13 +43,18 @@ export const NotificationsPage = () => {
     }
   }, [])
 
-  // Do not auto-prune read IDs on notifications refresh:
-  // transient reloads can empty notifications and incorrectly reset all read markers.
+  const activeReadNotificationIds = useMemo(() => {
+    if (notifications.length === 0) {
+      return readNotificationIds
+    }
+    const validIds = new Set(notifications.map((item) => item.id))
+    return readNotificationIds.filter((id) => validIds.has(id))
+  }, [notifications, readNotificationIds])
 
   const filteredNotifications = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase()
+      const query = searchTerm.trim().toLowerCase()
     return notifications.filter((item) => {
-      const isRead = readNotificationIds.includes(item.id)
+      const isRead = activeReadNotificationIds.includes(item.id)
       if (filter === 'UNREAD' && isRead) {
         return false
       }
@@ -67,11 +72,11 @@ export const NotificationsPage = () => {
       }
       return [item.title, item.description].join(' ').toLowerCase().includes(query)
     })
-  }, [notifications, filter, readNotificationIds, searchTerm])
+  }, [notifications, filter, activeReadNotificationIds, searchTerm])
 
   const unreadCount = useMemo(
-    () => notifications.filter((item) => !readNotificationIds.includes(item.id)).length,
-    [notifications, readNotificationIds],
+    () => notifications.filter((item) => !activeReadNotificationIds.includes(item.id)).length,
+    [notifications, activeReadNotificationIds],
   )
 
   const severityBadgeClass = (severity: 'info' | 'warning' | 'danger') => {
@@ -92,7 +97,7 @@ export const NotificationsPage = () => {
           onClick={() => window.location.assign(ROUTE_PATHS.dashboard)}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
         >
-          <span className="text-base leading-none">←</span>
+          <span className="text-base leading-none">{'<-'}</span>
           Volver al inicio
         </button>
         <h2 className="text-2xl font-bold text-slate-900">Notificaciones</h2>
@@ -144,7 +149,7 @@ export const NotificationsPage = () => {
             </div>
           ) : (
             filteredNotifications.map((item) => {
-              const isRead = readNotificationIds.includes(item.id)
+              const isRead = activeReadNotificationIds.includes(item.id)
               return (
                 <button
                   key={item.id}

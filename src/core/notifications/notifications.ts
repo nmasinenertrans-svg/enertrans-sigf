@@ -13,6 +13,20 @@ export type AppNotification = {
 export const NOTIFICATIONS_READ_KEY = 'enertrans.notifications.read'
 export const NOTIFICATIONS_READ_UPDATED_EVENT = 'enertrans:notifications-read-updated'
 
+const normalizeNotificationIds = (ids: string[]): string[] =>
+  Array.from(new Set(ids.filter((item) => typeof item === 'string' && item.trim().length > 0)))
+
+const areSameIds = (left: string[], right: string[]): boolean => {
+  if (left.length !== right.length) {
+    return false
+  }
+  const leftSet = new Set(left)
+  if (leftSet.size !== right.length) {
+    return false
+  }
+  return right.every((item) => leftSet.has(item))
+}
+
 export const readStoredNotifications = (): string[] => {
   if (typeof window === 'undefined') {
     return []
@@ -23,18 +37,28 @@ export const readStoredNotifications = (): string[] => {
       return []
     }
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []
+    return Array.isArray(parsed) ? normalizeNotificationIds(parsed) : []
   } catch {
     return []
   }
 }
 
-export const persistReadNotifications = (ids: string[]) => {
+type PersistReadOptions = {
+  merge?: boolean
+}
+
+export const persistReadNotifications = (ids: string[], options: PersistReadOptions = {}) => {
   if (typeof window === 'undefined') {
     return
   }
+  const { merge = true } = options
   try {
-    window.localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(ids))
+    const current = readStoredNotifications()
+    const next = merge ? normalizeNotificationIds([...current, ...ids]) : normalizeNotificationIds(ids)
+    if (areSameIds(current, next)) {
+      return
+    }
+    window.localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(next))
     window.dispatchEvent(new CustomEvent(NOTIFICATIONS_READ_UPDATED_EVENT))
   } catch {
     // ignore
@@ -76,6 +100,16 @@ const formatDate = (value?: string) => {
   }
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
+}
+
+const getLatestIsoDate = (values: Array<string | undefined>): string => {
+  const valid = values
+    .map((value) => (value ? new Date(value).getTime() : NaN))
+    .filter((value) => Number.isFinite(value)) as number[]
+  if (valid.length === 0) {
+    return '1970-01-01T00:00:00.000Z'
+  }
+  return new Date(Math.max(...valid)).toISOString()
 }
 
 export const buildAppNotifications = (params: {
@@ -129,7 +163,7 @@ export const buildAppNotifications = (params: {
           title: `${label} sin registro`,
           description: `${unit.internalCode} - ${unit.ownerCompany}`,
           severity: 'info',
-          createdAt: new Date().toISOString(),
+          createdAt: '1970-01-01T00:00:00.000Z',
           target: buildFleetDetailPath(unit.id),
         })
       }
@@ -166,7 +200,7 @@ export const buildAppNotifications = (params: {
       title: 'Ordenes de trabajo abiertas',
       description: `${openWorkOrdersCount} abiertas en flota`,
       severity: 'warning',
-      createdAt: new Date().toISOString(),
+      createdAt: getLatestIsoDate(workOrders.map((order) => order.createdAt)),
       target: ROUTE_PATHS.workOrders,
     })
   }
@@ -178,7 +212,7 @@ export const buildAppNotifications = (params: {
       title: 'Re-auditorias pendientes',
       description: `${pendingReauditCount} unidades en espera`,
       severity: 'warning',
-      createdAt: new Date().toISOString(),
+      createdAt: getLatestIsoDate(workOrders.filter((order) => order.pendingReaudit).map((order) => order.createdAt)),
       target: ROUTE_PATHS.audits,
     })
   }
