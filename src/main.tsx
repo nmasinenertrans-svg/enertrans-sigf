@@ -26,14 +26,19 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => null)
+    // Hard-disable SW to avoid stale chunk/navigation cache issues in production.
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .catch(() => null)
+
+    if ('caches' in window) {
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        .catch(() => null)
+    }
   })
 }
-
-// When a lazy chunk fails after a new deploy, force reload once to pick the new manifest.
-window.addEventListener('vite:preloadError', (event) => {
-  event.preventDefault()
-  window.location.reload()
-})
