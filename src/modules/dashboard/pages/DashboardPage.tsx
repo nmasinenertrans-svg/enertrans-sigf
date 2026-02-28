@@ -307,7 +307,16 @@ export const DashboardPage = () => {
   }
 
   const handleOccupancySegmentClick = (segment: Segment) => {
-    if (!segment.label || segment.label === 'Otros') {
+    if (!segment.label) {
+      return
+    }
+    if (segment.label === 'Otros') {
+      const params = new URLSearchParams()
+      params.set('clientGroup', 'OTHERS')
+      occupancySegments
+        .filter((item) => item.label !== 'Otros')
+        .forEach((item) => params.append('excludeClient', item.label))
+      navigate(`${ROUTE_PATHS.fleet.list}?${params.toString()}`)
       return
     }
     if (segment.label === 'Sin asignar') {

@@ -127,9 +127,23 @@ export const FleetListPage = () => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
     const normalizedClientFilter = clientFilter.trim().toLowerCase()
     const isUnassignedClientFilter = clientFilter.trim() === UNASSIGNED_CLIENT_FILTER
+    const clientGroupFilter = (searchParams.get('clientGroup') ?? '').trim().toUpperCase()
+    const excludedClientsForOthers = searchParams
+      .getAll('excludeClient')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
     return normalizedUnits.filter((unit) => {
       if (statusFilter !== 'ALL' && unit.operationalStatus !== statusFilter) {
         return false
+      }
+      if (clientGroupFilter === 'OTHERS') {
+        const unitClient = (unit.clientName ?? '').trim().toLowerCase()
+        if (!unitClient) {
+          return false
+        }
+        if (excludedClientsForOthers.includes(unitClient)) {
+          return false
+        }
       }
       if (isUnassignedClientFilter) {
         const unitClient = (unit.clientName ?? '').trim()
@@ -166,7 +180,7 @@ export const FleetListPage = () => {
         .toLowerCase()
       return haystack.includes(normalizedSearch)
     })
-  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, documentTypeFilter, documentStatusFilter])
+  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, documentTypeFilter, documentStatusFilter, searchParams])
 
   const stopQrCamera = () => {
     if (qrIntervalRef.current !== null) {
@@ -485,6 +499,11 @@ export const FleetListPage = () => {
         <p className="mt-3 text-xs text-slate-500">
           Resultados: {filteredUnits.length} de {normalizedUnits.length}
         </p>
+        {(searchParams.get('clientGroup') ?? '').trim().toUpperCase() === 'OTHERS' ? (
+          <p className="mt-1 text-xs font-semibold text-slate-600">
+            Filtro activo desde dashboard: clientes en "Otros".
+          </p>
+        ) : null}
       </section>
 
       {normalizedUnits.length === 0 ? (
