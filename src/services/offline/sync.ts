@@ -1,5 +1,5 @@
-﻿import { apiRequest } from '../api/apiClient'
-import { enqueueItem, getQueueItems, removeQueueItem, type OfflineQueueItem } from './queue'
+import { apiRequest } from '../api/apiClient'
+import { enqueueItem, getQueueItems, removeQueueItem, updateQueueItem, type OfflineQueueItem } from './queue'
 
 let syncing = false
 
@@ -134,10 +134,62 @@ const syncItem = async (item: OfflineQueueItem) => {
   }
 }
 
+const shouldDropByStatus = async (item: OfflineQueueItem, message: string): Promise<boolean> => {
+  const statusMatch = message.match(/^(\d{3})\b/)
+  const statusCode = statusMatch ? Number(statusMatch[1]) : null
+  if (!statusCode) {
+    return false
+  }
+
+  if (item.type === 'audit.create') {
+    if (statusCode === 409) {
+      await removeQueueItem(item.id)
+      return true
+    }
+    return false
+  }
+
+  if ([400, 404, 409, 422].includes(statusCode)) {
+    await removeQueueItem(item.id)
+    return true
+  }
+
+  return false
+}
+
+const markSyncFailure = async (item: OfflineQueueItem, message: string) => {
+  await updateQueueItem(item.id, {
+    attemptCount: (item.attemptCount ?? 0) + 1,
+    lastAttemptAt: new Date().toISOString(),
+    lastError: message || 'Error desconocido al sincronizar.',
+  })
+}
+
 export const enqueueAndSync = async (item: OfflineQueueItem) => {
   await enqueueItem(item)
   if (typeof navigator !== 'undefined' && navigator.onLine) {
     await syncQueue()
+  }
+}
+
+export const syncQueueItem = async (id: string) => {
+  const items = await getQueueItems()
+  const item = items.find((entry) => entry.id === id)
+  if (!item) {
+    return
+  }
+
+  try {
+    await syncItem(item)
+    await removeQueueItem(item.id)
+  } catch (error: any) {
+    const message = String(error?.message ?? '')
+    const dropped = await shouldDropByStatus(item, message)
+    if (dropped) {
+      return
+    }
+    await markSyncFailure(item, message)
+    throw error
   }
 }
 
@@ -155,20 +207,11 @@ export const syncQueue = async () => {
         await removeQueueItem(item.id)
       } catch (error: any) {
         const message = String(error?.message ?? '')
-        const statusMatch = message.match(/^(\d{3})\b/)
-        const statusCode = statusMatch ? Number(statusMatch[1]) : null
-
-        if (statusCode) {
-          if (item.type === 'audit.create') {
-            if (statusCode === 409) {
-              await removeQueueItem(item.id)
-              continue
-            }
-          } else if ([400, 404, 409, 422].includes(statusCode)) {
-            await removeQueueItem(item.id)
-            continue
-          }
+        const dropped = await shouldDropByStatus(item, message)
+        if (dropped) {
+          continue
         }
+        await markSyncFailure(item, message)
         break
       }
     }

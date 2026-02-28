@@ -1,8 +1,11 @@
-﻿export interface OfflineQueueItem {
+export interface OfflineQueueItem {
   id: string
   type: string
   payload: unknown
   createdAt: string
+  attemptCount?: number
+  lastAttemptAt?: string
+  lastError?: string
 }
 
 const DB_NAME = 'enertrans-offline'
@@ -27,7 +30,12 @@ export const enqueueItem = async (item: OfflineQueueItem): Promise<void> => {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
-    tx.objectStore(STORE_NAME).put(item)
+    tx.objectStore(STORE_NAME).put({
+      ...item,
+      attemptCount: item.attemptCount ?? 0,
+      lastAttemptAt: item.lastAttemptAt ?? '',
+      lastError: item.lastError ?? '',
+    } satisfies OfflineQueueItem)
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
@@ -48,6 +56,31 @@ export const removeQueueItem = async (id: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     tx.objectStore(STORE_NAME).delete(id)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+export const updateQueueItem = async (id: string, patch: Partial<OfflineQueueItem>): Promise<void> => {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    const request = store.get(id)
+
+    request.onsuccess = () => {
+      const current = request.result as OfflineQueueItem | undefined
+      if (!current) {
+        resolve()
+        return
+      }
+      store.put({
+        ...current,
+        ...patch,
+      } satisfies OfflineQueueItem)
+    }
+
+    request.onerror = () => reject(request.error)
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })

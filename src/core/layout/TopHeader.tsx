@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import enertransLogoUrl from '../../assets/enertrans-logo.png'
 import { setAuthToken } from '../../services/api/apiClient'
 import { getQueueItems, type OfflineQueueItem } from '../../services/offline/queue'
-import { syncQueue } from '../../services/offline/sync'
+import { syncQueue, syncQueueItem } from '../../services/offline/sync'
 import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
 import {
@@ -383,10 +383,41 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                       <div>
                         <p className="font-semibold">{item.type}</p>
                         <p className="text-[11px] text-slate-500">{item.id}</p>
+                        <p className="text-[11px] text-slate-500">
+                          Intentos: <span className="font-semibold text-slate-700">{item.attemptCount ?? 0}</span>
+                        </p>
+                        {item.lastAttemptAt ? (
+                          <p className="text-[11px] text-slate-500">
+                            Ultimo intento: {new Date(item.lastAttemptAt).toLocaleString()}
+                          </p>
+                        ) : null}
+                        {item.lastError ? (
+                          <p className="mt-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700">
+                            Error: {item.lastError}
+                          </p>
+                        ) : null}
                       </div>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
-                        {new Date(item.createdAt).toLocaleString()}
-                      </span>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
+                          {new Date(item.createdAt).toLocaleString()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await syncQueueItem(item.id)
+                              setAppError('Reintento individual completado.')
+                            } catch {
+                              setAppError('El reintento individual fallo. Revisa el error en la cola.')
+                            } finally {
+                              await loadQueue()
+                            }
+                          }}
+                          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          Reintentar
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
