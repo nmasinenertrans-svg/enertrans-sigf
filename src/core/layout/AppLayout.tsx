@@ -124,6 +124,7 @@ export const AppLayout = () => {
   } = useAppContext()
 
   const usersRef = useRef(users)
+  const currentUserRef = useRef(currentUser)
   const fleetUnitsRef = useRef(fleetUnits)
   const maintenancePlansRef = useRef(maintenancePlans)
   const auditsRef = useRef(audits)
@@ -138,6 +139,10 @@ export const AppLayout = () => {
   useEffect(() => {
     usersRef.current = users
   }, [users])
+
+  useEffect(() => {
+    currentUserRef.current = currentUser
+  }, [currentUser])
 
   useEffect(() => {
     fleetUnitsRef.current = fleetUnits
@@ -180,7 +185,7 @@ export const AppLayout = () => {
   }, [audits, fleetUnits, workOrders])
 
   useEffect(() => {
-    const currentUserId = currentUser?.id ?? null
+    const currentUserId = currentUserRef.current?.id ?? null
 
     const loadRemoteData = async () => {
       if (!currentUserId || !syncStatus.isOnline) {
@@ -223,7 +228,7 @@ export const AppLayout = () => {
 
       setGlobalLoading(true)
       try {
-        const canViewUsers = canUser(currentUser ?? null, 'USERS', 'view')
+        const canViewUsers = canUser(currentUserRef.current ?? null, 'USERS', 'view')
         const [
           usersResponse,
           fleetResponse,
@@ -347,7 +352,6 @@ export const AppLayout = () => {
 
     loadRemoteData()
   }, [
-    currentUser,
     currentUser?.id,
     syncStatus.isOnline,
     setFleetUnits,
@@ -390,7 +394,7 @@ export const AppLayout = () => {
       return
     }
 
-    if (!canUser(currentUser ?? null, 'MAINTENANCE_MODE', 'view')) {
+    if (!canUser(currentUserRef.current ?? null, 'MAINTENANCE_MODE', 'view')) {
       return
     }
 
@@ -404,7 +408,7 @@ export const AppLayout = () => {
     }
 
     loadMaintenance()
-  }, [currentUser, currentUser?.id, syncStatus.isOnline, setMaintenanceStatus])
+  }, [currentUser?.id, syncStatus.isOnline, setMaintenanceStatus])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
