@@ -38,6 +38,15 @@ export const AuditHistoryList = ({ items, onViewAudit, onExportPdf, onRequestDel
             <span className="font-semibold">Observaciones:</span> {item.observations || 'Sin observaciones.'}
           </p>
           <p className="mt-1 text-sm text-slate-700">
+            <span className="font-semibold">KM motor:</span> {item.unitKilometers ?? 0}
+          </p>
+          <p className="mt-1 text-sm text-slate-700">
+            <span className="font-semibold">Horas motor:</span> {item.engineHours ?? 0}
+          </p>
+          <p className="mt-1 text-sm text-slate-700">
+            <span className="font-semibold">Horas hidrogrua:</span> {item.hydroHours ?? 0}
+          </p>
+          <p className="mt-1 text-sm text-slate-700">
             <span className="font-semibold">Fotos:</span> {item.photoCount}
           </p>
 

@@ -33,6 +33,38 @@ const parseStatusFilter = (
   return 'ALL'
 }
 
+const parseDocumentTypeFilter = (raw: string | null): 'ALL' | 'rto' | 'hoist' => {
+  if (raw === 'rto' || raw === 'hoist' || raw === 'ALL') {
+    return raw
+  }
+  return 'ALL'
+}
+
+const parseDocumentStatusFilter = (raw: string | null): 'ALL' | 'overdue' | 'soon' | 'ok' | 'missing' => {
+  if (raw === 'overdue' || raw === 'soon' || raw === 'ok' || raw === 'missing' || raw === 'ALL') {
+    return raw
+  }
+  return 'ALL'
+}
+
+const getDocumentStatus = (expiresAt?: string): 'overdue' | 'soon' | 'ok' | 'missing' => {
+  if (!expiresAt) {
+    return 'missing'
+  }
+  const date = new Date(expiresAt)
+  if (Number.isNaN(date.getTime())) {
+    return 'missing'
+  }
+  const deltaDays = Math.ceil((date.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+  if (deltaDays < 0) {
+    return 'overdue'
+  }
+  if (deltaDays <= 30) {
+    return 'soon'
+  }
+  return 'ok'
+}
+
 export const FleetListPage = () => {
   const [searchParams] = useSearchParams()
   const {
@@ -53,6 +85,13 @@ export const FleetListPage = () => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'>(() =>
     parseStatusFilter(searchParams.get('status')),
   )
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<'ALL' | 'rto' | 'hoist'>(() =>
+    parseDocumentTypeFilter(searchParams.get('docType')),
+  )
+  const [documentStatusFilter, setDocumentStatusFilter] = useState<'ALL' | 'overdue' | 'soon' | 'ok' | 'missing'>(() =>
+    parseDocumentStatusFilter(searchParams.get('docStatus')),
+  )
+  const [clientFilter, setClientFilter] = useState(() => (searchParams.get('client') ?? '').trim())
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrScanning, setIsQrScanning] = useState(false)
@@ -85,9 +124,25 @@ export const FleetListPage = () => {
 
   const filteredUnits = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
+    const normalizedClientFilter = clientFilter.trim().toLowerCase()
     return normalizedUnits.filter((unit) => {
       if (statusFilter !== 'ALL' && unit.operationalStatus !== statusFilter) {
         return false
+      }
+      if (normalizedClientFilter) {
+        const unitClient = (unit.clientName ?? '').trim().toLowerCase()
+        if (!unitClient.includes(normalizedClientFilter)) {
+          return false
+        }
+      }
+      if (documentTypeFilter !== 'ALL' && documentStatusFilter !== 'ALL') {
+        if (documentTypeFilter === 'hoist' && unit.documents?.hoistNotApplicable) {
+          return false
+        }
+        const docExpiresAt = unit.documents?.[documentTypeFilter]?.expiresAt
+        if (getDocumentStatus(docExpiresAt) !== documentStatusFilter) {
+          return false
+        }
       }
       if (!normalizedSearch) {
         return true
@@ -104,7 +159,7 @@ export const FleetListPage = () => {
         .toLowerCase()
       return haystack.includes(normalizedSearch)
     })
-  }, [normalizedUnits, searchTerm, statusFilter])
+  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, documentTypeFilter, documentStatusFilter])
 
   const stopQrCamera = () => {
     if (qrIntervalRef.current !== null) {
@@ -361,7 +416,7 @@ export const FleetListPage = () => {
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Buscar
             <input
@@ -383,6 +438,41 @@ export const FleetListPage = () => {
               <option value="MAINTENANCE">{getOperationalStatusLabel('MAINTENANCE')}</option>
               <option value="OUT_OF_SERVICE">{getOperationalStatusLabel('OUT_OF_SERVICE')}</option>
             </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            Documento
+            <select
+              value={documentTypeFilter}
+              onChange={(event) => setDocumentTypeFilter(event.target.value as typeof documentTypeFilter)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+            >
+              <option value="ALL">Todos</option>
+              <option value="rto">RTO</option>
+              <option value="hoist">Izaje</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            Estado doc.
+            <select
+              value={documentStatusFilter}
+              onChange={(event) => setDocumentStatusFilter(event.target.value as typeof documentStatusFilter)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+            >
+              <option value="ALL">Todos</option>
+              <option value="overdue">Vencido</option>
+              <option value="soon">Por vencer</option>
+              <option value="ok">Vigente</option>
+              <option value="missing">Sin registro</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-4">
+            Cliente
+            <input
+              value={clientFilter}
+              onChange={(event) => setClientFilter(event.target.value)}
+              placeholder="Filtrar por cliente"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+            />
           </label>
         </div>
         <p className="mt-3 text-xs text-slate-500">

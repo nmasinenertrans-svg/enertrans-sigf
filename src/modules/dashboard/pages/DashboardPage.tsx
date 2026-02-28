@@ -44,7 +44,15 @@ const buildDonutPaths = (segments: Segment[]) => {
   })
 }
 
-const DonutChart = ({ title, segments }: { title: string; segments: Segment[] }) => {
+const DonutChart = ({
+  title,
+  segments,
+  onSegmentClick,
+}: {
+  title: string
+  segments: Segment[]
+  onSegmentClick?: (segment: Segment) => void
+}) => {
   const visibleSegments = toSegments(segments)
   const paths = buildDonutPaths(visibleSegments)
   const total = segments.reduce((acc, item) => acc + item.value, 0)
@@ -81,14 +89,20 @@ const DonutChart = ({ title, segments }: { title: string; segments: Segment[] })
           {segments.map((item) => {
             const percent = total > 0 ? Math.round((item.value / total) * 100) : 0
             return (
-              <div key={item.label} className="grid grid-cols-3 border-t border-slate-200 text-sm">
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => onSegmentClick?.(item)}
+                disabled={!onSegmentClick}
+                className="grid w-full grid-cols-3 border-t border-slate-200 text-left text-sm enabled:hover:bg-slate-50 disabled:cursor-default"
+              >
                 <div className="flex items-center gap-2 px-3 py-2 text-slate-700">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   {item.label}
                 </div>
                 <div className="px-3 py-2 text-right font-semibold text-slate-900">{formatCount(item.value)}</div>
                 <div className="px-3 py-2 text-right font-semibold text-slate-900">{percent}%</div>
-              </div>
+              </button>
             )
           })}
         </div>
@@ -97,7 +111,13 @@ const DonutChart = ({ title, segments }: { title: string; segments: Segment[] })
   )
 }
 
-const OccupancyChart = ({ segments }: { segments: Segment[] }) => {
+const OccupancyChart = ({
+  segments,
+  onSegmentClick,
+}: {
+  segments: Segment[]
+  onSegmentClick?: (segment: Segment) => void
+}) => {
   const visibleSegments = toSegments(segments)
   const paths = buildDonutPaths(visibleSegments)
   const total = segments.reduce((acc, item) => acc + item.value, 0)
@@ -134,7 +154,13 @@ const OccupancyChart = ({ segments }: { segments: Segment[] }) => {
           {segments.map((item) => {
             const percent = total > 0 ? Math.round((item.value / total) * 100) : 0
             return (
-              <div key={item.label} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => onSegmentClick?.(item)}
+                disabled={!onSegmentClick}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left enabled:hover:bg-slate-50 disabled:cursor-default"
+              >
                 <div className="flex items-center gap-2 text-sm text-slate-700">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   {item.label}
@@ -142,7 +168,7 @@ const OccupancyChart = ({ segments }: { segments: Segment[] }) => {
                 <div className="text-sm font-semibold text-slate-900">
                   {formatCount(item.value)} ({percent}%)
                 </div>
-              </div>
+              </button>
             )
           })}
         </div>
@@ -246,6 +272,46 @@ export const DashboardPage = () => {
     return segments
   }, [fleetUnits])
 
+  const mapLabelToDocStatus = (label: string): 'overdue' | 'soon' | 'ok' | 'missing' | null => {
+    const key = label.toLowerCase()
+    if (key.includes('vencid')) {
+      return 'overdue'
+    }
+    if (key.includes('proxim')) {
+      return 'soon'
+    }
+    if (key.includes('vigent')) {
+      return 'ok'
+    }
+    if (key.includes('registro')) {
+      return 'missing'
+    }
+    return null
+  }
+
+  const handleRtoSegmentClick = (segment: Segment) => {
+    const status = mapLabelToDocStatus(segment.label)
+    if (!status) {
+      return
+    }
+    navigate(`${ROUTE_PATHS.fleet.list}?docType=rto&docStatus=${status}`)
+  }
+
+  const handleHoistSegmentClick = (segment: Segment) => {
+    const status = mapLabelToDocStatus(segment.label)
+    if (!status) {
+      return
+    }
+    navigate(`${ROUTE_PATHS.fleet.list}?docType=hoist&docStatus=${status}`)
+  }
+
+  const handleOccupancySegmentClick = (segment: Segment) => {
+    if (!segment.label || segment.label === 'Otros') {
+      return
+    }
+    navigate(`${ROUTE_PATHS.fleet.list}?client=${encodeURIComponent(segment.label)}`)
+  }
+
   return (
     <section className="space-y-6">
       <header className="text-center">
@@ -289,11 +355,11 @@ export const DashboardPage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <DonutChart title="Estado de RTO/VTV" segments={rtoSegments} />
-        <DonutChart title="Estado de Certificacion" segments={hoistSegments} />
+        <DonutChart title="Estado de RTO/VTV" segments={rtoSegments} onSegmentClick={handleRtoSegmentClick} />
+        <DonutChart title="Estado de Certificacion" segments={hoistSegments} onSegmentClick={handleHoistSegmentClick} />
       </div>
 
-      <OccupancyChart segments={occupancySegments} />
+      <OccupancyChart segments={occupancySegments} onSegmentClick={handleOccupancySegmentClick} />
     </section>
   )
 }

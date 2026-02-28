@@ -136,6 +136,24 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - `AppRouter` migrado a carga lazy por ruta con `React.lazy` + `Suspense` para evitar importar todos los modulos al arranque.
   - impacto: se fragmento el JS por paginas (chunks dedicados por modulo) y desaparecio el warning de Vite por chunk >500KB.
   - validacion: `npm run lint` y `npm run build` OK.
+- 2026-02-28 - mejoras funcionales pedidas por operacion:
+  - Auditorias: historial y modal muestran ademas `KM motor`, `Horas motor` y `Horas hidrogrua` junto con observaciones.
+    Archivos: `src/modules/audits/types.ts`, `src/modules/audits/services/auditsService.ts`,
+    `src/modules/audits/components/AuditHistoryList.tsx`, `src/modules/audits/pages/AuditsPage.tsx`.
+  - Flota / perfil de unidad: nuevo item `Rastreo` con checks `ITURAN`, `RSV`, `MICROTRACK`, persistido en `documents.tracking`.
+    Archivos: `src/types/domain.ts`, `src/modules/fleet/services/fleetService.ts`,
+    `src/modules/fleet/pages/FleetDetailPage.tsx`.
+  - Flota / documentacion: nuevo boton `Eliminar archivo` para RTO/Seguro/Izaje/Titulo/Cedula, solo visible para roles `DEV` y `GERENTE`.
+    Archivo: `src/modules/fleet/pages/FleetDetailPage.tsx`.
+  - Dashboard interactivo completo:
+    - cards KPI ya navegables,
+    - tablas de donuts (RTO e Izaje) clickeables y navegan a Flota con filtros por documento/estado,
+    - ocupacion por cliente clickeable y navega a Flota filtrada por cliente.
+    Archivos: `src/modules/dashboard/pages/DashboardPage.tsx`, `src/modules/fleet/pages/FleetListPage.tsx`.
+  - Validacion tecnica final de esta tanda:
+    - `npm run lint` OK
+    - `npm run build` OK
+    - `npm run test` OK (7/7)
 - Correccion de runtime en paginas con hooks condicionales:
   - `ExternalRequestsPage`,
   - `InventoryPage`,

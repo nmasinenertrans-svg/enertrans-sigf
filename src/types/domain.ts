@@ -181,6 +181,12 @@ export interface FleetUnitDocument {
   rtoNacional?: boolean
 }
 
+export interface FleetUnitTracking {
+  ituran: boolean
+  rsv: boolean
+  microtrack: boolean
+}
+
 export interface FleetUnitDocuments {
   rto: FleetUnitDocument
   insurance: FleetUnitDocument
@@ -188,6 +194,7 @@ export interface FleetUnitDocuments {
   title?: FleetUnitDocument
   registration?: FleetUnitDocument
   hoistNotApplicable?: boolean
+  tracking?: FleetUnitTracking
 }
 
 export interface MaintenancePlan {

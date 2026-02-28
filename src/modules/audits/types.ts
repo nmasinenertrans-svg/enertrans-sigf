@@ -47,6 +47,9 @@ export interface AuditHistoryViewItem {
   resultLabel: string
   resultClassName: string
   observations: string
+  unitKilometers: number
+  engineHours: number
+  hydroHours: number
   photoCount: number
   sections: AuditChecklistSection[]
   syncState?: 'SYNCED' | 'PENDING' | 'LOCAL_ONLY' | 'ERROR'

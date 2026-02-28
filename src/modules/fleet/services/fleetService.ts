@@ -2,6 +2,7 @@ import {
   fleetOperationalStatuses,
   fleetUnitTypes,
   type FleetOperationalStatus,
+  type FleetUnitTracking,
   type FleetUnit,
   type FleetUnitDocuments,
   type FleetUnitFilters,
@@ -94,6 +95,12 @@ const createEmptyDocument = (): FleetUnitDocuments['rto'] => ({
   rtoNacional: false,
 })
 
+const createEmptyTracking = (): FleetUnitTracking => ({
+  ituran: false,
+  rsv: false,
+  microtrack: false,
+})
+
 const createEmptyDocuments = (): FleetUnitDocuments => ({
   rto: createEmptyDocument(),
   insurance: createEmptyDocument(),
@@ -101,6 +108,7 @@ const createEmptyDocuments = (): FleetUnitDocuments => ({
   title: createEmptyDocument(),
   registration: createEmptyDocument(),
   hoistNotApplicable: false,
+  tracking: createEmptyTracking(),
 })
 
 const normalizeLubricants = (lubricants?: FleetUnitLubricants): FleetUnitLubricants => ({
@@ -126,6 +134,10 @@ const normalizeDocuments = (documents?: FleetUnitDocuments): FleetUnitDocuments 
   title: normalizeDocument(documents?.title),
   registration: normalizeDocument(documents?.registration),
   hoistNotApplicable: documents?.hoistNotApplicable ?? false,
+  tracking: {
+    ...createEmptyTracking(),
+    ...(documents?.tracking ?? {}),
+  },
 })
 
 const isMissingOrExpired = (expiresAt?: string): boolean => {

@@ -124,12 +124,13 @@ export const FleetDetailPage = () => {
   const [isQrPdfLoading, setIsQrPdfLoading] = useState(false)
 
   const {
-    state: { fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements },
+    state: { currentUser, fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements },
     actions: { setFleetUnits },
   } = useAppContext()
 
   const canEditFleet = can('FLEET', 'edit')
   const canCreateAudits = can('AUDITS', 'create')
+  const canDeleteFleetDocuments = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
 
   const selectedUnit = useMemo(() => {
     if (!unitId) {
@@ -300,6 +301,11 @@ export const FleetDetailPage = () => {
     title: emptyDoc,
     registration: emptyDoc,
     hoistNotApplicable: false,
+    tracking: {
+      ituran: false,
+      rsv: false,
+      microtrack: false,
+    },
   }
   const emptyLubricants = {
     engineOil: '',
@@ -329,6 +335,7 @@ export const FleetDetailPage = () => {
   }
 
   const safeDocuments = selectedUnit?.documents ?? emptyDocs
+  const safeTracking = safeDocuments.tracking ?? emptyDocs.tracking
   const requiresHoist = Boolean(selectedUnit?.hasHydroCrane)
   const hoistNotApplicable = Boolean(safeDocuments.hoistNotApplicable)
   const safeLubricants = selectedUnit?.lubricants ?? emptyLubricants
@@ -460,6 +467,58 @@ export const FleetDetailPage = () => {
       operationalStatus: nextOperationalStatus,
     }))
     if (typeof navigator !== 'undefined' && navigator.onLine && selectedUnit) {
+      apiRequest(`/fleet/${selectedUnit.id}`, {
+        method: 'PATCH',
+        body: { documents: nextDocuments, operationalStatus: nextOperationalStatus },
+      }).catch(() => null)
+    }
+  }
+
+  const handleTrackingChange = (target: 'ituran' | 'rsv' | 'microtrack', checked: boolean) => {
+    const nextDocuments = {
+      ...(selectedUnit?.documents ?? emptyDocs),
+      tracking: {
+        ...(selectedUnit?.documents?.tracking ?? emptyDocs.tracking),
+        [target]: checked,
+      },
+    }
+    updateUnit((unit) => ({
+      ...unit,
+      documents: nextDocuments,
+    }))
+    if (typeof navigator !== 'undefined' && navigator.onLine && selectedUnit) {
+      apiRequest(`/fleet/${selectedUnit.id}`, {
+        method: 'PATCH',
+        body: { documents: nextDocuments },
+      }).catch(() => null)
+    }
+  }
+
+  const handleDeleteDocumentFile = (docKey: 'rto' | 'insurance' | 'hoist' | 'title' | 'registration') => {
+    if (!canDeleteFleetDocuments || !selectedUnit) {
+      return
+    }
+    const confirmed = window.confirm('¿Eliminar archivo cargado? Esta acción no se puede deshacer.')
+    if (!confirmed) {
+      return
+    }
+    const nextDocuments = {
+      ...(selectedUnit.documents ?? emptyDocs),
+      [docKey]: {
+        ...((selectedUnit.documents ?? emptyDocs)[docKey] ?? emptyDoc),
+        fileName: '',
+        fileBase64: '',
+        fileUrl: '',
+      },
+    }
+    const invalidDocs = hasInvalidDocuments(nextDocuments, requiresHoist)
+    const nextOperationalStatus = resolveOperationalStatus(invalidDocs)
+    updateUnit((unit) => ({
+      ...unit,
+      documents: nextDocuments,
+      operationalStatus: nextOperationalStatus,
+    }))
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
       apiRequest(`/fleet/${selectedUnit.id}`, {
         method: 'PATCH',
         body: { documents: nextDocuments, operationalStatus: nextOperationalStatus },
@@ -726,6 +785,38 @@ export const FleetDetailPage = () => {
             <dt className="text-xs uppercase tracking-wide text-slate-500">Semirremolque</dt>
             <dd className="mt-1 font-semibold text-slate-900">{selectedUnit.hasSemiTrailer ? 'Si' : 'No'}</dd>
           </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 md:col-span-2 xl:col-span-3">
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Rastreo</dt>
+            <dd className="mt-2 grid gap-2 md:grid-cols-3">
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(safeTracking.ituran)}
+                  onChange={(event) => handleTrackingChange('ituran', event.target.checked)}
+                  disabled={!canEditFleet}
+                />
+                ITURAN
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(safeTracking.rsv)}
+                  onChange={(event) => handleTrackingChange('rsv', event.target.checked)}
+                  disabled={!canEditFleet}
+                />
+                RSV
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(safeTracking.microtrack)}
+                  onChange={(event) => handleTrackingChange('microtrack', event.target.checked)}
+                  disabled={!canEditFleet}
+                />
+                MICROTRACK
+              </label>
+            </dd>
+          </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <dt className="text-xs uppercase tracking-wide text-slate-500">N° chasis</dt>
             <dd className="mt-1 font-semibold text-slate-900">{selectedUnit.chassisNumber}</dd>
@@ -984,6 +1075,15 @@ export const FleetDetailPage = () => {
                           className="inline-flex items-center rounded-lg border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"
                         >
                           Descargar PDF
+                        </button>
+                      ) : null}
+                      {canDeleteFleetDocuments ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDocumentFile(doc.key)}
+                          className="inline-flex items-center rounded-lg border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                        >
+                          Eliminar archivo
                         </button>
                       ) : null}
                     </div>

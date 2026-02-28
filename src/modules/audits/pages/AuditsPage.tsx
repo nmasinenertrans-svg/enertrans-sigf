@@ -984,6 +984,17 @@ export const AuditsPage = () => {
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
               <span className="font-semibold">Observaciones:</span> {viewAudit.observations || 'Sin observaciones.'}
             </div>
+            <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 md:grid-cols-3">
+              <p>
+                <span className="font-semibold">KM motor:</span> {viewAudit.unitKilometers ?? 0}
+              </p>
+              <p>
+                <span className="font-semibold">Horas motor:</span> {viewAudit.engineHours ?? 0}
+              </p>
+              <p>
+                <span className="font-semibold">Horas hidrogrua:</span> {viewAudit.hydroHours ?? 0}
+              </p>
+            </div>
 
             <div className="mt-4">
               <AuditChecklistEditor
