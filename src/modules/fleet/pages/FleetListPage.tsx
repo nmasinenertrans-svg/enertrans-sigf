@@ -23,6 +23,7 @@ interface WindowWithBarcodeDetector extends Window {
 }
 
 const qrFormats = ['qr_code']
+const UNASSIGNED_CLIENT_FILTER = '__UNASSIGNED__'
 
 const parseStatusFilter = (
   raw: string | null,
@@ -125,11 +126,17 @@ export const FleetListPage = () => {
   const filteredUnits = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
     const normalizedClientFilter = clientFilter.trim().toLowerCase()
+    const isUnassignedClientFilter = clientFilter.trim() === UNASSIGNED_CLIENT_FILTER
     return normalizedUnits.filter((unit) => {
       if (statusFilter !== 'ALL' && unit.operationalStatus !== statusFilter) {
         return false
       }
-      if (normalizedClientFilter) {
+      if (isUnassignedClientFilter) {
+        const unitClient = (unit.clientName ?? '').trim()
+        if (unitClient.length > 0) {
+          return false
+        }
+      } else if (normalizedClientFilter) {
         const unitClient = (unit.clientName ?? '').trim().toLowerCase()
         if (!unitClient.includes(normalizedClientFilter)) {
           return false
@@ -468,9 +475,9 @@ export const FleetListPage = () => {
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-4">
             Cliente
             <input
-              value={clientFilter}
+              value={clientFilter === UNASSIGNED_CLIENT_FILTER ? '' : clientFilter}
               onChange={(event) => setClientFilter(event.target.value)}
-              placeholder="Filtrar por cliente"
+              placeholder={clientFilter === UNASSIGNED_CLIENT_FILTER ? 'Filtro activo: sin asignar' : 'Filtrar por cliente'}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
             />
           </label>

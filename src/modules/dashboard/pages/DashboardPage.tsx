@@ -199,6 +199,7 @@ const getDocumentStatus = (expiresAt?: string, thresholdDays = 30) => {
 }
 
 const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
+const UNASSIGNED_CLIENT_FILTER = '__UNASSIGNED__'
 
 export const DashboardPage = () => {
   const {
@@ -307,6 +308,10 @@ export const DashboardPage = () => {
 
   const handleOccupancySegmentClick = (segment: Segment) => {
     if (!segment.label || segment.label === 'Otros') {
+      return
+    }
+    if (segment.label === 'Sin asignar') {
+      navigate(`${ROUTE_PATHS.fleet.list}?client=${UNASSIGNED_CLIENT_FILTER}`)
       return
     }
     navigate(`${ROUTE_PATHS.fleet.list}?client=${encodeURIComponent(segment.label)}`)
