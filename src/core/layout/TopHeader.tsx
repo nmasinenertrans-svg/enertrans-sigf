@@ -36,6 +36,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   const [isQueueOpen, setIsQueueOpen] = useState(false)
   const [queueItems, setQueueItems] = useState<OfflineQueueItem[]>([])
   const [isQueueLoading, setIsQueueLoading] = useState(false)
+  const [showOnlyQueueErrors, setShowOnlyQueueErrors] = useState(false)
 
   useEffect(() => {
     persistReadNotifications(readNotificationIds)
@@ -115,6 +116,15 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     anchor.click()
     URL.revokeObjectURL(url)
   }
+
+  const queueErrorCount = useMemo(
+    () => queueItems.filter((item) => Boolean(item.lastError)).length,
+    [queueItems],
+  )
+  const visibleQueueItems = useMemo(
+    () => (showOnlyQueueErrors ? queueItems.filter((item) => Boolean(item.lastError)) : queueItems),
+    [queueItems, showOnlyQueueErrors],
+  )
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300/80 bg-amber-300 px-3 py-2 shadow-sm md:h-20 md:flex-nowrap md:gap-3 md:px-8">
@@ -353,10 +363,22 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                 <p className="text-xs uppercase tracking-wide text-slate-500">Cola offline</p>
                 <h3 className="text-lg font-bold text-slate-900">Pendientes de sincronizacion</h3>
                 <p className="text-sm text-slate-600">
-                  {isQueueLoading ? 'Cargando...' : `${queueItems.length} item(s) en cola`}
+                  {isQueueLoading ? 'Cargando...' : `${queueItems.length} item(s) en cola • ${queueErrorCount} con error`}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOnlyQueueErrors((prev) => !prev)}
+                  className={[
+                    'rounded-lg border px-3 py-2 text-xs font-semibold',
+                    showOnlyQueueErrors
+                      ? 'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100',
+                  ].join(' ')}
+                >
+                  {showOnlyQueueErrors ? 'Mostrar todo' : 'Solo con error'}
+                </button>
                 <button
                   type="button"
                   onClick={async () => {
@@ -386,12 +408,12 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
             </div>
 
             <div className="mt-4 space-y-2">
-              {queueItems.length === 0 ? (
+              {visibleQueueItems.length === 0 ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  No hay elementos pendientes.
+                  {showOnlyQueueErrors ? 'No hay elementos con error.' : 'No hay elementos pendientes.'}
                 </div>
               ) : (
-                queueItems.map((item) => (
+                visibleQueueItems.map((item) => (
                   <div key={item.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
