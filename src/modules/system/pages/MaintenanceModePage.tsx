@@ -29,14 +29,17 @@ export const MaintenanceModePage = () => {
         setEnabled(response.enabled)
         setMessage(response.message ?? '')
         const flagsResponse = await apiRequest<typeof featureFlags>('/settings/features')
-        setFeatureFlags({ ...featureFlags, ...flagsResponse })
-        setFlags({ ...featureFlags, ...flagsResponse })
+        const nextFlags = { ...featureFlags, ...flagsResponse }
+        if (JSON.stringify(nextFlags) !== JSON.stringify(featureFlags)) {
+          setFeatureFlags(nextFlags)
+        }
+        setFlags(nextFlags)
       } catch {
         // ignore
       }
     }
     void load()
-  }, [setMaintenanceStatus])
+  }, [featureFlags, setMaintenanceStatus, setFeatureFlags])
 
   const handleSave = async () => {
     setIsSaving(true)

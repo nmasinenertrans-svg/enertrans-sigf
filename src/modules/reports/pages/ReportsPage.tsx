@@ -112,19 +112,12 @@ const isWithinRange = (value: string | undefined, startDate?: string, endDate?: 
   return true
 }
 
+const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
+
 export const ReportsPage = () => {
   const {
     state: { audits, workOrders, repairs, fleetUnits, featureFlags },
   } = useAppContext()
-
-  if (!featureFlags.showReportsModule) {
-    return (
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
-        <p className="mt-2 text-sm text-slate-600">Este módulo está deshabilitado por configuración.</p>
-      </section>
-    )
-  }
 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -158,8 +151,6 @@ export const ReportsPage = () => {
 
   const rangeLabel = startDate || endDate ? `Periodo: ${startDate || 'Inicio'} → ${endDate || 'Hoy'}` : 'Periodo completo'
 
-  const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
-
   const occupancyByClient = useMemo(() => {
     const counts = new Map<string, { count: number; units: FleetUnit[] }>()
     fleetUnits.forEach((unit) => {
@@ -179,6 +170,15 @@ export const ReportsPage = () => {
 
     return { segments, detail: sorted }
   }, [fleetUnits])
+
+  if (!featureFlags.showReportsModule) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
+        <p className="mt-2 text-sm text-slate-600">Este modulo esta deshabilitado por configuracion.</p>
+      </section>
+    )
+  }
 
   const exportAuditsCsv = () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Auditor', 'Resultado']
@@ -520,3 +520,5 @@ export const ReportsPage = () => {
     </section>
   )
 }
+
+

@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -41,15 +41,6 @@ export const InventoryPage = () => {
     actions: { setInventoryItems, setAppError },
   } = useAppContext()
 
-  if (!featureFlags.showInventoryModule) {
-    return (
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900">Inventario</h2>
-        <p className="mt-2 text-sm text-slate-600">Este módulo está deshabilitado por configuración.</p>
-      </section>
-    )
-  }
-
   const canCreate = can('INVENTORY', 'create')
   const canEdit = can('INVENTORY', 'edit')
   const canDelete = can('INVENTORY', 'delete')
@@ -71,6 +62,15 @@ export const InventoryPage = () => {
     }),
     [inventoryView],
   )
+
+  if (!featureFlags.showInventoryModule) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900">Inventario</h2>
+        <p className="mt-2 text-sm text-slate-600">Este modulo esta deshabilitado por configuracion.</p>
+      </section>
+    )
+  }
 
   const resetForm = () => {
     setEditingItemId(null)
@@ -434,3 +434,5 @@ export const InventoryPage = () => {
     </section>
   )
 }
+
+

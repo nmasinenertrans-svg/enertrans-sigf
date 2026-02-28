@@ -243,7 +243,7 @@ export const FleetDetailPage = () => {
     const map = new Map<string, (typeof externalRequests)[number]>()
     unitExternalRequests.forEach((request) => map.set(request.id, request))
     return map
-  }, [unitExternalRequests, externalRequests])
+  }, [unitExternalRequests])
 
   const associatedInventory = useMemo(() => {
     const unitWorkOrderIds = new Set(unitWorkOrders.map((workOrder) => workOrder.id))

@@ -97,7 +97,7 @@ export const MovementsPage = () => {
       })
 
       setFormData((previous) => applyParsedPayload(previous, parsed ?? {}, fleetUnits))
-    } catch (error) {
+    } catch {
       setAppError('No se pudo leer el PDF automáticamente. Completa los datos manualmente.')
     } finally {
       setIsParsing(false)
@@ -140,7 +140,7 @@ export const MovementsPage = () => {
 
       setMovements([created, ...movements])
       setFormData(createEmptyMovementFormData())
-    } catch (error) {
+    } catch {
       setAppError('No se pudo guardar el movimiento. Intenta nuevamente.')
     } finally {
       setIsSaving(false)

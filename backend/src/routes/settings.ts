@@ -45,7 +45,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const withRetry = async <T,>(fn: () => Promise<T>): Promise<T> => {
   try {
     return await fn()
-  } catch (error) {
+  } catch {
     await wait(600)
     return await fn()
   }

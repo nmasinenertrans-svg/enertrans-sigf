@@ -6,6 +6,7 @@ export interface OfflineQueueItem {
   attemptCount?: number
   lastAttemptAt?: string
   lastError?: string
+  blocked?: boolean
 }
 
 const DB_NAME = 'enertrans-offline'
@@ -35,6 +36,7 @@ export const enqueueItem = async (item: OfflineQueueItem): Promise<void> => {
       attemptCount: item.attemptCount ?? 0,
       lastAttemptAt: item.lastAttemptAt ?? '',
       lastError: item.lastError ?? '',
+      blocked: item.blocked ?? false,
     } satisfies OfflineQueueItem)
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)

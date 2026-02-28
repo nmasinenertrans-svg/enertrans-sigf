@@ -23,15 +23,6 @@ export const ExternalRequestsPage = () => {
     actions: { setExternalRequests, setAppError },
   } = useAppContext()
 
-  if (!featureFlags.showExternalRequestsModule) {
-    return (
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900">Notas de pedido externo</h2>
-        <p className="mt-2 text-sm text-slate-600">Este módulo está deshabilitado por configuración.</p>
-      </section>
-    )
-  }
-
   const canCreate = can('WORK_ORDERS', 'create')
   const canDelete = can('WORK_ORDERS', 'delete')
 
@@ -61,6 +52,15 @@ export const ExternalRequestsPage = () => {
       return haystack.includes(normalized)
     })
   }, [requestsView, unitFilter, searchTerm])
+
+  if (!featureFlags.showExternalRequestsModule) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900">Notas de pedido externo</h2>
+        <p className="mt-2 text-sm text-slate-600">Este modulo esta deshabilitado por configuracion.</p>
+      </section>
+    )
+  }
 
   const handleFieldChange = <TField extends keyof ExternalRequestFormData>(
     field: TField,
@@ -392,3 +392,5 @@ export const ExternalRequestsPage = () => {
     </section>
   )
 }
+
+

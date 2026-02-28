@@ -5,6 +5,7 @@ import { syncQueue } from '../../services/offline/sync'
 export const useOfflineSync = () => {
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [pendingCount, setPendingCount] = useState(0)
+  const [blockedCount, setBlockedCount] = useState(0)
   const [isSyncing, setIsSyncing] = useState(false)
   const syncingRef = useRef(false)
 
@@ -12,15 +13,27 @@ export const useOfflineSync = () => {
     let mounted = true
 
     const refreshCount = async () => {
-      const items = await getQueueItems()
-      if (mounted) {
-        setPendingCount(items.length)
+      try {
+        const items = await getQueueItems()
+        if (mounted) {
+          setPendingCount(items.length)
+          setBlockedCount(items.filter((item) => Boolean(item.blocked)).length)
+        }
+      } catch {
+        if (mounted) {
+          setPendingCount(0)
+          setBlockedCount(0)
+        }
       }
     }
 
     const handleOnline = async () => {
       setIsOnline(true)
-      await triggerSync()
+      try {
+        await triggerSync()
+      } catch {
+        // keep hook stable on transient sync failures
+      }
     }
 
     const handleOffline = () => {
@@ -39,17 +52,22 @@ export const useOfflineSync = () => {
         await refreshCount()
         return
       }
-      setIsSyncing(true)
-      syncingRef.current = true
-      await syncQueue()
-      await refreshCount()
-      setIsSyncing(false)
-      syncingRef.current = false
+      try {
+        setIsSyncing(true)
+        syncingRef.current = true
+        await syncQueue()
+      } finally {
+        await refreshCount()
+        setIsSyncing(false)
+        syncingRef.current = false
+      }
     }
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        void triggerSync()
+        void triggerSync().catch(() => {
+          // keep hook stable on transient sync failures
+        })
       }
     }
 
@@ -60,7 +78,11 @@ export const useOfflineSync = () => {
     document.addEventListener('visibilitychange', handleVisibility)
 
     const interval = setInterval(async () => {
-      await triggerSync()
+      try {
+        await triggerSync()
+      } catch {
+        // keep hook stable on transient sync failures
+      }
     }, 15000)
 
     return () => {
@@ -72,5 +94,5 @@ export const useOfflineSync = () => {
     }
   }, [])
 
-  return { isOnline, pendingCount, isSyncing }
+  return { isOnline, pendingCount, blockedCount, isSyncing }
 }

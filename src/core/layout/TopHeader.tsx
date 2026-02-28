@@ -4,6 +4,7 @@ import enertransLogoUrl from '../../assets/enertrans-logo.png'
 import { setAuthToken } from '../../services/api/apiClient'
 import { getQueueItems, type OfflineQueueItem } from '../../services/offline/queue'
 import { syncQueue, syncQueueItem } from '../../services/offline/sync'
+import { readSyncTelemetry, resetSyncTelemetry, type SyncTelemetrySnapshot } from '../../services/offline/telemetry'
 import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
 import {
@@ -19,6 +20,7 @@ interface TopHeaderProps {
   syncStatus: {
     isOnline: boolean
     pendingCount: number
+    blockedCount: number
     isSyncing: boolean
   }
   notifications: AppNotification[]
@@ -35,6 +37,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [isQueueOpen, setIsQueueOpen] = useState(false)
   const [queueItems, setQueueItems] = useState<OfflineQueueItem[]>([])
+  const [syncTelemetry, setSyncTelemetry] = useState<SyncTelemetrySnapshot | null>(null)
   const [isQueueLoading, setIsQueueLoading] = useState(false)
   const [showOnlyQueueErrors, setShowOnlyQueueErrors] = useState(false)
 
@@ -59,9 +62,11 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   // during reload/sync the list can be transiently empty and that resets all "read" state.
 
   const statusLabel = syncStatus.isOnline ? 'Online' : 'Offline'
-  const statusClass = syncStatus.isOnline
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-rose-200 bg-rose-50 text-rose-700'
+  const statusClass = syncStatus.blockedCount > 0
+    ? 'border-rose-200 bg-rose-50 text-rose-700'
+    : syncStatus.isOnline
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : 'border-rose-200 bg-rose-50 text-rose-700'
 
   const unreadNotifications = useMemo(
     () => notifications.filter((item) => !readNotificationIds.includes(item.id)),
@@ -99,6 +104,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     try {
       const items = await getQueueItems()
       setQueueItems(items)
+      setSyncTelemetry(readSyncTelemetry())
     } catch {
       setAppError('No se pudo cargar la cola offline.')
     } finally {
@@ -113,6 +119,17 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
     const anchor = document.createElement('a')
     anchor.href = url
     anchor.download = `enertrans-offline-queue-${new Date().toISOString()}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportSyncTelemetry = () => {
+    const payload = JSON.stringify(readSyncTelemetry(), null, 2)
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `enertrans-sync-telemetry-${new Date().toISOString()}.json`
     anchor.click()
     URL.revokeObjectURL(url)
   }
@@ -154,6 +171,9 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
           {syncStatus.isSyncing ? <span className="hidden sm:inline"> • Sincronizando</span> : null}
           {syncStatus.pendingCount > 0 ? (
             <span className="hidden sm:inline">{` • Pendientes: ${syncStatus.pendingCount}`}</span>
+          ) : null}
+          {syncStatus.blockedCount > 0 ? (
+            <span className="hidden sm:inline">{` • Bloqueados: ${syncStatus.blockedCount}`}</span>
           ) : null}
         </div>
 
@@ -408,6 +428,43 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
             </div>
 
             <div className="mt-4 space-y-2">
+              {syncTelemetry ? (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] text-slate-700">
+                  <p className="font-semibold text-sky-800">Telemetria sync (local)</p>
+                  <p className="mt-1">
+                    Encolados: {syncTelemetry.totals.enqueued} | Exito: {syncTelemetry.totals.success} | Fallos:{' '}
+                    {syncTelemetry.totals.failure} | Descartados: {syncTelemetry.totals.dropped}
+                  </p>
+                  <p>
+                    Bloqueados: {syncTelemetry.totals.blocked} | Omitidos por bloqueo:{' '}
+                    {syncTelemetry.totals.skippedBlocked} | Desbloqueo manual: {syncTelemetry.totals.manualUnblocked}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Ultima actualizacion: {new Date(syncTelemetry.updatedAt).toLocaleString()}
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportSyncTelemetry}
+                  className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                >
+                  Exportar telemetria
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetSyncTelemetry()
+                    setSyncTelemetry(readSyncTelemetry())
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Reset telemetria
+                </button>
+              </div>
+
               {visibleQueueItems.length === 0 ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                   {showOnlyQueueErrors ? 'No hay elementos con error.' : 'No hay elementos pendientes.'}
@@ -422,6 +479,11 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                         <p className="text-[11px] text-slate-500">
                           Intentos: <span className="font-semibold text-slate-700">{item.attemptCount ?? 0}</span>
                         </p>
+                        {item.blocked ? (
+                          <p className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                            Estado: bloqueado por reintentos
+                          </p>
+                        ) : null}
                         {item.lastAttemptAt ? (
                           <p className="text-[11px] text-slate-500">
                             Ultimo intento: {new Date(item.lastAttemptAt).toLocaleString()}

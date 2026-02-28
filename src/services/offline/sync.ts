@@ -1,7 +1,43 @@
-import { apiRequest } from '../api/apiClient'
+import { ApiRequestError, apiRequest } from '../api/apiClient'
 import { enqueueItem, getQueueItems, removeQueueItem, updateQueueItem, type OfflineQueueItem } from './queue'
+import { recordSyncTelemetry } from './telemetry'
 
 let syncing = false
+
+const MAX_RETRY_ATTEMPTS = 5
+const NON_RETRYABLE_STATUS_CODES = new Set([400, 404, 409, 422])
+
+type RepairPayload = {
+  id: string
+  invoiceFileUrl?: string
+  invoiceFileBase64?: string
+  invoiceFileName?: string
+} & Record<string, unknown>
+
+type ExternalRequestPayload = {
+  id: string
+  providerFileUrl?: string
+  providerFileBase64?: string
+  providerFileName?: string
+} & Record<string, unknown>
+
+type AuditPayload = {
+  id: string
+  auditKind: string
+  workOrderId?: string
+  workOrderCode?: string
+  unitId: string
+  auditorUserId: string
+  auditorName: string
+  performedAt: string
+  result: string
+  observations?: string
+  photoBase64List?: string[]
+  checklistSections: unknown[]
+  unitKilometers?: number
+  engineHours?: number
+  hydroHours?: number
+}
 
 const parseDataUrl = (dataUrl: string) => {
   const [meta, base64] = dataUrl.split(',')
@@ -23,7 +59,20 @@ const uploadDataUrl = async (dataUrl: string, fileName: string, folder: string) 
   return response.url
 }
 
-const syncAudit = async (payload: any) => {
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message) {
+      return message
+    }
+  }
+  return fallback
+}
+
+const syncAudit = async (payload: AuditPayload) => {
   const photoUrls: string[] = []
   const photoList: string[] = payload.photoBase64List || []
 
@@ -32,9 +81,9 @@ const syncAudit = async (payload: any) => {
     try {
       const url = await uploadDataUrl(dataUrl, `audit-${payload.id}-${index}.jpg`, 'audits')
       photoUrls.push(url)
-    } catch {
-      // Keep syncing the audit even if one photo upload fails.
-      // This prevents losing the operational record due to an attachment issue.
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Error de carga de adjunto')
+      throw new Error(`AUDIT_PHOTO_UPLOAD_FAILED [${index + 1}/${photoList.length}] ${message}`)
     }
   }
 
@@ -70,130 +119,179 @@ const syncItem = async (item: OfflineQueueItem) => {
     case 'workOrder.create':
       await apiRequest('/work-orders', { method: 'POST', body: item.payload })
       return
-    case 'repair.create':
-      {
-        const payload = item.payload as any
-        let invoiceFileUrl = payload.invoiceFileUrl || ''
-        let invoiceFileBase64 = payload.invoiceFileBase64 || ''
+    case 'repair.create': {
+      const payload = item.payload as RepairPayload
+      let invoiceFileUrl = payload.invoiceFileUrl || ''
+      let invoiceFileBase64 = payload.invoiceFileBase64 || ''
 
-        if (invoiceFileBase64 && !invoiceFileUrl) {
-          try {
-            invoiceFileUrl = await uploadDataUrl(
-              invoiceFileBase64,
-              payload.invoiceFileName || `repair-${payload.id}.pdf`,
-              'repairs',
-            )
-            invoiceFileBase64 = ''
-          } catch {
-            invoiceFileUrl = ''
-          }
-        }
-
-        await apiRequest('/repairs', {
-          method: 'POST',
-          body: {
-            ...payload,
-            invoiceFileUrl,
-            invoiceFileBase64,
-          },
-        })
+      if (invoiceFileBase64 && !invoiceFileUrl) {
+        invoiceFileUrl = await uploadDataUrl(
+          invoiceFileBase64,
+          payload.invoiceFileName || `repair-${payload.id}.pdf`,
+          'repairs',
+        )
+        invoiceFileBase64 = ''
       }
+
+      await apiRequest('/repairs', {
+        method: 'POST',
+        body: {
+          ...payload,
+          invoiceFileUrl,
+          invoiceFileBase64,
+        },
+      })
       return
+    }
     case 'inventory.create':
       await apiRequest('/inventory', { method: 'POST', body: item.payload })
       return
     case 'audit.create':
-      await syncAudit(item.payload)
+      await syncAudit(item.payload as AuditPayload)
       return
-    case 'externalRequest.create':
-      {
-        const payload = item.payload as any
-        let providerFileUrl = payload.providerFileUrl || ''
-        let providerFileBase64 = payload.providerFileBase64 || ''
+    case 'externalRequest.create': {
+      const payload = item.payload as ExternalRequestPayload
+      let providerFileUrl = payload.providerFileUrl || ''
+      let providerFileBase64 = payload.providerFileBase64 || ''
 
-        if (providerFileBase64 && !providerFileUrl) {
-          try {
-            providerFileUrl = await uploadDataUrl(
-              providerFileBase64,
-              payload.providerFileName || `external-${payload.id}.pdf`,
-              'external-requests',
-            )
-            providerFileBase64 = ''
-          } catch {
-            providerFileUrl = ''
-          }
-        }
-
-        await apiRequest('/external-requests', {
-          method: 'POST',
-          body: {
-            ...payload,
-            providerFileUrl,
-            providerFileBase64,
-          },
-        })
+      if (providerFileBase64 && !providerFileUrl) {
+        providerFileUrl = await uploadDataUrl(
+          providerFileBase64,
+          payload.providerFileName || `external-${payload.id}.pdf`,
+          'external-requests',
+        )
+        providerFileBase64 = ''
       }
+
+      await apiRequest('/external-requests', {
+        method: 'POST',
+        body: {
+          ...payload,
+          providerFileUrl,
+          providerFileBase64,
+        },
+      })
       return
+    }
     default:
       return
   }
 }
 
-const shouldDropByStatus = async (item: OfflineQueueItem, message: string): Promise<boolean> => {
+const extractStatusCode = (error: unknown): number | null => {
+  if (error instanceof ApiRequestError) {
+    return error.status
+  }
+  const message = getErrorMessage(error, '')
   const statusMatch = message.match(/^(\d{3})\b/)
-  const statusCode = statusMatch ? Number(statusMatch[1]) : null
+  return statusMatch ? Number(statusMatch[1]) : null
+}
+
+const classifySyncError = (item: OfflineQueueItem, error: unknown) => {
+  const statusCode = extractStatusCode(error)
+  const message = getErrorMessage(error, '')
+
   if (!statusCode) {
-    return false
+    return { shouldDrop: false, message: message || 'Error desconocido al sincronizar.' }
   }
 
-  if (item.type === 'audit.create') {
-    if (statusCode === 409) {
-      await removeQueueItem(item.id)
-      return true
-    }
-    return false
+  if (item.type === 'audit.create' && statusCode === 409) {
+    return { shouldDrop: true, message: `409 conflicto: auditoria ya existente en servidor.` }
   }
 
-  if ([400, 404, 409, 422].includes(statusCode)) {
-    await removeQueueItem(item.id)
-    return true
+  if (NON_RETRYABLE_STATUS_CODES.has(statusCode)) {
+    return { shouldDrop: true, message: `${statusCode} error no recuperable para ${item.type}.` }
   }
 
-  return false
+  return { shouldDrop: false, message: message || `${statusCode} error recuperable al sincronizar.` }
 }
 
 const markSyncFailure = async (item: OfflineQueueItem, message: string) => {
+  const nextAttemptCount = (item.attemptCount ?? 0) + 1
+  const isBlocked = nextAttemptCount >= MAX_RETRY_ATTEMPTS
+  const normalizedMessage = message || 'Error desconocido al sincronizar.'
+
   await updateQueueItem(item.id, {
-    attemptCount: (item.attemptCount ?? 0) + 1,
+    attemptCount: nextAttemptCount,
     lastAttemptAt: new Date().toISOString(),
-    lastError: message || 'Error desconocido al sincronizar.',
+    lastError: isBlocked
+      ? `PAUSADO_AUTOMATICO: supero ${MAX_RETRY_ATTEMPTS} intentos. ${normalizedMessage}`
+      : normalizedMessage,
+    blocked: isBlocked,
   })
+}
+
+const getQueueItemById = async (id: string) => {
+  const items = await getQueueItems()
+  return items.find((entry) => entry.id === id)
 }
 
 export const enqueueAndSync = async (item: OfflineQueueItem) => {
   await enqueueItem(item)
+  recordSyncTelemetry({
+    name: 'queue.enqueued',
+    itemType: item.type,
+    itemId: item.id,
+  })
   if (typeof navigator !== 'undefined' && navigator.onLine) {
     await syncQueue()
   }
 }
 
 export const syncQueueItem = async (id: string) => {
-  const items = await getQueueItems()
-  const item = items.find((entry) => entry.id === id)
-  if (!item) {
+  const currentItem = await getQueueItemById(id)
+  if (!currentItem) {
     return
   }
+
+  if (currentItem.blocked) {
+    await updateQueueItem(currentItem.id, {
+      blocked: false,
+      lastError: '',
+    })
+    recordSyncTelemetry({
+      name: 'sync.unblocked.manual',
+      itemType: currentItem.type,
+      itemId: currentItem.id,
+    })
+  }
+
+  const item = (await getQueueItemById(id)) ?? currentItem
 
   try {
     await syncItem(item)
     await removeQueueItem(item.id)
-  } catch (error: any) {
-    const message = String(error?.message ?? '')
-    const dropped = await shouldDropByStatus(item, message)
-    if (dropped) {
+    recordSyncTelemetry({
+      name: 'sync.success',
+      itemType: item.type,
+      itemId: item.id,
+    })
+  } catch (error: unknown) {
+    const { shouldDrop, message } = classifySyncError(item, error)
+    const statusCode = extractStatusCode(error)
+    if (shouldDrop) {
+      await removeQueueItem(item.id)
+      recordSyncTelemetry({
+        name: 'sync.dropped',
+        itemType: item.type,
+        itemId: item.id,
+        statusCode,
+        retryable: false,
+        reason: message,
+      })
       return
     }
     await markSyncFailure(item, message)
+    const refreshedItem = await getQueueItemById(item.id)
+    const blocked = Boolean(refreshedItem?.blocked)
+    recordSyncTelemetry({
+      name: blocked ? 'sync.blocked' : 'sync.failure',
+      itemType: item.type,
+      itemId: item.id,
+      statusCode,
+      retryable: true,
+      reason: message,
+    })
     throw error
   }
 }
@@ -207,16 +305,51 @@ export const syncQueue = async () => {
   try {
     const items = await getQueueItems()
     for (const item of items) {
+      if (item.blocked) {
+        recordSyncTelemetry({
+          name: 'sync.skipped.blocked',
+          itemType: item.type,
+          itemId: item.id,
+          retryable: false,
+          reason: 'Item bloqueado por reintentos previos.',
+        })
+        continue
+      }
+
       try {
         await syncItem(item)
         await removeQueueItem(item.id)
-      } catch (error: any) {
-        const message = String(error?.message ?? '')
-        const dropped = await shouldDropByStatus(item, message)
-        if (dropped) {
+        recordSyncTelemetry({
+          name: 'sync.success',
+          itemType: item.type,
+          itemId: item.id,
+        })
+      } catch (error: unknown) {
+        const { shouldDrop, message } = classifySyncError(item, error)
+        const statusCode = extractStatusCode(error)
+        if (shouldDrop) {
+          await removeQueueItem(item.id)
+          recordSyncTelemetry({
+            name: 'sync.dropped',
+            itemType: item.type,
+            itemId: item.id,
+            statusCode,
+            retryable: false,
+            reason: message,
+          })
           continue
         }
         await markSyncFailure(item, message)
+        const refreshedItem = await getQueueItemById(item.id)
+        const blocked = Boolean(refreshedItem?.blocked)
+        recordSyncTelemetry({
+          name: blocked ? 'sync.blocked' : 'sync.failure',
+          itemType: item.type,
+          itemId: item.id,
+          statusCode,
+          retryable: true,
+          reason: message,
+        })
         continue
       }
     }

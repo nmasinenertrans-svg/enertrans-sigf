@@ -85,6 +85,148 @@ export const WorkOrdersPage = () => {
     })
   }, [statusFilter, includeInProgress, pendingReauditOnly, unitFilter, searchTerm, workOrderViewList])
 
+  const boardSummary = useMemo(
+    () => ({
+      total: workOrderViewList.length,
+      open: workOrderViewList.filter((item) => item.status === 'OPEN').length,
+      inProgress: workOrderViewList.filter((item) => item.status === 'IN_PROGRESS').length,
+      closed: workOrderViewList.filter((item) => item.status === 'CLOSED').length,
+    }),
+    [workOrderViewList],
+  )
+
+  const resetForm = () => {
+    setEditingWorkOrderId(null)
+    setErrors({})
+    setFormData(createEmptyWorkOrderFormData(fleetUnits[0]?.id ?? ''))
+    clearDraft()
+  }
+
+  function saveResolutionDraft(workOrderId: string, deviationId: string, note: string, photoBase64: string) {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        WORK_ORDER_RESOLUTION_DRAFT_KEY,
+        JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          workOrderId,
+          deviationId,
+          note,
+          photoBase64,
+        }),
+      )
+    } catch {
+      // ignore
+    }
+  }
+
+  function loadResolutionDraft(): {
+    updatedAt: string
+    workOrderId: string
+    deviationId: string
+    note: string
+    photoBase64: string
+  } | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem(WORK_ORDER_RESOLUTION_DRAFT_KEY)
+      if (!raw) {
+        return null
+      }
+      const parsed = JSON.parse(raw) as {
+        updatedAt?: string
+        workOrderId?: string
+        deviationId?: string
+        note?: string
+        photoBase64?: string
+      }
+      if (!parsed?.updatedAt || !parsed?.workOrderId || !parsed?.deviationId) {
+        return null
+      }
+      return {
+        updatedAt: parsed.updatedAt,
+        workOrderId: parsed.workOrderId,
+        deviationId: parsed.deviationId,
+        note: parsed.note ?? '',
+        photoBase64: parsed.photoBase64 ?? '',
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function clearResolutionDraft() {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.removeItem(WORK_ORDER_RESOLUTION_DRAFT_KEY)
+    } catch {
+      // ignore
+    }
+  }
+
+  function saveDraft(data: WorkOrderFormData, editingId: string | null) {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.setItem(
+        WORK_ORDER_DRAFT_KEY,
+        JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          editingWorkOrderId: editingId,
+          formData: data,
+        }),
+      )
+    } catch {
+      // ignore
+    }
+  }
+
+  function loadDraft(): { updatedAt: string; editingWorkOrderId: string | null; formData: WorkOrderFormData } | null {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    try {
+      const raw = window.localStorage.getItem(WORK_ORDER_DRAFT_KEY)
+      if (!raw) {
+        return null
+      }
+      const parsed = JSON.parse(raw) as {
+        updatedAt?: string
+        editingWorkOrderId?: string | null
+        formData?: WorkOrderFormData
+      }
+      if (!parsed?.updatedAt || !parsed?.formData) {
+        return null
+      }
+      return {
+        updatedAt: parsed.updatedAt,
+        editingWorkOrderId: parsed.editingWorkOrderId ?? null,
+        formData: parsed.formData,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function clearDraft() {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      window.localStorage.removeItem(WORK_ORDER_DRAFT_KEY)
+    } catch {
+      // ignore
+    }
+  }
+
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const statusParam = searchParams.get('status')
     const pendingParam = searchParams.get('pendingReaudit')
@@ -155,6 +297,7 @@ export const WorkOrdersPage = () => {
     setFormData(draft.formData)
     setDraftChecked(true)
   }, [draftChecked])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const handler = window.setTimeout(() => {
@@ -163,147 +306,6 @@ export const WorkOrdersPage = () => {
 
     return () => window.clearTimeout(handler)
   }, [formData, editingWorkOrderId])
-
-  const boardSummary = useMemo(
-    () => ({
-      total: workOrderViewList.length,
-      open: workOrderViewList.filter((item) => item.status === 'OPEN').length,
-      inProgress: workOrderViewList.filter((item) => item.status === 'IN_PROGRESS').length,
-      closed: workOrderViewList.filter((item) => item.status === 'CLOSED').length,
-    }),
-    [workOrderViewList],
-  )
-
-  const resetForm = () => {
-    setEditingWorkOrderId(null)
-    setErrors({})
-    setFormData(createEmptyWorkOrderFormData(fleetUnits[0]?.id ?? ''))
-    clearDraft()
-  }
-
-  const saveResolutionDraft = (workOrderId: string, deviationId: string, note: string, photoBase64: string) => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    try {
-      window.localStorage.setItem(
-        WORK_ORDER_RESOLUTION_DRAFT_KEY,
-        JSON.stringify({
-          updatedAt: new Date().toISOString(),
-          workOrderId,
-          deviationId,
-          note,
-          photoBase64,
-        }),
-      )
-    } catch {
-      // ignore
-    }
-  }
-
-  const loadResolutionDraft = (): {
-    updatedAt: string
-    workOrderId: string
-    deviationId: string
-    note: string
-    photoBase64: string
-  } | null => {
-    if (typeof window === 'undefined') {
-      return null
-    }
-    try {
-      const raw = window.localStorage.getItem(WORK_ORDER_RESOLUTION_DRAFT_KEY)
-      if (!raw) {
-        return null
-      }
-      const parsed = JSON.parse(raw) as {
-        updatedAt?: string
-        workOrderId?: string
-        deviationId?: string
-        note?: string
-        photoBase64?: string
-      }
-      if (!parsed?.updatedAt || !parsed?.workOrderId || !parsed?.deviationId) {
-        return null
-      }
-      return {
-        updatedAt: parsed.updatedAt,
-        workOrderId: parsed.workOrderId,
-        deviationId: parsed.deviationId,
-        note: parsed.note ?? '',
-        photoBase64: parsed.photoBase64 ?? '',
-      }
-    } catch {
-      return null
-    }
-  }
-
-  const clearResolutionDraft = () => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    try {
-      window.localStorage.removeItem(WORK_ORDER_RESOLUTION_DRAFT_KEY)
-    } catch {
-      // ignore
-    }
-  }
-
-  const saveDraft = (data: WorkOrderFormData, editingId: string | null) => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    try {
-      window.localStorage.setItem(
-        WORK_ORDER_DRAFT_KEY,
-        JSON.stringify({
-          updatedAt: new Date().toISOString(),
-          editingWorkOrderId: editingId,
-          formData: data,
-        }),
-      )
-    } catch {
-      // ignore
-    }
-  }
-
-  const loadDraft = (): { updatedAt: string; editingWorkOrderId: string | null; formData: WorkOrderFormData } | null => {
-    if (typeof window === 'undefined') {
-      return null
-    }
-    try {
-      const raw = window.localStorage.getItem(WORK_ORDER_DRAFT_KEY)
-      if (!raw) {
-        return null
-      }
-      const parsed = JSON.parse(raw) as {
-        updatedAt?: string
-        editingWorkOrderId?: string | null
-        formData?: WorkOrderFormData
-      }
-      if (!parsed?.updatedAt || !parsed?.formData) {
-        return null
-      }
-      return {
-        updatedAt: parsed.updatedAt,
-        editingWorkOrderId: parsed.editingWorkOrderId ?? null,
-        formData: parsed.formData,
-      }
-    } catch {
-      return null
-    }
-  }
-
-  const clearDraft = () => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    try {
-      window.localStorage.removeItem(WORK_ORDER_DRAFT_KEY)
-    } catch {
-      // ignore
-    }
-  }
 
   const handleFieldChange = <TField extends WorkOrderFormField>(field: TField, value: WorkOrderFormData[TField]) => {
     setFormData((previousFormData) => ({

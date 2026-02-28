@@ -1,5 +1,12 @@
 # React + TypeScript + Vite
 
+## Proyecto ENERTRANS SIGF
+
+Contexto tecnico completo y actualizado del proyecto:
+- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md)
+
+Este archivo (`PROJECT_CONTEXT.md`) es el documento vivo para arquitectura, modulos, offline sync y timeline de cambios.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

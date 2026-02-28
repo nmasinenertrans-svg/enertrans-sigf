@@ -114,7 +114,7 @@ router.get('/', async (_req, res) => {
       unitIds: item.units.map((unit) => unit.unitId),
     }))
     return res.json(mapped)
-  } catch (error) {
+  } catch {
     return res.status(500).json({ message: 'No se pudieron cargar los movimientos.' })
   }
 })
@@ -180,7 +180,7 @@ router.post('/parse', async (req, res) => {
     const result = await pdfParse(buffer)
     const parsedData = parseRemitoText(result.text ?? '')
     return res.json({ ...parsedData, pages: result.numpages ?? 0 })
-  } catch (error) {
+  } catch {
     return res.json({
       remitoNumber: '',
       remitoDate: '',

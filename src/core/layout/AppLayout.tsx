@@ -3,7 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { ErrorBanner } from '../../components/shared/ErrorBanner'
 import { GlobalLoader } from '../../components/shared/GlobalLoader'
 import { RouteTransitionLoader } from '../../components/shared/RouteTransitionLoader'
-import { apiRequest, getAuthToken, setAuthToken } from '../../services/api/apiClient'
+import { ApiRequestError, apiRequest, getAuthToken, setAuthToken } from '../../services/api/apiClient'
 import { getQueueItems } from '../../services/offline/queue'
 import type {
   AppUser,
@@ -204,11 +204,10 @@ export const AppLayout = () => {
         try {
           return await apiRequest<T>(path)
         } catch (error) {
-          const message = String((error as Error)?.message ?? '')
-          if (message.includes('403')) {
+          if (error instanceof ApiRequestError && error.status === 403) {
             return null
           }
-          if (message.includes('permisos') || message.includes('Token') || message.includes('Unauthorized') || message.includes('401')) {
+          if (error instanceof ApiRequestError && error.status === 401) {
             if (!didInvalidateSession) {
               didInvalidateSession = true
               setAuthToken(null)
@@ -348,6 +347,7 @@ export const AppLayout = () => {
 
     loadRemoteData()
   }, [
+    currentUser,
     currentUser?.id,
     syncStatus.isOnline,
     setFleetUnits,
@@ -404,7 +404,7 @@ export const AppLayout = () => {
     }
 
     loadMaintenance()
-  }, [currentUser?.id, syncStatus.isOnline, setMaintenanceStatus])
+  }, [currentUser, currentUser?.id, syncStatus.isOnline, setMaintenanceStatus])
 
   useEffect(() => {
     if (typeof window === 'undefined') {

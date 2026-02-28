@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -81,7 +81,7 @@ export const TasksPage = () => {
     [users],
   )
 
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     if (!canViewTasks) {
       return
     }
@@ -94,11 +94,11 @@ export const TasksPage = () => {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [canViewTasks, setAppError])
 
   useEffect(() => {
     loadTasks()
-  }, [canViewTasks])
+  }, [loadTasks])
 
   const resetForm = () => {
     setEditingTaskId(null)

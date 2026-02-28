@@ -1,0 +1,214 @@
+# ENERTRANS SIGF - Contexto Vivo del Proyecto
+
+Ultima actualizacion: 2026-02-28
+Responsable de actualizacion: Codex (este chat)
+Objetivo: que cualquier dev (o nuevo chat) tenga contexto operativo completo sin depender del historial conversacional.
+
+## 1) Que es esta app
+
+ENERTRANS SIGF es una SPA React + TypeScript para gestion integral de flota.
+Incluye:
+- Flota (alta/edicion/detalle de unidades)
+- Mantenimiento
+- Auditorias operativas
+- Ordenes de trabajo
+- Reparaciones
+- Pedidos externos
+- Inventario
+- Movimientos
+- Reportes
+- Tareas
+- Usuarios/perfil
+- Notificaciones
+- Modo mantenimiento del sistema
+
+## 2) Stack y runtime
+
+- Frontend: React 19 + TypeScript + Vite
+- Routing: react-router-dom
+- Estilos: Tailwind
+- Persistencia local: localStorage + IndexedDB (cola offline)
+- API: `src/services/api/apiClient.ts` (Bearer token)
+- Build: `npm run build` (`tsc -b && vite build`)
+
+## 3) Estructura principal
+
+Rutas:
+- Definicion de paths: `src/core/routing/routePaths.ts`
+- Router principal: `src/core/routing/AppRouter.tsx`
+
+Layout/base:
+- `src/core/layout/AppLayout.tsx`
+- `src/core/layout/TopHeader.tsx`
+- `src/core/layout/Sidebar.tsx`
+
+Modulos funcionales (`src/modules/*`):
+- `auth`, `dashboard`, `fleet`, `maintenance`, `audits`, `tasks`, `movements`,
+  `workOrders`, `externalRequests`, `repairs`, `inventory`, `reports`,
+  `users`, `system`
+
+Servicios clave:
+- API: `src/services/api/apiClient.ts`
+- Cola offline (IndexedDB): `src/services/offline/queue.ts`
+- Motor de sincronizacion offline: `src/services/offline/sync.ts`
+- Telemetria local de sync: `src/services/offline/telemetry.ts`
+
+## 4) Modelo de seguridad y acceso
+
+- Login por token (guardado en localStorage)
+- Rutas protegidas por:
+  - `RequireAuth`
+  - `RequirePermission`
+  - feature flags (`RequireFeatureFlag`)
+- Las flags se cargan desde `/settings/features` en `AppLayout`.
+
+## 5) Flujo de datos de alto nivel
+
+1. `AppLayout` carga datos remotos cuando hay usuario + online.
+2. Se mergea remoto con local y con payloads en cola offline (segun modulo).
+3. `useOfflineSync` dispara sync periodico y por eventos (`online`, `visibilitychange`).
+4. `TopHeader` muestra estado online/offline, pendientes y (ahora) bloqueados.
+
+## 6) Offline-first (estado actual)
+
+### Cola
+- Store IndexedDB `enertrans-offline`, object store `queue`.
+- Item base:
+  - `id`, `type`, `payload`, `createdAt`
+  - `attemptCount`, `lastAttemptAt`, `lastError`
+  - `blocked` (nuevo, para pausa automatica por demasiados intentos)
+
+### Politica de sync
+- Reintento normal en errores recuperables.
+- Errores no recuperables (400/404/409/422): descarte del item.
+- `audit.create` con 409: descarte (ya existe en servidor).
+- Si un item llega a 5 intentos fallidos: `blocked=true` (no reintenta automatico).
+- Reintento manual individual desbloquea el item y lo intenta nuevamente.
+
+### Integridad de adjuntos
+- Antes: algunas cargas de adjuntos podian fallar en silencio y aun asi crear registro remoto incompleto.
+- Ahora: si falla carga de foto/adjunto en sync, se corta ese item y queda como fallo (no se crea registro incompleto).
+
+## 7) Telemetria local de sync (nuevo)
+
+Persistencia local en `localStorage`:
+- key: `enertrans.offline.syncTelemetry.v1`
+
+Eventos registrados:
+- `queue.enqueued`
+- `sync.success`
+- `sync.failure`
+- `sync.dropped`
+- `sync.blocked`
+- `sync.skipped.blocked`
+- `sync.unblocked.manual`
+
+Resumen visible en modal DEV de cola:
+- totales de encolados, exitos, fallos, descartes, bloqueos, etc.
+- export JSON de telemetria
+- reset de telemetria
+
+## 8) Timeline de cambios (base historica)
+
+Fuente: historial git (ultimos commits visibles en este entorno).
+
+### Cambios previos recientes (ya en `main`)
+- `ca25787` cola offline: filtro "solo con error" + contadores.
+- `4562e65` auditorias: conservar locales `PENDING/ERROR` al refrescar desde servidor.
+- `f8dcb11` auditorias: permitia sync aun si fallaba foto (esto se endurecio despues en cambios locales actuales).
+- `2870f7d` cola/notificaciones: evitar bloqueo global por error individual y sincronizar estado leido.
+- `be5dd06` metadata de reintentos + accion de reintento por item.
+- `978591a` refresh de auditorias post-sync + errores visibles.
+- `4c58ba9` fix reset estado leido de notificaciones.
+- `ae4cc17` evitar auditorias "fantasma" locales.
+- `1c44d03` pagina de notificaciones con persistencia de leido.
+
+### Cambios criticos actuales (working tree de este chat, aun no committeados)
+- 2026-02-28 - saneamiento de calidad/lint:
+  - se corrigieron errores reales `no-unused-vars` en backend y frontend sin alterar comportamiento funcional
+    (`backend/src/middleware/maintenance.ts`, `backend/src/routes/movements.ts`,
+    `backend/src/routes/settings.ts`, `src/modules/movements/pages/MovementsPage.tsx`).
+  - se ajustaron dependencias de hooks para eliminar warnings de `react-hooks/exhaustive-deps`
+    (`src/core/layout/AppLayout.tsx`, `src/modules/fleet/pages/FleetDetailPage.tsx`,
+    `src/modules/system/pages/MaintenanceModePage.tsx`, `src/modules/tasks/pages/TasksPage.tsx`).
+  - estado actual: `npm run lint` en raiz queda limpio (`0 errors`, `0 warnings`).
+- 2026-02-28 - optimizacion critica de bundle frontend:
+  - `AppRouter` migrado a carga lazy por ruta con `React.lazy` + `Suspense` para evitar importar todos los modulos al arranque.
+  - impacto: se fragmento el JS por paginas (chunks dedicados por modulo) y desaparecio el warning de Vite por chunk >500KB.
+  - validacion: `npm run lint` y `npm run build` OK.
+- Correccion de runtime en paginas con hooks condicionales:
+  - `ExternalRequestsPage`,
+  - `InventoryPage`,
+  - `ReportsPage`.
+  Se movieron early returns por feature flag para preservar el orden estable de hooks.
+- Correccion en `WorkOrdersPage`:
+  - se elimino uso de helpers antes de declaracion (reorden de efectos),
+  - se estabilizo lint de efectos de sincronizacion con URL/localStorage.
+- Correccion de tipado y robustez:
+  - `LoginPage`: eliminacion de `any`, parseo seguro de usuario persistido y validacion de `role`.
+  - `offline/sync`: eliminacion de `any` en errores y payloads offline; helpers de tipado seguro.
+- `FleetListPage`: eliminacion de setState en `useEffect` para filtro inicial (inicializacion directa desde query param).
+- Observabilidad backend: integracion Sentry en Express (`@sentry/node`):
+  - `Sentry.init` temprano en bootstrap,
+  - integraciones `express` + `prisma`,
+  - `setupExpressErrorHandler(app)` en pipeline.
+- Observabilidad frontend: integracion Sentry React (`@sentry/react`):
+  - `Sentry.init` en `src/main.tsx`,
+  - `ErrorBoundary` global envolviendo `<App />`,
+  - activacion condicionada por `VITE_SENTRY_DSN`.
+- Sourcemaps frontend para Sentry:
+  - `@sentry/vite-plugin` integrado en `vite.config.ts`,
+  - upload condicional en build (solo si existen `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`),
+  - release unificado por `SENTRY_RELEASE`.
+- Configuracion via env:
+  - `SENTRY_DSN`,
+  - `SENTRY_ENVIRONMENT`,
+  - `SENTRY_TRACES_SAMPLE_RATE`,
+  - `VITE_SENTRY_DSN`,
+  - `VITE_SENTRY_ENVIRONMENT`,
+  - `VITE_SENTRY_TRACES_SAMPLE_RATE`.
+- Error API tipado (`ApiRequestError`) para decisiones robustas por status.
+- `AppLayout.safeRequest` migrado de `string includes` a manejo por `ApiRequestError.status` (401/403).
+- Motor sync endurecido:
+  - descarte por no recuperables,
+  - bloqueo automatico por 5 intentos,
+  - desbloqueo manual en reintento individual.
+- Integridad estricta de adjuntos (no mas perdida silenciosa).
+- Telemetria local completa de sync + UI DEV para resumen/export/reset.
+- Estado global sync:
+  - nuevo `blockedCount`,
+  - alerta visible en badge de header,
+  - fix para no dejar `isSyncing` atascado si hay excepcion,
+  - manejo defensivo para evitar promesas rechazadas no controladas en `online/visibility/interval`.
+- Correccion de texto corrupto en notificaciones (`•`/separador).
+- Suite de regresion con Vitest para sync:
+  - drop no recuperable (422),
+  - bloqueo por max intentos,
+  - desbloqueo manual + exito,
+  - fallo adjunto evita POST de auditoria.
+- Suite adicional para hook/UI:
+  - `useOfflineSync`: conteo `pending/blocked` y no quedarse en `isSyncing=true` tras fallo,
+  - `TopHeader`: visualizacion de `Bloqueados: N` en badge de estado.
+- Tooling de tests frontend agregado: `vitest`, `@testing-library/react`, `jsdom`.
+- Dependencia backend agregada: `@sentry/node`.
+- Dependencia frontend agregada: `@sentry/react`.
+- Dependencia build agregada: `@sentry/vite-plugin`.
+
+## 9) Riesgos abiertos (a seguir)
+
+- Falta pipeline CI formal de tests (el runner local ya existe).
+- Bundle principal supera warning de chunk size (>500KB).
+
+## 10) Regla de mantenimiento de este archivo
+
+Desde ahora, en cada cambio relevante se debe actualizar este archivo en el mismo PR/commit:
+- Seccion impactada (`arquitectura`, `offline`, `timeline`, `riesgos`).
+- Fecha de actualizacion.
+- Resumen de impacto funcional y operativo.
+
+Plantilla minima para cada update:
+- Fecha:
+- Cambio:
+- Archivos:
+- Riesgo mitigado:
+- Riesgo residual:

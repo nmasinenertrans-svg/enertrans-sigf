@@ -105,7 +105,7 @@ export const buildAppNotifications = (params: {
         items.push({
           id: `${unit.id}-${docKey}-overdue`,
           title: `${label} vencido`,
-          description: `${unit.internalCode} • ${formatDate(expiresAt)}`,
+          description: `${unit.internalCode} - ${formatDate(expiresAt)}`,
           severity: 'danger',
           createdAt: expiresAt ?? new Date().toISOString(),
           target: buildFleetDetailPath(unit.id),
@@ -116,7 +116,7 @@ export const buildAppNotifications = (params: {
         items.push({
           id: `${unit.id}-${docKey}-soon`,
           title: `${label} por vencer`,
-          description: `${unit.internalCode} • ${formatDate(expiresAt)}`,
+          description: `${unit.internalCode} - ${formatDate(expiresAt)}`,
           severity: 'warning',
           createdAt: expiresAt ?? new Date().toISOString(),
           target: buildFleetDetailPath(unit.id),
@@ -127,7 +127,7 @@ export const buildAppNotifications = (params: {
         items.push({
           id: `${unit.id}-${docKey}-missing`,
           title: `${label} sin registro`,
-          description: `${unit.internalCode} • ${unit.ownerCompany}`,
+          description: `${unit.internalCode} - ${unit.ownerCompany}`,
           severity: 'info',
           createdAt: new Date().toISOString(),
           target: buildFleetDetailPath(unit.id),
@@ -152,7 +152,7 @@ export const buildAppNotifications = (params: {
     items.push({
       id: `audit-${audit.id}`,
       title: 'Auditoria rechazada',
-      description: `${unit?.internalCode ?? 'Unidad'} • ${formatDate(audit.performedAt)}`,
+      description: `${unit?.internalCode ?? 'Unidad'} - ${formatDate(audit.performedAt)}`,
       severity: 'danger',
       createdAt: audit.performedAt,
       target: buildFleetDetailPath(audit.unitId),
@@ -192,3 +192,4 @@ export const buildAppNotifications = (params: {
     return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
   })
 }
+

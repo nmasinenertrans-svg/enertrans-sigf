@@ -5,6 +5,51 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest, setAuthToken } from '../../../services/api/apiClient'
 import logo from '../../../assets/enertrans-logo.png'
+import type { AppUser, PermissionOverride, UserPermissions, UserRole } from '../../../types/domain'
+import { userRoles } from '../../../types/domain'
+
+type StoredMaintenanceStatus = { enabled: boolean; message?: string }
+type LoginResponseUser = {
+  id: string
+  username: string
+  fullName: string
+  role: string
+  avatarUrl?: string
+  permissions?: UserPermissions
+  permissionOverrides?: PermissionOverride[]
+}
+type LoginResponse = {
+  token: string
+  user: LoginResponseUser
+}
+
+const isUserRole = (value: string): value is UserRole => userRoles.includes(value as UserRole)
+
+const toStoredUser = (value: unknown): AppUser | null => {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+  const candidate = value as Partial<AppUser>
+  if (
+    typeof candidate.id !== 'string' ||
+    typeof candidate.username !== 'string' ||
+    typeof candidate.fullName !== 'string' ||
+    typeof candidate.role !== 'string' ||
+    !isUserRole(candidate.role)
+  ) {
+    return null
+  }
+  return {
+    id: candidate.id,
+    username: candidate.username,
+    fullName: candidate.fullName,
+    role: candidate.role,
+    password: typeof candidate.password === 'string' ? candidate.password : '',
+    avatarUrl: typeof candidate.avatarUrl === 'string' ? candidate.avatarUrl : undefined,
+    permissions: candidate.permissions,
+    permissionOverrides: candidate.permissionOverrides,
+  }
+}
 
 export const LoginPage = () => {
   const navigate = useNavigate()
@@ -16,39 +61,39 @@ export const LoginPage = () => {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const maintenanceStatus = useMemo(() => {
+  const maintenanceStatus = useMemo<StoredMaintenanceStatus | null>(() => {
     if (typeof window === 'undefined') {
       return null
     }
     try {
       const raw = window.localStorage.getItem('enertrans.sigf.maintenance')
-      return raw ? (JSON.parse(raw) as { enabled: boolean; message?: string }) : null
+      return raw ? (JSON.parse(raw) as StoredMaintenanceStatus) : null
     } catch {
       return null
     }
   }, [])
 
-  const [lastUser, setLastUser] = useState(() => {
+  const [lastUser, setLastUser] = useState<AppUser | null>(() => {
     if (typeof window === 'undefined') {
       return null
     }
     try {
       const raw = window.localStorage.getItem('enertrans.sigf.last-user')
       if (raw) {
-        return JSON.parse(raw) as any
+        return toStoredUser(JSON.parse(raw))
       }
       const fallback = window.localStorage.getItem('enertrans.sigf.app-state.v1')
       if (!fallback) {
         return null
       }
-      const parsed = JSON.parse(fallback) as { currentUser?: any }
-      return parsed?.currentUser ?? null
+      const parsed = JSON.parse(fallback) as { currentUser?: unknown }
+      return toStoredUser(parsed?.currentUser)
     } catch {
       return null
     }
   })
 
-  const saveLastUser = (user: any) => {
+  const saveLastUser = (user: AppUser) => {
     if (typeof window === 'undefined') {
       return
     }
@@ -72,29 +117,19 @@ export const LoginPage = () => {
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       try {
-        const response = await apiRequest<{
-          token: string
-          user: {
-            id: string
-            username: string
-            fullName: string
-            role: string
-            avatarUrl?: string
-            permissions?: any
-            permissionOverrides?: any
-          }
-        }>('/auth/login', {
+        const response = await apiRequest<LoginResponse>('/auth/login', {
           method: 'POST',
           body: { username, password },
           token: null,
         })
 
         setAuthToken(response.token)
+        const role = isUserRole(response.user.role) ? response.user.role : ('AUDITOR' as UserRole)
         const nextUser = {
           id: response.user.id,
           username: response.user.username,
           fullName: response.user.fullName,
-          role: response.user.role as any,
+          role,
           avatarUrl: response.user.avatarUrl,
           password,
           permissions: response.user.permissions,

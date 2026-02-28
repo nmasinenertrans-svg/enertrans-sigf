@@ -1,6 +1,7 @@
-﻿import 'dotenv/config'
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import * as Sentry from '@sentry/node'
 import { prisma } from './db.js'
 import authRoutes from './routes/auth.js'
 import usersRoutes from './routes/users.js'
@@ -20,6 +21,21 @@ import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
 import { maintenanceGuard } from './middleware/maintenance.js'
+
+const sentryDsn = process.env.SENTRY_DSN || ''
+const sentryEnvironment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development'
+const sentryRelease = process.env.SENTRY_RELEASE || undefined
+const tracesSampleRate = Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0')
+const normalizedTracesSampleRate = Number.isFinite(tracesSampleRate) ? tracesSampleRate : 0
+
+Sentry.init({
+  dsn: sentryDsn || undefined,
+  enabled: Boolean(sentryDsn),
+  environment: sentryEnvironment,
+  release: sentryRelease,
+  integrations: [Sentry.expressIntegration(), Sentry.prismaIntegration()],
+  tracesSampleRate: normalizedTracesSampleRate,
+})
 
 const app = express()
 
@@ -45,6 +61,8 @@ app.use('/inventory', requireAuth, requirePermission('INVENTORY', 'view'), inven
 app.use('/movements', requireAuth, requirePermission('FLEET', 'view'), movementsRoutes)
 app.use('/tasks', requireAuth, requirePermission('TASKS', 'view'), tasksRoutes)
 app.use('/files', requireAuth, filesRoutes)
+
+Sentry.setupExpressErrorHandler(app)
 
 const ensureDevUser = async () => {
   const count = await prisma.user.count()

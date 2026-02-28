@@ -16,7 +16,6 @@ const isBypassedPath = (path: string) => {
 }
 
 export const maintenanceGuard = async (req: Request, res: Response, next: NextFunction) => {
-  const method = req.method.toUpperCase()
   if (isBypassedPath(req.path)) {
     return next()
   }

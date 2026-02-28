@@ -24,6 +24,15 @@ interface WindowWithBarcodeDetector extends Window {
 
 const qrFormats = ['qr_code']
 
+const parseStatusFilter = (
+  raw: string | null,
+): 'ALL' | 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE' => {
+  if (raw === 'OPERATIONAL' || raw === 'MAINTENANCE' || raw === 'OUT_OF_SERVICE' || raw === 'ALL') {
+    return raw
+  }
+  return 'ALL'
+}
+
 export const FleetListPage = () => {
   const [searchParams] = useSearchParams()
   const {
@@ -41,7 +50,9 @@ export const FleetListPage = () => {
 
   const normalizedUnits = useMemo(() => normalizeFleetUnits(fleetUnits), [fleetUnits])
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'>(() =>
+    parseStatusFilter(searchParams.get('status')),
+  )
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrScanning, setIsQrScanning] = useState(false)
@@ -94,21 +105,6 @@ export const FleetListPage = () => {
       return haystack.includes(normalizedSearch)
     })
   }, [normalizedUnits, searchTerm, statusFilter])
-
-  useEffect(() => {
-    const statusParam = searchParams.get('status')
-    if (!statusParam) {
-      return
-    }
-    if (
-      statusParam === 'ALL' ||
-      statusParam === 'OPERATIONAL' ||
-      statusParam === 'MAINTENANCE' ||
-      statusParam === 'OUT_OF_SERVICE'
-    ) {
-      setStatusFilter(statusParam)
-    }
-  }, [searchParams])
 
   const stopQrCamera = () => {
     if (qrIntervalRef.current !== null) {
