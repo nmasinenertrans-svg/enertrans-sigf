@@ -38,9 +38,9 @@ export const setAuthToken = (token: string | null) => {
 
 export const apiRequest = async <T>(
   path: string,
-  options: { method?: string; body?: unknown; token?: string | null } = {},
+  options: { method?: string; body?: unknown; token?: string | null; timeoutMs?: number } = {},
 ): Promise<T> => {
-  const { method = 'GET', body, token = getAuthToken() } = options
+  const { method = 'GET', body, token = getAuthToken(), timeoutMs } = options
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
@@ -49,11 +49,30 @@ export const apiRequest = async <T>(
     headers.Authorization = `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+  const timeoutId =
+    controller && typeof timeoutMs === 'number' && timeoutMs > 0
+      ? globalThis.setTimeout(() => controller.abort(), timeoutMs)
+      : null
+
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller?.signal,
+    })
+  } catch (error) {
+    if (controller?.signal.aborted) {
+      throw new Error(`Timeout al consultar ${path}.`)
+    }
+    throw error
+  } finally {
+    if (timeoutId !== null) {
+      globalThis.clearTimeout(timeoutId)
+    }
+  }
 
   if (!response.ok) {
     const message = await response.text()

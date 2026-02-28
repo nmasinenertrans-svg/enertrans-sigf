@@ -202,7 +202,7 @@ export const AppLayout = () => {
 
       const safeRequest = async <T,>(path: string): Promise<T | null> => {
         try {
-          return await apiRequest<T>(path)
+          return await apiRequest<T>(path, { timeoutMs: 15000 })
         } catch (error) {
           if (error instanceof ApiRequestError && error.status === 403) {
             return null
