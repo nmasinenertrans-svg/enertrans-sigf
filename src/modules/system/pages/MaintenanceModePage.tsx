@@ -314,8 +314,8 @@ export const MaintenanceModePage = () => {
             Dashboard sin interaccion (tarjetas y graficos solo visuales)
             <input
               type="checkbox"
-              checked={flags.interactiveDashboard}
-              onChange={(event) => setFlags((prev) => ({ ...prev, interactiveDashboard: event.target.checked }))}
+              checked={!flags.interactiveDashboard}
+              onChange={(event) => setFlags((prev) => ({ ...prev, interactiveDashboard: !event.target.checked }))}
               className="h-4 w-4"
             />
           </label>
