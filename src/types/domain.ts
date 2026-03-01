@@ -106,6 +106,7 @@ export interface FeatureFlags {
   showInventoryModule: boolean
   showUsersModule: boolean
   manualAuditMode: boolean
+  interactiveDashboard: boolean
 }
 
 export interface FleetUnit {

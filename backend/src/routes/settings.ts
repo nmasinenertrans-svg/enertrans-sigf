@@ -25,6 +25,7 @@ const featureFlagsSchema = z.object({
   showInventoryModule: z.boolean().optional(),
   showUsersModule: z.boolean().optional(),
   manualAuditMode: z.boolean().optional(),
+  interactiveDashboard: z.boolean().optional(),
 })
 
 const defaultFeatureFlags = {
@@ -41,6 +42,7 @@ const defaultFeatureFlags = {
   showInventoryModule: true,
   showUsersModule: true,
   manualAuditMode: false,
+  interactiveDashboard: true,
 }
 
 const notificationsReadSchema = z.object({

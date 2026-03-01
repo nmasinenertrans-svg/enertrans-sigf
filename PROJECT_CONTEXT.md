@@ -230,6 +230,18 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Exige PDF en auditorias manuales y mantiene trazabilidad de informe.
   Riesgo residual:
   - Las OT cerradas historicas con `pendingReaudit=true` previas al cambio quedan como legado hasta ser gestionadas.
+- Fecha: 2026-02-28
+  Cambio: Toggle de interactividad de dashboard (`interactiveDashboard`) para activar/desactivar clicks en tarjetas y graficos.
+  Archivos:
+  - `backend/src/routes/settings.ts`
+  - `src/types/domain.ts`
+  - `src/core/context/appState.ts`
+  - `src/modules/system/pages/MaintenanceModePage.tsx`
+  - `src/modules/dashboard/pages/DashboardPage.tsx`
+  Riesgo mitigado:
+  - Permite dejar dashboard en modo solo lectura visual sin navegacion interactiva.
+  Riesgo residual:
+  - Los modulos destino siguen operativos; solo se bloquea la navegacion directa desde dashboard.
 
 ## 9) Riesgos abiertos (a seguir)
 

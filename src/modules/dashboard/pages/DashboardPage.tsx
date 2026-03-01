@@ -203,9 +203,10 @@ const UNASSIGNED_CLIENT_FILTER = '__UNASSIGNED__'
 
 export const DashboardPage = () => {
   const {
-    state: { fleetUnits, workOrders },
+    state: { fleetUnits, workOrders, featureFlags },
   } = useAppContext()
   const navigate = useNavigate()
+  const dashboardInteractive = featureFlags.interactiveDashboard
 
   const outOfServiceCount = fleetUnits.filter((unit) => unit.operationalStatus === 'OUT_OF_SERVICE').length
   const openWorkOrdersCount = workOrders.filter((order) => order.status !== 'CLOSED').length
@@ -336,32 +337,48 @@ export const DashboardPage = () => {
       <div className="grid gap-4 md:grid-cols-4">
         <button
           type="button"
+          disabled={!dashboardInteractive}
           onClick={() => navigate(ROUTE_PATHS.fleet.list)}
-          className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className={[
+            'rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition',
+            dashboardInteractive ? 'hover:-translate-y-0.5 hover:shadow-md' : 'cursor-default opacity-90',
+          ].join(' ')}
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total flota</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">{fleetUnits.length}</p>
         </button>
         <button
           type="button"
+          disabled={!dashboardInteractive}
           onClick={() => navigate(`${ROUTE_PATHS.fleet.list}?status=OUT_OF_SERVICE`)}
-          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className={[
+            'rounded-xl border border-rose-200 bg-rose-50 p-4 text-left shadow-sm transition',
+            dashboardInteractive ? 'hover:-translate-y-0.5 hover:shadow-md' : 'cursor-default opacity-90',
+          ].join(' ')}
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Fuera de servicio</p>
           <p className="mt-2 text-2xl font-bold text-rose-800">{outOfServiceCount}</p>
         </button>
         <button
           type="button"
+          disabled={!dashboardInteractive}
           onClick={() => navigate(`${ROUTE_PATHS.workOrders}?status=OPEN&includeInProgress=1`)}
-          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className={[
+            'rounded-xl border border-amber-200 bg-amber-50 p-4 text-left shadow-sm transition',
+            dashboardInteractive ? 'hover:-translate-y-0.5 hover:shadow-md' : 'cursor-default opacity-90',
+          ].join(' ')}
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">OT abiertas</p>
           <p className="mt-2 text-2xl font-bold text-amber-800">{openWorkOrdersCount}</p>
         </button>
         <button
           type="button"
+          disabled={!dashboardInteractive}
           onClick={() => navigate(`${ROUTE_PATHS.audits}?pendingReaudit=1`)}
-          className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className={[
+            'rounded-xl border border-sky-200 bg-sky-50 p-4 text-left shadow-sm transition',
+            dashboardInteractive ? 'hover:-translate-y-0.5 hover:shadow-md' : 'cursor-default opacity-90',
+          ].join(' ')}
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Pendiente re-auditoria</p>
           <p className="mt-2 text-2xl font-bold text-sky-800">{pendingReauditCount}</p>
@@ -369,11 +386,22 @@ export const DashboardPage = () => {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <DonutChart title="Estado de RTO/VTV" segments={rtoSegments} onSegmentClick={handleRtoSegmentClick} />
-        <DonutChart title="Estado de Certificacion" segments={hoistSegments} onSegmentClick={handleHoistSegmentClick} />
+        <DonutChart
+          title="Estado de RTO/VTV"
+          segments={rtoSegments}
+          onSegmentClick={dashboardInteractive ? handleRtoSegmentClick : undefined}
+        />
+        <DonutChart
+          title="Estado de Certificacion"
+          segments={hoistSegments}
+          onSegmentClick={dashboardInteractive ? handleHoistSegmentClick : undefined}
+        />
       </div>
 
-      <OccupancyChart segments={occupancySegments} onSegmentClick={handleOccupancySegmentClick} />
+      <OccupancyChart
+        segments={occupancySegments}
+        onSegmentClick={dashboardInteractive ? handleOccupancySegmentClick : undefined}
+      />
     </section>
   )
 }
