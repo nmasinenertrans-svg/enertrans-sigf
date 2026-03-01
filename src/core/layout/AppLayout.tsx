@@ -263,6 +263,14 @@ export const AppLayout = () => {
               result: audit.result,
               observations: audit.observations ?? '',
               photoBase64List: Array.isArray(audit.photoUrls) ? audit.photoUrls : [],
+              reportPdfFileName:
+                typeof audit.checklist?.meta?.reportPdfFileName === 'string'
+                  ? audit.checklist.meta.reportPdfFileName
+                  : undefined,
+              reportPdfFileUrl:
+                typeof audit.checklist?.meta?.reportPdfFileUrl === 'string'
+                  ? audit.checklist.meta.reportPdfFileUrl
+                  : undefined,
               checklistSections: Array.isArray(audit.checklist?.sections) ? audit.checklist.sections : [],
               unitKilometers: audit.unitKilometers ?? 0,
               engineHours: audit.engineHours ?? 0,

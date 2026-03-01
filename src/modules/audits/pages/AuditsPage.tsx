@@ -33,9 +33,10 @@ export const AuditsPage = () => {
   const { can } = usePermissions()
   const [searchParams] = useSearchParams()
   const {
-    state: { currentUser, fleetUnits, audits, workOrders, externalRequests },
+    state: { currentUser, fleetUnits, audits, workOrders, externalRequests, featureFlags },
     actions: { setAudits, setGlobalLoading, setAppError, setWorkOrders, setFleetUnits },
   } = useAppContext()
+  const manualAuditMode = featureFlags.manualAuditMode
 
   const canCreate = can('AUDITS', 'create')
   const canDelete = can('AUDITS', 'delete')
@@ -71,8 +72,11 @@ export const AuditsPage = () => {
     return undefined
   }, [searchParams, workOrders, pendingReauditOrder, pendingReauditParam])
 
-  const pendingReauditOrders = useMemo(() => workOrders.filter((order) => order.pendingReaudit), [workOrders])
-  const isReauditMode = Boolean(pendingWorkOrder)
+  const pendingReauditOrders = useMemo(
+    () => (manualAuditMode ? [] : workOrders.filter((order) => order.pendingReaudit)),
+    [workOrders, manualAuditMode],
+  )
+  const isReauditMode = manualAuditMode ? false : Boolean(pendingWorkOrder)
 
   const [formData, setFormData] = useState<AuditFormData>(() => createEmptyAuditFormData(preferredUnitId))
   const [errors, setErrors] = useState<AuditFormErrors>({})
@@ -190,8 +194,8 @@ export const AuditsPage = () => {
     setFormData((previousFormData) => ({
       ...previousFormData,
       unitId: preferredUnitId,
-      auditMode: 'INDEPENDENT',
-      externalRequestId: '',
+      auditMode: manualAuditMode ? 'INDEPENDENT' : previousFormData.auditMode,
+      externalRequestId: manualAuditMode ? '' : previousFormData.externalRequestId,
       unitKilometers: selectedUnit?.currentKilometers ?? 0,
       engineHours: selectedUnit?.currentEngineHours ?? 0,
       hydroHours: selectedUnit?.currentHydroHours ?? 0,
@@ -207,7 +211,18 @@ export const AuditsPage = () => {
 
       return preferredUnitId || allUnitsFilter
     })
-  }, [preferredUnitId, fleetUnits])
+  }, [preferredUnitId, fleetUnits, manualAuditMode])
+
+  useEffect(() => {
+    if (!manualAuditMode) {
+      return
+    }
+    setFormData((previousFormData) => ({
+      ...previousFormData,
+      auditMode: 'INDEPENDENT',
+      externalRequestId: '',
+    }))
+  }, [manualAuditMode])
 
   useEffect(() => {
     if (pendingWorkOrder || createParam === '1') {
@@ -252,7 +267,7 @@ export const AuditsPage = () => {
   }, [formData, isFormOpen, isReauditMode])
 
   useEffect(() => {
-    if (!pendingWorkOrder) {
+    if (manualAuditMode || !pendingWorkOrder) {
       return
     }
 
@@ -264,7 +279,7 @@ export const AuditsPage = () => {
       checklistSections: createChecklistFromDeviations(pendingWorkOrder.taskList ?? []),
     }))
     setUnitFilter(pendingWorkOrder.unitId)
-  }, [pendingWorkOrder])
+  }, [pendingWorkOrder, manualAuditMode])
 
   const handleItemStatusChange = (sectionId: string, itemId: string, status: AuditChecklistStatus) => {
     setFormData((previousFormData) => ({
@@ -310,6 +325,43 @@ export const AuditsPage = () => {
     }
   }
 
+  const handleManualPdfFileChange = async (file: File | null) => {
+    if (!file) {
+      setFormData((previousFormData) => ({
+        ...previousFormData,
+        reportPdfFileName: '',
+        reportPdfFileBase64: '',
+        reportPdfFileUrl: '',
+      }))
+      setErrors((previousErrors) => ({ ...previousErrors, reportPdfFileBase64: undefined }))
+      return
+    }
+
+    if (file.type !== 'application/pdf') {
+      setErrors((previousErrors) => ({ ...previousErrors, reportPdfFileBase64: 'Solo se permite archivo PDF.' }))
+      return
+    }
+
+    try {
+      setGlobalLoading(true)
+      const pdfData = await readFileAsDataUrl(file)
+      setFormData((previousFormData) => ({
+        ...previousFormData,
+        reportPdfFileName: file.name,
+        reportPdfFileBase64: pdfData,
+        reportPdfFileUrl: '',
+      }))
+      setErrors((previousErrors) => ({ ...previousErrors, reportPdfFileBase64: undefined }))
+    } catch {
+      setErrors((previousErrors) => ({
+        ...previousErrors,
+        reportPdfFileBase64: 'No se pudo leer el PDF. Intenta nuevamente.',
+      }))
+    } finally {
+      setGlobalLoading(false)
+    }
+  }
+
   const handleRemovePhoto = (photoIndex: number) => {
     setFormData((previousFormData) => ({
       ...previousFormData,
@@ -335,6 +387,14 @@ export const AuditsPage = () => {
         result: audit.result,
         observations: audit.observations ?? '',
         photoBase64List: Array.isArray(audit.photoUrls) ? audit.photoUrls : [],
+        reportPdfFileName:
+          typeof audit.checklist?.meta?.reportPdfFileName === 'string'
+            ? audit.checklist.meta.reportPdfFileName
+            : undefined,
+        reportPdfFileUrl:
+          typeof audit.checklist?.meta?.reportPdfFileUrl === 'string'
+            ? audit.checklist.meta.reportPdfFileUrl
+            : undefined,
         checklistSections: Array.isArray(audit.checklist?.sections) ? audit.checklist.sections : [],
         unitKilometers: audit.unitKilometers ?? 0,
         engineHours: audit.engineHours ?? 0,
@@ -361,12 +421,15 @@ export const AuditsPage = () => {
     }
   }
 
-  const handleSubmitAudit = () => {
+  const handleSubmitAudit = async () => {
     if (!canCreate) {
       return
     }
 
     const validationErrors = validateAuditFormData(formData, fleetUnits)
+    if (manualAuditMode && !formData.reportPdfFileBase64) {
+      validationErrors.reportPdfFileBase64 = 'Debes adjuntar el PDF de la auditoria manual.'
+    }
 
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
@@ -379,13 +442,46 @@ export const AuditsPage = () => {
     const unitCode = selectedUnit?.internalCode ?? ''
     const selectedExternalRequest = externalRequests.find((item) => item.id === formData.externalRequestId)
     const externalRequestCode = selectedExternalRequest?.code
-    const createdAuditBase = toAuditRecord(formData, auditorId, auditorName, workOrders, unitCode, externalRequestCode)
-    const createdAudit = {
+    const createdAuditBase = toAuditRecord(
+      formData,
+      auditorId,
+      auditorName,
+      workOrders,
+      unitCode,
+      externalRequestCode,
+      { manualAuditMode },
+    )
+    let createdAudit = {
       ...createdAuditBase,
       syncState:
         typeof navigator !== 'undefined' && navigator.onLine
           ? ('PENDING' as const)
           : ('LOCAL_ONLY' as const),
+    }
+
+    if (manualAuditMode && createdAudit.reportPdfFileBase64 && typeof navigator !== 'undefined' && navigator.onLine) {
+      try {
+        setGlobalLoading(true)
+        const upload = await apiRequest<{ url: string }>('/files/upload', {
+          method: 'POST',
+          body: {
+            fileName: createdAudit.reportPdfFileName || `audit-${createdAudit.id}.pdf`,
+            contentType: 'application/pdf',
+            dataUrl: createdAudit.reportPdfFileBase64,
+            folder: 'audits',
+          },
+        })
+        createdAudit = {
+          ...createdAudit,
+          reportPdfFileUrl: upload.url,
+          reportPdfFileBase64: '',
+        }
+      } catch {
+        setAppError('No se pudo subir el PDF de la auditoria manual.')
+        return
+      } finally {
+        setGlobalLoading(false)
+      }
     }
 
     const updatedFleetUnits = fleetUnits.map((unit) =>
@@ -431,11 +527,11 @@ export const AuditsPage = () => {
       void ensureRemoteUnit()
     }
 
-    const workOrderPayload = pendingWorkOrder
+    const workOrderPayload = !manualAuditMode && pendingWorkOrder
       ? { workOrderId: pendingWorkOrder.id, workOrderCode: pendingWorkOrder.code }
       : {}
 
-    if (createdAudit.result === 'REJECTED') {
+    if (!manualAuditMode && createdAudit.result === 'REJECTED') {
       const createdWorkOrder = createWorkOrderFromAudit(createdAudit, unitCode)
       setWorkOrders([createdWorkOrder, ...workOrders])
       setFleetUnits(
@@ -494,13 +590,15 @@ export const AuditsPage = () => {
         )
       }
 
-      setWorkOrders(
-        workOrders.map((order) =>
-          order.unitId === createdAudit.unitId && order.pendingReaudit
-            ? { ...order, pendingReaudit: false }
-            : order,
-        ),
-      )
+      if (!manualAuditMode) {
+        setWorkOrders(
+          workOrders.map((order) =>
+            order.unitId === createdAudit.unitId && order.pendingReaudit
+              ? { ...order, pendingReaudit: false }
+              : order,
+          ),
+        )
+      }
 
       void enqueueAndSync({
         id: `audit.create.${createdAudit.id}`,
@@ -540,7 +638,7 @@ export const AuditsPage = () => {
         setAppError('No se pudo sincronizar la auditoria. Quedo guardada localmente.')
       })
 
-      if (pendingWorkOrder && typeof navigator !== 'undefined' && navigator.onLine) {
+      if (!manualAuditMode && pendingWorkOrder && typeof navigator !== 'undefined' && navigator.onLine) {
         apiRequest(`/work-orders/${pendingWorkOrder.id}`, {
           method: 'PATCH',
           body: { pendingReaudit: false },
@@ -610,7 +708,11 @@ export const AuditsPage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Auditorias</h2>
-        <p className="text-sm text-slate-600">Checklist dinamico, observaciones, fotos y trazabilidad por unidad.</p>
+        <p className="text-sm text-slate-600">
+          {manualAuditMode
+            ? 'Modo manual activo: PDF obligatorio, sin OT automatica y sin re-auditorias automaticas.'
+            : 'Checklist dinamico, observaciones, fotos y trazabilidad por unidad.'}
+        </p>
       </header>
 
       {!isFormOpen && pendingReauditOrders.length > 0 ? (
@@ -695,7 +797,7 @@ export const AuditsPage = () => {
                   {errors.unitId ? <span className="text-xs font-semibold text-rose-700">{errors.unitId}</span> : null}
                 </label>
 
-                {!isReauditMode ? (
+                {!isReauditMode && !manualAuditMode ? (
                   <label className="mt-4 flex flex-col gap-2">
                     <span className="text-sm font-semibold text-slate-700">Tipo de auditoria</span>
                     <select
@@ -717,7 +819,7 @@ export const AuditsPage = () => {
                   </label>
                 ) : null}
 
-                {!isReauditMode && formData.auditMode === 'EXTERNAL_REQUEST' ? (
+                {!isReauditMode && !manualAuditMode && formData.auditMode === 'EXTERNAL_REQUEST' ? (
                   <label className="mt-4 flex flex-col gap-2">
                     <span className="text-sm font-semibold text-slate-700">Nota de pedido vinculada</span>
                     <select
@@ -805,6 +907,43 @@ export const AuditsPage = () => {
                   </label>
                 </div>
 
+                {manualAuditMode ? (
+                  <>
+                    <label className="mt-4 flex flex-col gap-2">
+                      <span className="text-sm font-semibold text-slate-700">Resultado de la auditoria manual</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                        value={formData.manualResult}
+                        onChange={(event) =>
+                          setFormData((previousFormData) => ({
+                            ...previousFormData,
+                            manualResult: event.target.value as 'APPROVED' | 'REJECTED',
+                          }))
+                        }
+                      >
+                        <option value="APPROVED">Aprobada</option>
+                        <option value="REJECTED">Rechazada</option>
+                      </select>
+                    </label>
+
+                    <label className="mt-4 flex flex-col gap-2">
+                      <span className="text-sm font-semibold text-slate-700">PDF de auditoria manual</span>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-200 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-300"
+                        onChange={(event) => void handleManualPdfFileChange(event.target.files?.[0] ?? null)}
+                      />
+                      {formData.reportPdfFileName ? (
+                        <span className="text-xs text-slate-600">Archivo cargado: {formData.reportPdfFileName}</span>
+                      ) : null}
+                      {errors.reportPdfFileBase64 ? (
+                        <span className="text-xs font-semibold text-rose-700">{errors.reportPdfFileBase64}</span>
+                      ) : null}
+                    </label>
+                  </>
+                ) : null}
+
                 <label className="mt-4 flex flex-col gap-2">
                   <span className="text-sm font-semibold text-slate-700">Observaciones generales</span>
                   <textarea
@@ -829,15 +968,17 @@ export const AuditsPage = () => {
                   onClick={handleSubmitAudit}
                   className="mt-5 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
                 >
-                  {isReauditMode ? 'Cerrar re-auditoria' : 'Crear auditoria'}
+                  {isReauditMode ? 'Cerrar re-auditoria' : manualAuditMode ? 'Guardar auditoria manual' : 'Crear auditoria'}
                 </button>
               </section>
 
-              <AuditPhotoPicker
-                photoBase64List={formData.photoBase64List}
-                onAddPhotoFiles={handleAddPhotoFiles}
-                onRemovePhoto={handleRemovePhoto}
-              />
+              {!manualAuditMode ? (
+                <AuditPhotoPicker
+                  photoBase64List={formData.photoBase64List}
+                  onAddPhotoFiles={handleAddPhotoFiles}
+                  onRemovePhoto={handleRemovePhoto}
+                />
+              ) : null}
             </>
           ) : !isFormOpen ? (
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -865,7 +1006,7 @@ export const AuditsPage = () => {
         </div>
 
         <div className="space-y-4 xl:col-span-2">
-          {canCreate && isFormOpen && formData.auditMode === 'INDEPENDENT' ? (
+          {canCreate && isFormOpen && formData.auditMode === 'INDEPENDENT' && !manualAuditMode ? (
             <>
               <AuditChecklistEditor
                 sections={formData.checklistSections}
@@ -1006,6 +1147,19 @@ export const AuditsPage = () => {
             </div>
 
             <div className="mt-4">
+              {viewAudit.reportPdfFileUrl ? (
+                <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <span className="font-semibold">Informe PDF:</span>{' '}
+                  <a
+                    href={viewAudit.reportPdfFileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-amber-700 underline"
+                  >
+                    {viewAudit.reportPdfFileName || 'Ver archivo'}
+                  </a>
+                </div>
+              ) : null}
               <h4 className="text-sm font-semibold text-slate-700">Fotos</h4>
               {viewAudit.photoBase64List.length === 0 ? (
                 <p className="mt-1 text-sm text-slate-500">No se adjuntaron fotos.</p>

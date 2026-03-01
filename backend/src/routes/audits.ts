@@ -82,6 +82,15 @@ const resolveAuditKind = async (unitId: string): Promise<'AUDIT' | 'REAUDIT'> =>
   return closedWorkOrders ? 'REAUDIT' : 'AUDIT'
 }
 
+const isManualAuditModeEnabled = async (): Promise<boolean> => {
+  const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
+  const featureFlags =
+    settings?.featureFlags && typeof settings.featureFlags === 'object' && !Array.isArray(settings.featureFlags)
+      ? (settings.featureFlags as Record<string, unknown>)
+      : {}
+  return featureFlags.manualAuditMode === true
+}
+
 router.get('/', async (_req, res) => {
   const items = await prisma.auditRecord.findMany({ orderBy: { createdAt: 'desc' } })
   return res.json(items)
@@ -101,7 +110,8 @@ router.post('/', async (req, res) => {
     }
   }
 
-  const auditKind = parsed.data.auditKind ?? (await resolveAuditKind(parsed.data.unitId))
+  const manualAuditMode = await isManualAuditModeEnabled()
+  const auditKind = manualAuditMode ? 'AUDIT' : parsed.data.auditKind ?? (await resolveAuditKind(parsed.data.unitId))
   const unit = await prisma.fleetUnit.findUnique({
     where: { id: parsed.data.unitId },
     select: { internalCode: true },
@@ -122,7 +132,10 @@ router.post('/', async (req, res) => {
     result: parsed.data.result,
     observations: parsed.data.observations,
     photoUrls: parsed.data.photoUrls,
-    checklist: parsed.data.checklist,
+    checklist:
+      parsed.data.checklist && typeof parsed.data.checklist === 'object'
+        ? parsed.data.checklist
+        : { sections: [] },
     unitKilometers: parsed.data.unitKilometers,
     engineHours: parsed.data.engineHours,
     hydroHours: parsed.data.hydroHours,
@@ -149,7 +162,7 @@ router.post('/', async (req, res) => {
         },
       })
 
-        if (!openWorkOrder) {
+        if (!manualAuditMode && !openWorkOrder) {
           const workOrderCode =
             parsed.data.workOrderCode ?? formatCode('OT', await getNextSequence('workOrder'), unitCode)
           await prisma.workOrder.create({
@@ -172,16 +185,18 @@ router.post('/', async (req, res) => {
         data: { operationalStatus: 'OUT_OF_SERVICE' },
       })
     } else {
-      if (parsed.data.workOrderId) {
+      if (!manualAuditMode && parsed.data.workOrderId) {
         await prisma.workOrder.updateMany({
           where: { id: parsed.data.workOrderId },
           data: { pendingReaudit: false },
         })
       }
-      await prisma.workOrder.updateMany({
-        where: { unitId: item.unitId, pendingReaudit: true },
-        data: { pendingReaudit: false },
-      })
+      if (!manualAuditMode) {
+        await prisma.workOrder.updateMany({
+          where: { unitId: item.unitId, pendingReaudit: true },
+          data: { pendingReaudit: false },
+        })
+      }
       const openWorkOrders = await prisma.workOrder.findFirst({
         where: {
           unitId: item.unitId,

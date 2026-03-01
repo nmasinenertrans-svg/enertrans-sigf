@@ -33,6 +33,9 @@ type AuditPayload = {
   result: string
   observations?: string
   photoBase64List?: string[]
+  reportPdfFileName?: string
+  reportPdfFileBase64?: string
+  reportPdfFileUrl?: string
   checklistSections: unknown[]
   unitKilometers?: number
   engineHours?: number
@@ -87,6 +90,20 @@ const syncAudit = async (payload: AuditPayload) => {
     }
   }
 
+  let reportPdfFileUrl = payload.reportPdfFileUrl || ''
+  if (!reportPdfFileUrl && payload.reportPdfFileBase64) {
+    try {
+      reportPdfFileUrl = await uploadDataUrl(
+        payload.reportPdfFileBase64,
+        payload.reportPdfFileName || `audit-${payload.id}.pdf`,
+        'audits',
+      )
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Error de carga de informe PDF')
+      throw new Error(`AUDIT_PDF_UPLOAD_FAILED ${message}`)
+    }
+  }
+
   const body = {
     id: payload.id,
     auditKind: payload.auditKind,
@@ -99,7 +116,15 @@ const syncAudit = async (payload: AuditPayload) => {
     result: payload.result,
     observations: payload.observations,
     photoUrls,
-    checklist: { sections: payload.checklistSections },
+    checklist: {
+      sections: payload.checklistSections,
+      meta: reportPdfFileUrl
+        ? {
+            reportPdfFileUrl,
+            reportPdfFileName: payload.reportPdfFileName || `audit-${payload.id}.pdf`,
+          }
+        : undefined,
+    },
     unitKilometers: payload.unitKilometers ?? 0,
     engineHours: payload.engineHours ?? 0,
     hydroHours: payload.hydroHours ?? 0,

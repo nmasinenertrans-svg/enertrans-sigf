@@ -34,9 +34,10 @@ export const WorkOrdersPage = () => {
   const [searchParams] = useSearchParams()
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, inventoryItems, workOrders },
+    state: { fleetUnits, inventoryItems, workOrders, featureFlags },
     actions: { setWorkOrders, setInventoryItems, setFleetUnits, setAppError },
   } = useAppContext()
+  const manualAuditMode = featureFlags.manualAuditMode
 
   const canCreate = can('WORK_ORDERS', 'create')
   const canEdit = can('WORK_ORDERS', 'edit')
@@ -548,7 +549,7 @@ export const WorkOrdersPage = () => {
     const updatedWorkOrder: WorkOrder = {
       ...workOrder,
       status: 'CLOSED' as WorkOrderStatus,
-      pendingReaudit: true,
+      pendingReaudit: manualAuditMode ? false : true,
       taskList: normalizedTasks,
     }
     const nextWorkOrders = workOrders.map((order) => (order.id === workOrderId ? updatedWorkOrder : order))
@@ -582,7 +583,11 @@ export const WorkOrdersPage = () => {
       }
     }
 
-    setAppError('OT cerrada. Se genero una re-auditoria pendiente para el auditor.')
+    setAppError(
+      manualAuditMode
+        ? 'OT cerrada en modo manual. No se genero re-auditoria automatica.'
+        : 'OT cerrada. Se genero una re-auditoria pendiente para el auditor.',
+    )
   }
 
   if (fleetUnits.length === 0) {
@@ -709,7 +714,7 @@ export const WorkOrdersPage = () => {
                         onClick={() => handleCloseWorkOrder(item.id)}
                         className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
                       >
-                        Cerrar OT y solicitar re-auditoria
+                        {manualAuditMode ? 'Cerrar OT (sin re-auditoria automatica)' : 'Cerrar OT y solicitar re-auditoria'}
                       </button>
                     ) : null}
                   </div>

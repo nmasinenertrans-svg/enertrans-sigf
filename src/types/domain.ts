@@ -105,6 +105,7 @@ export interface FeatureFlags {
   showReportsModule: boolean
   showInventoryModule: boolean
   showUsersModule: boolean
+  manualAuditMode: boolean
 }
 
 export interface FleetUnit {
@@ -255,6 +256,9 @@ export interface AuditRecord {
   result: AuditResult
   observations: string
   photoBase64List: string[]
+  reportPdfFileName?: string
+  reportPdfFileUrl?: string
+  reportPdfFileBase64?: string
   checklistSections: AuditChecklistSection[]
   unitKilometers: number
   engineHours: number

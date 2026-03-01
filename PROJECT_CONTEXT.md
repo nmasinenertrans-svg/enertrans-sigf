@@ -211,6 +211,25 @@ Fuente: historial git (ultimos commits visibles en este entorno).
 - Dependencia backend agregada: `@sentry/node`.
 - Dependencia frontend agregada: `@sentry/react`.
 - Dependencia build agregada: `@sentry/vite-plugin`.
+- Fecha: 2026-02-28
+  Cambio: Modo de auditoria manual configurable desde `Mantenimiento > Modulos y botones`.
+  Archivos:
+  - `backend/src/routes/settings.ts`
+  - `backend/src/routes/audits.ts`
+  - `backend/src/routes/workOrders.ts`
+  - `src/types/domain.ts`
+  - `src/core/context/appState.ts`
+  - `src/modules/system/pages/MaintenanceModePage.tsx`
+  - `src/modules/audits/services/auditsService.ts`
+  - `src/modules/audits/pages/AuditsPage.tsx`
+  - `src/services/offline/sync.ts`
+  - `src/core/layout/AppLayout.tsx`
+  - `src/modules/workOrders/pages/WorkOrdersPage.tsx`
+  Riesgo mitigado:
+  - Evita generacion automatica de OT y re-auditorias cuando negocio requiere operacion manual.
+  - Exige PDF en auditorias manuales y mantiene trazabilidad de informe.
+  Riesgo residual:
+  - Las OT cerradas historicas con `pendingReaudit=true` previas al cambio quedan como legado hasta ser gestionadas.
 
 ## 9) Riesgos abiertos (a seguir)
 

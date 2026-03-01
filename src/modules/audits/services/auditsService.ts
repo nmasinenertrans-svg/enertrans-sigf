@@ -112,10 +112,14 @@ const createStandardChecklist = (): AuditChecklistSectionDraft[] => [
 export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
   unitId,
   auditMode: 'INDEPENDENT',
+  manualResult: 'APPROVED',
   externalRequestId: '',
   observations: '',
   checklistSections: createStandardChecklist(),
   photoBase64List: [],
+  reportPdfFileName: '',
+  reportPdfFileBase64: '',
+  reportPdfFileUrl: '',
   unitKilometers: 0,
   engineHours: 0,
   hydroHours: 0,
@@ -190,6 +194,10 @@ export const validateAuditFormData = (formData: AuditFormData, unitList: FleetUn
     if (!hasValidSections) {
       validationErrors.checklistSections = 'El checklist debe tener al menos una seccion con un item valido.'
     }
+  }
+
+  if (formData.reportPdfFileBase64 && !formData.reportPdfFileName) {
+    validationErrors.reportPdfFileBase64 = 'El archivo PDF cargado no es valido.'
   }
 
   return validationErrors
@@ -304,7 +312,9 @@ export const toAuditRecord = (
   workOrders: WorkOrder[] = [],
   unitCode: string = '',
   externalRequestCode?: string,
+  options?: { manualAuditMode?: boolean },
 ): AuditRecord => {
+  const manualAuditMode = options?.manualAuditMode === true
   let checklistSections = formData.checklistSections
     .map((sectionDraft) => toChecklistSection(sectionDraft))
     .filter((section): section is AuditChecklistSection => section !== null)
@@ -326,10 +336,29 @@ export const toAuditRecord = (
     ]
   }
 
-  const auditKind = resolveAuditKind(formData.unitId, workOrders)
-  const pendingOrder = workOrders.find((order) => order.unitId === formData.unitId && order.pendingReaudit)
-  const overrideSequence = auditKind === 'REAUDIT' ? parseSequenceNumber(pendingOrder?.code) : null
+  const auditKind = manualAuditMode ? 'AUDIT' : resolveAuditKind(formData.unitId, workOrders)
+  const pendingOrder = manualAuditMode
+    ? undefined
+    : workOrders.find((order) => order.unitId === formData.unitId && order.pendingReaudit)
+  const overrideSequence = !manualAuditMode && auditKind === 'REAUDIT' ? parseSequenceNumber(pendingOrder?.code) : null
   const code = buildAuditCode(auditKind, unitCode, overrideSequence)
+
+  if (manualAuditMode) {
+    checklistSections = [
+      {
+        id: createId(),
+        title: 'AUDITORIA MANUAL',
+        items: [
+          {
+            id: createId(),
+            label: formData.reportPdfFileName ? `Informe PDF: ${formData.reportPdfFileName}` : 'Informe PDF manual',
+            status: formData.manualResult === 'REJECTED' ? 'BAD' : 'OK',
+            observation: formData.observations.trim(),
+          },
+        ],
+      },
+    ]
+  }
 
   return {
     id: createId(),
@@ -339,9 +368,17 @@ export const toAuditRecord = (
     auditorUserId,
     auditorName,
     performedAt: new Date().toISOString(),
-    result: formData.auditMode === 'EXTERNAL_REQUEST' ? 'REJECTED' : evaluateAuditResult(checklistSections),
+    result:
+      formData.auditMode === 'EXTERNAL_REQUEST'
+        ? 'REJECTED'
+        : manualAuditMode
+          ? formData.manualResult
+          : evaluateAuditResult(checklistSections),
     observations: formData.observations.trim(),
     photoBase64List: formData.photoBase64List,
+    reportPdfFileName: formData.reportPdfFileName || undefined,
+    reportPdfFileBase64: formData.reportPdfFileBase64 || undefined,
+    reportPdfFileUrl: formData.reportPdfFileUrl || undefined,
     checklistSections,
     unitKilometers: formData.unitKilometers,
     engineHours: formData.engineHours,
@@ -380,6 +417,7 @@ const resultClassMap: Record<'APPROVED' | 'REJECTED', string> = {
 
 const normalizeLegacyAuditRecord = (audit: AuditRecord): AuditRecord => {
   const checklistSections = Array.isArray(audit.checklistSections) ? audit.checklistSections : []
+  const hasValidResult = audit.result === 'APPROVED' || audit.result === 'REJECTED'
 
   return {
     ...audit,
@@ -387,7 +425,7 @@ const normalizeLegacyAuditRecord = (audit: AuditRecord): AuditRecord => {
     code: audit.code ?? 'AU-LEGACY',
     auditorName: audit.auditorName ?? 'Usuario no identificado',
     checklistSections,
-    result: evaluateAuditResult(checklistSections),
+    result: hasValidResult ? audit.result : evaluateAuditResult(checklistSections),
     unitKilometers: audit.unitKilometers ?? 0,
     engineHours: audit.engineHours ?? 0,
     hydroHours: audit.hydroHours ?? 0,

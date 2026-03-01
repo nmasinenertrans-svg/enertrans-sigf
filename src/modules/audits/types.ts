@@ -16,10 +16,14 @@ export interface AuditChecklistSectionDraft {
 export interface AuditFormData {
   unitId: string
   auditMode: 'INDEPENDENT' | 'EXTERNAL_REQUEST'
+  manualResult: 'APPROVED' | 'REJECTED'
   externalRequestId: string
   observations: string
   checklistSections: AuditChecklistSectionDraft[]
   photoBase64List: string[]
+  reportPdfFileName: string
+  reportPdfFileBase64: string
+  reportPdfFileUrl?: string
   unitKilometers: number
   engineHours: number
   hydroHours: number
@@ -34,6 +38,7 @@ export type AuditFormErrors = {
   unitKilometers?: string
   engineHours?: string
   hydroHours?: string
+  reportPdfFileBase64?: string
 }
 
 export interface AuditHistoryViewItem {

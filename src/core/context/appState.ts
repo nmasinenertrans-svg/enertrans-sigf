@@ -84,6 +84,7 @@ const defaultFeatureFlags: FeatureFlags = {
   showReportsModule: true,
   showInventoryModule: true,
   showUsersModule: true,
+  manualAuditMode: false,
 }
 
 const defaultPersistedState: PersistedAppState = {

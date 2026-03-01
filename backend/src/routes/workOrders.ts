@@ -5,6 +5,15 @@ import { formatCode, getNextSequence } from '../utils/sequence.js'
 
 const router = Router()
 
+const isManualAuditModeEnabled = async (): Promise<boolean> => {
+  const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
+  const featureFlags =
+    settings?.featureFlags && typeof settings.featureFlags === 'object' && !Array.isArray(settings.featureFlags)
+      ? (settings.featureFlags as Record<string, unknown>)
+      : {}
+  return featureFlags.manualAuditMode === true
+}
+
 const workOrderSchema = z.object({
   id: z.string().uuid().optional(),
   code: z.string().optional(),
@@ -59,7 +68,12 @@ router.patch('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
-  const pendingReaudit = parsed.data.status === 'CLOSED' ? true : parsed.data.pendingReaudit
+  const manualAuditMode = await isManualAuditModeEnabled()
+  const pendingReaudit = manualAuditMode
+    ? false
+    : parsed.data.status === 'CLOSED'
+      ? true
+      : parsed.data.pendingReaudit
 
   try {
     const item = await prisma.workOrder.update({
