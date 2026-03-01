@@ -9,6 +9,7 @@ import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
 import {
   formatNotificationDateTime,
+  hydrateReadNotificationsFromServer,
   NOTIFICATIONS_READ_UPDATED_EVENT,
   persistReadNotifications,
   readStoredNotifications,
@@ -46,6 +47,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
   }, [readNotificationIds])
 
   useEffect(() => {
+    void hydrateReadNotificationsFromServer()
     const syncReadIds = () => {
       setReadNotificationIds(readStoredNotifications())
     }

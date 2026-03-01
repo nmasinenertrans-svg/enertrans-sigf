@@ -1,5 +1,6 @@
 import { ROUTE_PATHS, buildFleetDetailPath } from '../routing/routePaths'
 import type { AuditRecord, FleetUnit, WorkOrder } from '../../types/domain'
+import { apiRequest, getAuthToken } from '../../services/api/apiClient'
 
 export type AppNotification = {
   id: string
@@ -12,6 +13,9 @@ export type AppNotification = {
 
 export const NOTIFICATIONS_READ_KEY = 'enertrans.notifications.read'
 export const NOTIFICATIONS_READ_UPDATED_EVENT = 'enertrans:notifications-read-updated'
+let isPersistingRemote = false
+let queuedRemoteIds: string[] | null = null
+let hydrationInFlight: Promise<string[] | null> | null = null
 
 const normalizeNotificationIds = (ids: string[]): string[] =>
   Array.from(new Set(ids.filter((item) => typeof item === 'string' && item.trim().length > 0)))
@@ -60,9 +64,75 @@ export const persistReadNotifications = (ids: string[], options: PersistReadOpti
     }
     window.localStorage.setItem(NOTIFICATIONS_READ_KEY, JSON.stringify(next))
     window.dispatchEvent(new CustomEvent(NOTIFICATIONS_READ_UPDATED_EVENT))
+    queueRemotePersist(next)
   } catch {
     // ignore
   }
+}
+
+const canSyncWithServer = () => {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return false
+  }
+  return Boolean(getAuthToken())
+}
+
+const queueRemotePersist = (ids: string[]) => {
+  if (!canSyncWithServer()) {
+    return
+  }
+  queuedRemoteIds = ids
+  if (isPersistingRemote) {
+    return
+  }
+  isPersistingRemote = true
+  void (async () => {
+    try {
+      while (queuedRemoteIds) {
+        const next = queuedRemoteIds
+        queuedRemoteIds = null
+        await apiRequest<{ ids: string[] }>('/settings/notifications-read', {
+          method: 'PUT',
+          body: { ids: next },
+          timeoutMs: 8000,
+        })
+      }
+    } catch {
+      // keep local state; retry on next local update
+    } finally {
+      isPersistingRemote = false
+    }
+  })()
+}
+
+export const hydrateReadNotificationsFromServer = async (): Promise<string[]> => {
+  if (!canSyncWithServer()) {
+    return readStoredNotifications()
+  }
+  if (!hydrationInFlight) {
+    hydrationInFlight = (async () => {
+      try {
+        const response = await apiRequest<{ ids: string[] }>('/settings/notifications-read', {
+          timeoutMs: 8000,
+        })
+        const local = readStoredNotifications()
+        const merged = normalizeNotificationIds([...local, ...response.ids])
+        if (!areSameIds(local, merged)) {
+          persistReadNotifications(merged, { merge: false })
+        }
+        return merged
+      } catch {
+        return null
+      } finally {
+        hydrationInFlight = null
+      }
+    })()
+  }
+  const resolved = await hydrationInFlight
+  return resolved ?? readStoredNotifications()
 }
 
 export const formatNotificationDateTime = (value?: string): string => {

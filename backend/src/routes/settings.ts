@@ -4,6 +4,7 @@ import { prisma } from '../db.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
+const NOTIFICATIONS_READ_BY_USER_KEY = '__notificationsReadByUser'
 
 const maintenanceSchema = z.object({
   enabled: z.boolean(),
@@ -38,6 +39,38 @@ const defaultFeatureFlags = {
   showReportsModule: true,
   showInventoryModule: true,
   showUsersModule: true,
+}
+
+const notificationsReadSchema = z.object({
+  ids: z.array(z.string()).max(5000),
+})
+
+const normalizeReadIds = (ids: unknown): string[] => {
+  if (!Array.isArray(ids)) {
+    return []
+  }
+  const safe = ids
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 5000)
+  return Array.from(new Set(safe))
+}
+
+const toFeatureFlagsRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+
+const readNotificationsByUser = (featureFlagsValue: unknown): Record<string, string[]> => {
+  const source = toFeatureFlagsRecord(featureFlagsValue)
+  const rawMap = source[NOTIFICATIONS_READ_BY_USER_KEY]
+  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
+    return {}
+  }
+
+  return Object.entries(rawMap as Record<string, unknown>).reduce<Record<string, string[]>>((acc, [userId, ids]) => {
+    acc[userId] = normalizeReadIds(ids)
+    return acc
+  }, {})
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -75,11 +108,66 @@ router.get('/maintenance', async (_req, res) => {
 
 router.get('/features', async (_req, res) => {
   const settings = await loadSettings()
-  const stored = (settings?.featureFlags as Record<string, boolean> | null) ?? {}
+  const raw = toFeatureFlagsRecord(settings?.featureFlags)
+  const stored = Object.keys(defaultFeatureFlags).reduce<Record<string, boolean>>((acc, key) => {
+    const value = raw[key]
+    if (typeof value === 'boolean') {
+      acc[key] = value
+    }
+    return acc
+  }, {})
   return res.json({
     ...defaultFeatureFlags,
     ...stored,
   })
+})
+
+router.get('/notifications-read', async (req: AuthenticatedRequest, res) => {
+  if (!req.userId) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
+  const settings = await loadSettings()
+  const notificationsByUser = readNotificationsByUser(settings?.featureFlags)
+  return res.json({
+    ids: notificationsByUser[req.userId] ?? [],
+  })
+})
+
+router.put('/notifications-read', async (req: AuthenticatedRequest, res) => {
+  if (!req.userId) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
+  const parsed = notificationsReadSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Datos invalidos.' })
+  }
+
+  try {
+    const settings = await loadSettings()
+    const featureFlags = toFeatureFlagsRecord(settings?.featureFlags)
+    const notificationsByUser = readNotificationsByUser(featureFlags)
+    notificationsByUser[req.userId] = normalizeReadIds(parsed.data.ids)
+
+    const nextFeatureFlags = {
+      ...featureFlags,
+      [NOTIFICATIONS_READ_BY_USER_KEY]: notificationsByUser,
+    }
+
+    await withRetry(() =>
+      prisma.appSettings.upsert({
+        where: { id: 'app' },
+        update: { featureFlags: nextFeatureFlags },
+        create: { id: 'app', featureFlags: nextFeatureFlags },
+      }),
+    )
+
+    return res.json({ ids: notificationsByUser[req.userId] })
+  } catch (error) {
+    console.error('Error guardando notificaciones leidas:', error)
+    return res.status(503).json({ message: 'No se pudo guardar la configuracion. Reintenta en 1 minuto.' })
+  }
 })
 
 router.put('/maintenance', async (req: AuthenticatedRequest, res) => {
