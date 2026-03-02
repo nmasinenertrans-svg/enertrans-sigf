@@ -229,6 +229,14 @@ export const AppLayout = () => {
       setGlobalLoading(true)
       try {
         const canViewUsers = canUser(currentUserRef.current ?? null, 'USERS', 'view')
+        const activeFlags = featureFlagsRef.current
+        const shouldSyncMaintenance = activeFlags.showMaintenanceModule
+        const shouldSyncAudits = activeFlags.showAuditsModule
+        const shouldSyncWorkOrders = activeFlags.showWorkOrdersModule
+        const shouldSyncRepairs = activeFlags.showRepairsModule
+        const shouldSyncExternalRequests = activeFlags.showExternalRequestsModule
+        const shouldSyncMovements = activeFlags.showMovementsModule
+        const shouldSyncInventory = activeFlags.showInventoryModule
         const [
           usersResponse,
           fleetResponse,
@@ -242,13 +250,13 @@ export const AppLayout = () => {
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
-          safeRequest<MaintenancePlan[]>('/maintenance'),
-          safeRequest<any[]>('/audits'),
-          safeRequest<WorkOrder[]>('/work-orders'),
-          safeRequest<RepairRecord[]>('/repairs'),
-          safeRequest<ExternalRequest[]>('/external-requests'),
-          safeRequest<FleetMovement[]>('/movements'),
-          safeRequest<InventoryItem[]>('/inventory'),
+          shouldSyncMaintenance ? safeRequest<MaintenancePlan[]>('/maintenance') : Promise.resolve(null),
+          shouldSyncAudits ? safeRequest<any[]>('/audits') : Promise.resolve(null),
+          shouldSyncWorkOrders ? safeRequest<WorkOrder[]>('/work-orders') : Promise.resolve(null),
+          shouldSyncRepairs ? safeRequest<RepairRecord[]>('/repairs') : Promise.resolve(null),
+          shouldSyncExternalRequests ? safeRequest<ExternalRequest[]>('/external-requests') : Promise.resolve(null),
+          shouldSyncMovements ? safeRequest<FleetMovement[]>('/movements') : Promise.resolve(null),
+          shouldSyncInventory ? safeRequest<InventoryItem[]>('/inventory') : Promise.resolve(null),
         ])
 
         const mappedAudits: AuditRecord[] | null = auditsResponse
