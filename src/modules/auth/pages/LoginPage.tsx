@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { authenticateUser } from '../../../core/auth/authService'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
-import { apiRequest, setAuthToken } from '../../../services/api/apiClient'
+import { ApiRequestError, apiRequest, setAuthToken } from '../../../services/api/apiClient'
 import logo from '../../../assets/enertrans-logo.png'
 import type { AppUser, PermissionOverride, UserPermissions, UserRole } from '../../../types/domain'
 import { userRoles } from '../../../types/domain'
@@ -148,11 +148,20 @@ export const LoginPage = () => {
         setIsSubmitting(false)
         return
       } catch (error) {
-        const message = String((error as Error)?.message ?? '')
-        if (message.includes('503')) {
+        if (error instanceof ApiRequestError && error.status === 503) {
           setErrorMessage(
             maintenanceStatus?.message || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.',
           )
+          setIsSubmitting(false)
+          return
+        }
+        if (error instanceof ApiRequestError && error.status === 401) {
+          setErrorMessage('Usuario o contrasena incorrectos.')
+          setIsSubmitting(false)
+          return
+        }
+        if (error instanceof ApiRequestError) {
+          setErrorMessage(`No se pudo autenticar en el servidor (${error.status}). Verifica backend/API y volve a intentar.`)
           setIsSubmitting(false)
           return
         }
