@@ -191,4 +191,47 @@ describe('offline sync hardening', () => {
       }),
     )
   })
+
+  it('keeps audit item in queue on 422 for manual review', async () => {
+    const item = {
+      id: 'audit.create.422',
+      type: 'audit.create',
+      payload: {
+        id: 'a-422',
+        auditKind: 'AUDIT',
+        unitId: 'u-1',
+        auditorUserId: 'usr-1',
+        auditorName: 'Tester',
+        performedAt: new Date().toISOString(),
+        result: 'APPROVED',
+        observations: 'ok',
+        photoBase64List: [],
+        checklistSections: [],
+      },
+      createdAt: new Date().toISOString(),
+      attemptCount: 0,
+    }
+    queueMocks.getQueueItems
+      .mockResolvedValueOnce([item])
+      .mockResolvedValueOnce([{ ...item, attemptCount: 1, blocked: false }])
+    apiMocks.apiRequest.mockRejectedValue(new apiMocks.ApiRequestError({ status: 422, responseBody: 'Validation' }))
+
+    const { syncQueue } = await importSync()
+    await syncQueue()
+
+    expect(queueMocks.removeQueueItem).not.toHaveBeenCalledWith(item.id)
+    expect(queueMocks.updateQueueItem).toHaveBeenCalledWith(
+      item.id,
+      expect.objectContaining({
+        attemptCount: 1,
+      }),
+    )
+    expect(telemetryMocks.recordSyncTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'sync.failure',
+        itemType: item.type,
+        statusCode: 422,
+      }),
+    )
+  })
 })

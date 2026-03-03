@@ -224,6 +224,13 @@ const classifySyncError = (item: OfflineQueueItem, error: unknown) => {
     return { shouldDrop: true, message: `409 conflicto: auditoria ya existente en servidor.` }
   }
 
+  if (item.type === 'audit.create' && NON_RETRYABLE_STATUS_CODES.has(statusCode)) {
+    return {
+      shouldDrop: false,
+      message: `${statusCode} error en auditoria. Se conserva en cola para revision y reintento manual.`,
+    }
+  }
+
   if (NON_RETRYABLE_STATUS_CODES.has(statusCode)) {
     return { shouldDrop: true, message: `${statusCode} error no recuperable para ${item.type}.` }
   }
