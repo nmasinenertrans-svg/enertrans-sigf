@@ -548,18 +548,24 @@ export const AuditsPage = () => {
       }).then(async () => {
         const queueItems = await getQueueItems().catch(() => [])
         const stillQueued = queueItems.some((item) => item.id === `audit.create.${createdAudit.id}`)
+        const onlineNow = typeof navigator !== 'undefined' && navigator.onLine
         setAudits((previousAudits) =>
           previousAudits.map((audit) =>
             audit.id === createdAudit.id
               ? {
                   ...audit,
-                  syncState: stillQueued ? ('PENDING' as const) : ('SYNCED' as const),
+                  syncState: stillQueued ? (onlineNow ? ('ERROR' as const) : ('PENDING' as const)) : ('SYNCED' as const),
+                  syncError: stillQueued && onlineNow ? 'No confirmada en servidor.' : undefined,
                 }
               : audit,
           ),
         )
         if (stillQueued) {
-          setAppError('Auditoria guardada localmente. Pendiente de sincronizacion.')
+          setAppError(
+            onlineNow
+              ? 'Auditoria NO confirmada en servidor. Quedo local en este dispositivo.'
+              : 'Auditoria guardada localmente. Pendiente de sincronizacion.',
+          )
         } else {
           await refreshAuditsFromServer()
         }
@@ -608,18 +614,24 @@ export const AuditsPage = () => {
       }).then(async () => {
         const queueItems = await getQueueItems().catch(() => [])
         const stillQueued = queueItems.some((item) => item.id === `audit.create.${createdAudit.id}`)
+        const onlineNow = typeof navigator !== 'undefined' && navigator.onLine
         setAudits((previousAudits) =>
           previousAudits.map((audit) =>
             audit.id === createdAudit.id
               ? {
                   ...audit,
-                  syncState: stillQueued ? ('PENDING' as const) : ('SYNCED' as const),
+                  syncState: stillQueued ? (onlineNow ? ('ERROR' as const) : ('PENDING' as const)) : ('SYNCED' as const),
+                  syncError: stillQueued && onlineNow ? 'No confirmada en servidor.' : undefined,
                 }
               : audit,
           ),
         )
         if (stillQueued) {
-          setAppError('Auditoria guardada localmente. Pendiente de sincronizacion.')
+          setAppError(
+            onlineNow
+              ? 'Auditoria NO confirmada en servidor. Quedo local en este dispositivo.'
+              : 'Auditoria guardada localmente. Pendiente de sincronizacion.',
+          )
         } else {
           await refreshAuditsFromServer()
         }
