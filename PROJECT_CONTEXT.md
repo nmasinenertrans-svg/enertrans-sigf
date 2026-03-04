@@ -242,6 +242,14 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Permite dejar dashboard en modo solo lectura visual sin navegacion interactiva.
   Riesgo residual:
   - Los modulos destino siguen operativos; solo se bloquea la navegacion directa desde dashboard.
+- Fecha: 2026-03-03
+  Cambio: Endpoint forense backend para trazabilidad de auditorias en produccion.
+  Archivos:
+  - `backend/src/routes/audits.ts`
+  Riesgo mitigado:
+  - Permite verificar rapidamente si una auditoria existe en servidor por unidad/auditor/rango temporal.
+  Riesgo residual:
+  - Si una auditoria nunca llego al backend por fallo de red previo, el endpoint no puede recuperarla; solo confirma ausencia.
 
 ## 9) Riesgos abiertos (a seguir)
 

@@ -1,5 +1,6 @@
-﻿import { Router } from 'express'
+import { Router } from 'express'
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 
@@ -22,6 +23,15 @@ const auditSchema = z.object({
   hydroHours: z.coerce.number().int().nonnegative().optional().default(0),
   workOrderId: z.string().uuid().optional(),
   workOrderCode: z.string().optional(),
+})
+
+const forensicSearchSchema = z.object({
+  unitId: z.string().optional(),
+  unitCode: z.string().optional(),
+  auditor: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(500).optional(),
 })
 
 const createDeviationId = (): string => {
@@ -94,6 +104,91 @@ const isManualAuditModeEnabled = async (): Promise<boolean> => {
 router.get('/', async (_req, res) => {
   const items = await prisma.auditRecord.findMany({ orderBy: { createdAt: 'desc' } })
   return res.json(items)
+})
+
+router.get('/forensics/search', async (req, res) => {
+  const parsed = forensicSearchSchema.safeParse(req.query)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Parametros invalidos.' })
+  }
+
+  const { unitId, unitCode, auditor, dateFrom, dateTo, limit } = parsed.data
+  const where: Prisma.AuditRecordWhereInput = {}
+
+  if (unitId?.trim()) {
+    where.unitId = unitId.trim()
+  }
+
+  if (unitCode?.trim()) {
+    const matchingUnits = await prisma.fleetUnit.findMany({
+      where: {
+        internalCode: {
+          contains: unitCode.trim(),
+          mode: 'insensitive',
+        },
+      },
+      select: { id: true },
+      take: 100,
+    })
+    const ids = matchingUnits.map((item) => item.id)
+    if (ids.length === 0) {
+      return res.json([])
+    }
+    where.unitId = where.unitId ? where.unitId : { in: ids }
+  }
+
+  if (auditor?.trim()) {
+    where.auditorName = {
+      contains: auditor.trim(),
+      mode: 'insensitive',
+    }
+  }
+
+  if (dateFrom || dateTo) {
+    where.performedAt = {}
+    if (dateFrom) {
+      const from = new Date(dateFrom)
+      if (!Number.isNaN(from.getTime())) {
+        where.performedAt.gte = from
+      }
+    }
+    if (dateTo) {
+      const to = new Date(dateTo)
+      if (!Number.isNaN(to.getTime())) {
+        where.performedAt.lte = to
+      }
+    }
+  }
+
+  const items = await prisma.auditRecord.findMany({
+    where,
+    include: {
+      unit: {
+        select: {
+          id: true,
+          internalCode: true,
+          ownerCompany: true,
+        },
+      },
+    },
+    orderBy: { performedAt: 'desc' },
+    take: limit ?? 200,
+  })
+
+  return res.json(
+    items.map((item) => ({
+      id: item.id,
+      code: item.code,
+      performedAt: item.performedAt,
+      result: item.result,
+      auditorName: item.auditorName,
+      unitId: item.unitId,
+      unitInternalCode: item.unit?.internalCode ?? null,
+      ownerCompany: item.unit?.ownerCompany ?? null,
+      observations: item.observations,
+      hasPhotos: Array.isArray(item.photoUrls) && item.photoUrls.length > 0,
+    })),
+  )
 })
 
 router.post('/', async (req, res) => {
@@ -236,3 +331,5 @@ router.delete('/:id', async (req, res) => {
 })
 
 export default router
+
+
