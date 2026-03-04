@@ -369,6 +369,32 @@ export const AuditsPage = () => {
     }))
   }
 
+  const mapServerAuditToClient = (audit: any) => ({
+    id: audit.id,
+    code: audit.code,
+    auditKind: audit.auditKind ?? 'AUDIT',
+    unitId: audit.unitId,
+    auditorUserId: audit.auditorUserId,
+    auditorName: audit.auditorName,
+    performedAt: audit.performedAt,
+    result: audit.result,
+    observations: audit.observations ?? '',
+    photoBase64List: Array.isArray(audit.photoUrls) ? audit.photoUrls : [],
+    reportPdfFileName:
+      typeof audit.checklist?.meta?.reportPdfFileName === 'string'
+        ? audit.checklist.meta.reportPdfFileName
+        : undefined,
+    reportPdfFileUrl:
+      typeof audit.checklist?.meta?.reportPdfFileUrl === 'string'
+        ? audit.checklist.meta.reportPdfFileUrl
+        : undefined,
+    checklistSections: Array.isArray(audit.checklist?.sections) ? audit.checklist.sections : [],
+    unitKilometers: audit.unitKilometers ?? 0,
+    engineHours: audit.engineHours ?? 0,
+    hydroHours: audit.hydroHours ?? 0,
+    syncState: 'SYNCED' as const,
+  })
+
   const refreshAuditsFromServer = async () => {
     if (typeof navigator === 'undefined' || !navigator.onLine) {
       return
@@ -376,31 +402,7 @@ export const AuditsPage = () => {
 
     try {
       const auditsResponse = await apiRequest<any[]>('/audits')
-      const mappedAudits = (auditsResponse ?? []).map((audit) => ({
-        id: audit.id,
-        code: audit.code,
-        auditKind: audit.auditKind ?? 'AUDIT',
-        unitId: audit.unitId,
-        auditorUserId: audit.auditorUserId,
-        auditorName: audit.auditorName,
-        performedAt: audit.performedAt,
-        result: audit.result,
-        observations: audit.observations ?? '',
-        photoBase64List: Array.isArray(audit.photoUrls) ? audit.photoUrls : [],
-        reportPdfFileName:
-          typeof audit.checklist?.meta?.reportPdfFileName === 'string'
-            ? audit.checklist.meta.reportPdfFileName
-            : undefined,
-        reportPdfFileUrl:
-          typeof audit.checklist?.meta?.reportPdfFileUrl === 'string'
-            ? audit.checklist.meta.reportPdfFileUrl
-            : undefined,
-        checklistSections: Array.isArray(audit.checklist?.sections) ? audit.checklist.sections : [],
-        unitKilometers: audit.unitKilometers ?? 0,
-        engineHours: audit.engineHours ?? 0,
-        hydroHours: audit.hydroHours ?? 0,
-        syncState: 'SYNCED' as const,
-      }))
+      const mappedAudits = (auditsResponse ?? []).map((audit) => mapServerAuditToClient(audit))
       const remoteIds = new Set(mappedAudits.map((audit) => audit.id))
       setAudits((previousAudits) => {
         const localPendingOrError = previousAudits.filter(
@@ -530,6 +532,54 @@ export const AuditsPage = () => {
     const workOrderPayload = !manualAuditMode && pendingWorkOrder
       ? { workOrderId: pendingWorkOrder.id, workOrderCode: pendingWorkOrder.code }
       : {}
+
+    const isOnlineNow = typeof navigator !== 'undefined' && navigator.onLine
+    if (isOnlineNow) {
+      const onlinePayload = {
+        id: createdAudit.id,
+        auditKind: createdAudit.auditKind,
+        unitId: createdAudit.unitId,
+        auditorUserId: createdAudit.auditorUserId,
+        auditorName: createdAudit.auditorName,
+        performedAt: createdAudit.performedAt,
+        result: createdAudit.result,
+        observations: createdAudit.observations,
+        photoUrls: createdAudit.photoBase64List,
+        checklist: {
+          sections: createdAudit.checklistSections,
+          meta: createdAudit.reportPdfFileUrl
+            ? {
+                reportPdfFileName: createdAudit.reportPdfFileName,
+                reportPdfFileUrl: createdAudit.reportPdfFileUrl,
+              }
+            : undefined,
+        },
+        unitKilometers: createdAudit.unitKilometers,
+        engineHours: createdAudit.engineHours,
+        hydroHours: createdAudit.hydroHours,
+        ...workOrderPayload,
+      }
+
+      try {
+        const persistedAudit = await apiRequest<any>('/audits', {
+          method: 'POST',
+          body: onlinePayload,
+        })
+
+        const syncedAudit = mapServerAuditToClient(persistedAudit)
+        setAudits((previousAudits) => [syncedAudit, ...previousAudits.filter((audit) => audit.id !== syncedAudit.id)])
+        clearDraft()
+        if (isFormOpen) {
+          setIsFormOpen(false)
+          navigate(ROUTE_PATHS.audits, { replace: true })
+        }
+        resetAuditForm()
+        await refreshAuditsFromServer()
+        return
+      } catch {
+        setAppError('No se pudo confirmar la auditoria en servidor. Se guardara localmente hasta reintentar.')
+      }
+    }
 
     if (!manualAuditMode && createdAudit.result === 'REJECTED') {
       const createdWorkOrder = createWorkOrderFromAudit(createdAudit, unitCode)
