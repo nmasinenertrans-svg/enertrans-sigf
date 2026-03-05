@@ -278,6 +278,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Reduce errores operativos y tiempo en mobile al elegir unidad entre flotas grandes.
   Riesgo residual:
   - El filtro usa coincidencia por texto; si se requiere exactitud estricta por dominio, podria agregarse modo de busqueda exacta.
+- Fecha: 2026-03-05
+  Cambio: Alta de OT forzada a estado `ABIERTA` sin selector manual de estado en formulario.
+  Archivos:
+  - `src/modules/workOrders/components/WorkOrderForm.tsx`
+  - `src/modules/workOrders/services/workOrdersService.ts`
+  - `src/modules/workOrders/pages/WorkOrdersPage.tsx`
+  - `backend/src/routes/workOrders.ts`
+  Riesgo mitigado:
+  - Evita puentear flujo operativo creando OT nuevas como `EN PROCESO` o `CERRADA`.
+  Riesgo residual:
+  - Cambios de estado deben hacerse por acciones operativas posteriores (ej. cierre), no al alta.
 
 ## 9) Riesgos abiertos (a seguir)
 

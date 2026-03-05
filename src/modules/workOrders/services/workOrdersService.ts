@@ -122,7 +122,7 @@ export const validateWorkOrderFormData = (
 export const toWorkOrder = (formData: WorkOrderFormData, unitCode: string): WorkOrder => ({
   id: createId(),
   unitId: formData.unitId,
-  status: formData.status,
+  status: 'OPEN',
   createdAt: new Date().toISOString(),
   taskList: buildTaskListFromInput(formData.tasksInput),
   spareParts: parseListInput(formData.sparePartsInput),

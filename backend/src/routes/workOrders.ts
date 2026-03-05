@@ -19,7 +19,7 @@ const workOrderSchema = z.object({
   code: z.string().optional(),
   pendingReaudit: z.boolean().optional().default(false),
   unitId: z.string().min(1),
-  status: z.enum(['OPEN', 'IN_PROGRESS', 'CLOSED']),
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'CLOSED']).optional().default('OPEN'),
   taskList: z.array(z.any()).optional().default([]),
   spareParts: z.array(z.string()).optional().default([]),
   laborDetail: z.string().optional().default(''),
@@ -50,6 +50,7 @@ router.post('/', async (req, res) => {
     const item = await prisma.workOrder.create({
       data: {
         ...parsed.data,
+        status: 'OPEN',
         code,
       },
     })

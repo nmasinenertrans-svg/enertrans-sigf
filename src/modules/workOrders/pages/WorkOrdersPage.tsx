@@ -341,6 +341,7 @@ export const WorkOrdersPage = () => {
       }
 
       const updatedWorkOrder = mergeWorkOrderFromForm(selectedWorkOrder, formData)
+      updatedWorkOrder.status = selectedWorkOrder.status
       const nextWorkOrders = workOrders.map((workOrder) =>
         workOrder.id === editingWorkOrderId ? updatedWorkOrder : workOrder,
       )
