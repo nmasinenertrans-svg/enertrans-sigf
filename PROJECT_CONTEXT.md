@@ -1,6 +1,6 @@
 # ENERTRANS SIGF - Contexto Vivo del Proyecto
 
-Ultima actualizacion: 2026-02-28
+Ultima actualizacion: 2026-03-05
 Responsable de actualizacion: Codex (este chat)
 Objetivo: que cualquier dev (o nuevo chat) tenga contexto operativo completo sin depender del historial conversacional.
 
@@ -250,6 +250,18 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Permite verificar rapidamente si una auditoria existe en servidor por unidad/auditor/rango temporal.
   Riesgo residual:
   - Si una auditoria nunca llego al backend por fallo de red previo, el endpoint no puede recuperarla; solo confirma ausencia.
+- Fecha: 2026-03-05
+  Cambio: Registro y visualizacion de ultimo login por usuario en panel DEV de usuarios.
+  Archivos:
+  - `backend/src/routes/auth.ts`
+  - `backend/src/routes/users.ts`
+  - `src/types/domain.ts`
+  - `src/modules/auth/pages/LoginPage.tsx`
+  - `src/modules/users/pages/UsersPage.tsx`
+  Riesgo mitigado:
+  - Permite auditar actividad reciente de cuentas y detectar usuarios inactivos o accesos recientes sin depender de logs externos.
+  Riesgo residual:
+  - El dato se guarda en `AppSettings.featureFlags` (mapa por usuario), no como columna dedicada en `User`; si en el futuro se requiere analitica avanzada conviene migrarlo a tabla propia.
 
 ## 9) Riesgos abiertos (a seguir)
 

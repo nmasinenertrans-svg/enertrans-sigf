@@ -42,6 +42,20 @@ const createUserId = (): string => {
   return `user-${Date.now()}`
 }
 
+const formatLastLogin = (value?: string): string => {
+  if (!value) {
+    return 'Sin registro'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'Sin registro'
+  }
+  return new Intl.DateTimeFormat('es-AR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date)
+}
+
 export const UsersPage = () => {
   const {
     state: { users },
@@ -447,6 +461,7 @@ export const UsersPage = () => {
               <p className="text-sm font-semibold text-slate-900">{user.fullName}</p>
               <p className="text-xs text-slate-600">{user.username}</p>
               <p className="text-xs text-slate-500">Rol: {user.role}</p>
+              <p className="text-xs text-slate-500">Ultimo login: {formatLastLogin(user.lastLoginAt)}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"

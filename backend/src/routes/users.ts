@@ -4,6 +4,25 @@ import { prisma } from '../db.js'
 import { hashPassword } from '../utils/password.js'
 
 const router = Router()
+const LAST_LOGIN_BY_USER_KEY = '__lastLoginByUser'
+
+const toFeatureFlagsRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+
+const readLastLoginByUser = (featureFlagsValue: unknown): Record<string, string> => {
+  const source = toFeatureFlagsRecord(featureFlagsValue)
+  const rawMap = source[LAST_LOGIN_BY_USER_KEY]
+  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
+    return {}
+  }
+
+  return Object.entries(rawMap as Record<string, unknown>).reduce<Record<string, string>>((acc, [userId, value]) => {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      acc[userId] = value
+    }
+    return acc
+  }, {})
+}
 
 const createUserSchema = z.object({
   username: z.string().min(1),
@@ -25,20 +44,33 @@ const updateUserSchema = z.object({
 })
 
 router.get('/', async (_req, res) => {
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      username: true,
-      fullName: true,
-      role: true,
-      avatarUrl: true,
-      permissions: true,
-      permissionOverrides: true,
-      createdAt: true,
-    },
-  })
-  return res.json(users)
+  const [users, settings] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        role: true,
+        avatarUrl: true,
+        permissions: true,
+        permissionOverrides: true,
+        createdAt: true,
+      },
+    }),
+    prisma.appSettings.findUnique({
+      where: { id: 'app' },
+      select: { featureFlags: true },
+    }),
+  ])
+
+  const lastLogins = readLastLoginByUser(settings?.featureFlags)
+  return res.json(
+    users.map((user) => ({
+      ...user,
+      lastLoginAt: lastLogins[user.id],
+    })),
+  )
 })
 
 router.post('/', async (req, res) => {

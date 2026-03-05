@@ -83,6 +83,7 @@ export interface AppUser {
   role: UserRole
   password: string
   avatarUrl?: string
+  lastLoginAt?: string
   permissions?: UserPermissions
   permissionOverrides?: PermissionOverride[]
 }
