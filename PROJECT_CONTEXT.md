@@ -262,6 +262,14 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Permite auditar actividad reciente de cuentas y detectar usuarios inactivos o accesos recientes sin depender de logs externos.
   Riesgo residual:
   - El dato se guarda en `AppSettings.featureFlags` (mapa por usuario), no como columna dedicada en `User`; si en el futuro se requiere analitica avanzada conviene migrarlo a tabla propia.
+- Fecha: 2026-03-05
+  Cambio: Se habilita la coexistencia de multiples OT abiertas por la misma unidad cuando la auditoria resulta RECHAZADA.
+  Archivos:
+  - `backend/src/routes/audits.ts`
+  Riesgo mitigado:
+  - Evita bloquear OT independientes para un dominio que ya tenga una OT abierta por otra auditoria.
+  Riesgo residual:
+  - Puede aumentar la cantidad de OT abiertas en paralelo para una unidad; la operacion debe gestionar prioridad y cierre para evitar dispersion.
 
 ## 9) Riesgos abiertos (a seguir)
 

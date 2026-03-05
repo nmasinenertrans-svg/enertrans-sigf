@@ -250,30 +250,22 @@ router.post('/', async (req, res) => {
     })
 
     if (item.result === 'REJECTED') {
-      const openWorkOrder = await prisma.workOrder.findFirst({
-        where: {
-          unitId: item.unitId,
-          status: { in: ['OPEN', 'IN_PROGRESS'] },
-        },
-      })
-
-        if (!manualAuditMode && !openWorkOrder) {
-          const workOrderCode =
-            parsed.data.workOrderCode ?? formatCode('OT', await getNextSequence('workOrder'), unitCode)
-          await prisma.workOrder.create({
-            data: {
-              id: parsed.data.workOrderId,
-              code: workOrderCode,
-              pendingReaudit: false,
-              unitId: item.unitId,
-              status: 'OPEN',
-              taskList: extractBadItems(parsed.data.checklist),
-              spareParts: [],
-              laborDetail: `Desvios detectados en auditoria ${code}`,
-              linkedInventorySkuList: [],
-            },
-          })
-        }
+      if (!manualAuditMode) {
+        const workOrderCode = parsed.data.workOrderCode ?? formatCode('OT', await getNextSequence('workOrder'), unitCode)
+        await prisma.workOrder.create({
+          data: {
+            id: parsed.data.workOrderId,
+            code: workOrderCode,
+            pendingReaudit: false,
+            unitId: item.unitId,
+            status: 'OPEN',
+            taskList: extractBadItems(parsed.data.checklist),
+            spareParts: [],
+            laborDetail: `Desvios detectados en auditoria ${code}`,
+            linkedInventorySkuList: [],
+          },
+        })
+      }
 
       await prisma.fleetUnit.update({
         where: { id: item.unitId },
