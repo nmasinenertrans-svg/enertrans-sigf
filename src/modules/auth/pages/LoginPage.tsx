@@ -16,6 +16,7 @@ type LoginResponseUser = {
   role: string
   avatarUrl?: string
   lastLoginAt?: string
+  lastActivityAt?: string
   permissions?: UserPermissions
   permissionOverrides?: PermissionOverride[]
 }
@@ -48,6 +49,7 @@ const toStoredUser = (value: unknown): AppUser | null => {
     password: typeof candidate.password === 'string' ? candidate.password : '',
     avatarUrl: typeof candidate.avatarUrl === 'string' ? candidate.avatarUrl : undefined,
     lastLoginAt: typeof candidate.lastLoginAt === 'string' ? candidate.lastLoginAt : undefined,
+    lastActivityAt: typeof candidate.lastActivityAt === 'string' ? candidate.lastActivityAt : undefined,
     permissions: candidate.permissions,
     permissionOverrides: candidate.permissionOverrides,
   }
@@ -141,6 +143,7 @@ export const LoginPage = () => {
           role,
           avatarUrl: response.user.avatarUrl,
           lastLoginAt: response.user.lastLoginAt,
+          lastActivityAt: response.user.lastActivityAt,
           password,
           permissions: response.user.permissions,
           permissionOverrides: response.user.permissionOverrides,

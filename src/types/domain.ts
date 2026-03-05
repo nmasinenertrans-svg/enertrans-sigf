@@ -84,6 +84,7 @@ export interface AppUser {
   password: string
   avatarUrl?: string
   lastLoginAt?: string
+  lastActivityAt?: string
   permissions?: UserPermissions
   permissionOverrides?: PermissionOverride[]
 }

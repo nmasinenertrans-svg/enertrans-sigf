@@ -289,6 +289,19 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita puentear flujo operativo creando OT nuevas como `EN PROCESO` o `CERRADA`.
   Riesgo residual:
   - Cambios de estado deben hacerse por acciones operativas posteriores (ej. cierre), no al alta.
+- Fecha: 2026-03-05
+  Cambio: Trazabilidad de uso por usuario con `ultimo acceso` (actividad) ademas de `ultimo login`.
+  Archivos:
+  - `backend/src/middleware/auth.ts`
+  - `backend/src/routes/auth.ts`
+  - `backend/src/routes/users.ts`
+  - `src/types/domain.ts`
+  - `src/modules/auth/pages/LoginPage.tsx`
+  - `src/modules/users/pages/UsersPage.tsx`
+  Riesgo mitigado:
+  - Evita falsos "Sin registro" en usuarios que no reloguean pero usan la app con sesion activa.
+  Riesgo residual:
+  - La actividad se actualiza con throttle (5 min) para no sobrecargar DB; no representa segundos exactos.
 
 ## 9) Riesgos abiertos (a seguir)
 

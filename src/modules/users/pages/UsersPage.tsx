@@ -56,6 +56,31 @@ const formatLastLogin = (value?: string): string => {
   }).format(date)
 }
 
+const resolveAccessTimestamp = (lastActivityAt?: string, lastLoginAt?: string): string | undefined =>
+  lastActivityAt || lastLoginAt
+
+const getAccessStateLabel = (timestamp?: string): { label: string; className: string } => {
+  if (!timestamp) {
+    return { label: 'Sin actividad', className: 'text-slate-500' }
+  }
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) {
+    return { label: 'Sin actividad', className: 'text-slate-500' }
+  }
+
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const oneDay = 24 * 60 * 60 * 1000
+
+  if (diffMs < oneDay) {
+    return { label: 'Activo hoy', className: 'text-emerald-700' }
+  }
+  if (diffMs < 7 * oneDay) {
+    return { label: 'Activo reciente', className: 'text-amber-700' }
+  }
+  return { label: 'Inactivo', className: 'text-rose-700' }
+}
+
 export const UsersPage = () => {
   const {
     state: { users },
@@ -458,10 +483,19 @@ export const UsersPage = () => {
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {users.map((user) => (
             <div key={user.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">{user.fullName}</p>
-              <p className="text-xs text-slate-600">{user.username}</p>
-              <p className="text-xs text-slate-500">Rol: {user.role}</p>
-              <p className="text-xs text-slate-500">Ultimo login: {formatLastLogin(user.lastLoginAt)}</p>
+              {(() => {
+                const lastAccess = resolveAccessTimestamp(user.lastActivityAt, user.lastLoginAt)
+                const accessState = getAccessStateLabel(lastAccess)
+                return (
+                  <>
+                    <p className="text-sm font-semibold text-slate-900">{user.fullName}</p>
+                    <p className="text-xs text-slate-600">{user.username}</p>
+                    <p className="text-xs text-slate-500">Rol: {user.role}</p>
+                    <p className="text-xs text-slate-500">Ultimo acceso: {formatLastLogin(lastAccess)}</p>
+                    <p className={`text-xs font-semibold ${accessState.className}`}>Uso: {accessState.label}</p>
+                  </>
+                )
+              })()}
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"

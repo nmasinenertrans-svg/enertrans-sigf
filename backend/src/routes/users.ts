@@ -5,6 +5,7 @@ import { hashPassword } from '../utils/password.js'
 
 const router = Router()
 const LAST_LOGIN_BY_USER_KEY = '__lastLoginByUser'
+const LAST_ACTIVITY_BY_USER_KEY = '__lastActivityByUser'
 
 const toFeatureFlagsRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -12,6 +13,21 @@ const toFeatureFlagsRecord = (value: unknown): Record<string, unknown> =>
 const readLastLoginByUser = (featureFlagsValue: unknown): Record<string, string> => {
   const source = toFeatureFlagsRecord(featureFlagsValue)
   const rawMap = source[LAST_LOGIN_BY_USER_KEY]
+  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
+    return {}
+  }
+
+  return Object.entries(rawMap as Record<string, unknown>).reduce<Record<string, string>>((acc, [userId, value]) => {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      acc[userId] = value
+    }
+    return acc
+  }, {})
+}
+
+const readLastActivityByUser = (featureFlagsValue: unknown): Record<string, string> => {
+  const source = toFeatureFlagsRecord(featureFlagsValue)
+  const rawMap = source[LAST_ACTIVITY_BY_USER_KEY]
   if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
     return {}
   }
@@ -65,10 +81,12 @@ router.get('/', async (_req, res) => {
   ])
 
   const lastLogins = readLastLoginByUser(settings?.featureFlags)
+  const lastActivity = readLastActivityByUser(settings?.featureFlags)
   return res.json(
     users.map((user) => ({
       ...user,
       lastLoginAt: lastLogins[user.id],
+      lastActivityAt: lastActivity[user.id],
     })),
   )
 })

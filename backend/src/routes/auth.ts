@@ -6,6 +6,7 @@ import { verifyPassword } from '../utils/password.js'
 
 const router = Router()
 const LAST_LOGIN_BY_USER_KEY = '__lastLoginByUser'
+const LAST_ACTIVITY_BY_USER_KEY = '__lastActivityByUser'
 
 const toFeatureFlagsRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -13,6 +14,21 @@ const toFeatureFlagsRecord = (value: unknown): Record<string, unknown> =>
 const readLastLoginByUser = (featureFlagsValue: unknown): Record<string, string> => {
   const source = toFeatureFlagsRecord(featureFlagsValue)
   const rawMap = source[LAST_LOGIN_BY_USER_KEY]
+  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
+    return {}
+  }
+
+  return Object.entries(rawMap as Record<string, unknown>).reduce<Record<string, string>>((acc, [userId, value]) => {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      acc[userId] = value
+    }
+    return acc
+  }, {})
+}
+
+const readLastActivityByUser = (featureFlagsValue: unknown): Record<string, string> => {
+  const source = toFeatureFlagsRecord(featureFlagsValue)
+  const rawMap = source[LAST_ACTIVITY_BY_USER_KEY]
   if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
     return {}
   }
@@ -79,10 +95,15 @@ router.post('/login', async (req, res) => {
   try {
     const featureFlags = toFeatureFlagsRecord(settings?.featureFlags)
     const lastLogins = readLastLoginByUser(featureFlags)
+    const lastActivityByUser = readLastActivityByUser(featureFlags)
     const nextFeatureFlags = {
       ...featureFlags,
       [LAST_LOGIN_BY_USER_KEY]: {
         ...lastLogins,
+        [user.id]: lastLoginAt,
+      },
+      [LAST_ACTIVITY_BY_USER_KEY]: {
+        ...lastActivityByUser,
         [user.id]: lastLoginAt,
       },
     }
