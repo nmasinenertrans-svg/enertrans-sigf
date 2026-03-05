@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react'
+﻿import { useMemo, useState, type ReactNode } from 'react'
 import type { FleetUnit, InventoryItem, WorkOrderStatus } from '../../../types/domain'
 import { workOrderStatuses } from '../../../types/domain'
 import type { WorkOrderFormData, WorkOrderFormErrors, WorkOrderFormField } from '../types'
@@ -41,8 +41,21 @@ export const WorkOrderForm = ({
   onFieldChange,
   onSubmit,
   onCancelEdit,
-}: WorkOrderFormProps) => (
-  <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+}: WorkOrderFormProps) => {
+  const [unitSearch, setUnitSearch] = useState('')
+  const filteredUnits = useMemo(() => {
+    const query = unitSearch.trim().toLowerCase()
+    if (!query) {
+      return fleetUnits
+    }
+    return fleetUnits.filter((unit) => {
+      const haystack = [unit.internalCode, unit.ownerCompany, unit.clientName, unit.brand, unit.model].join(' ').toLowerCase()
+      return haystack.includes(query)
+    })
+  }, [fleetUnits, unitSearch])
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
     <header>
       <h3 className="text-lg font-bold text-slate-900">{isEditing ? 'Editar OT' : 'Crear OT'}</h3>
       <p className="mt-1 text-sm text-slate-600">Asociá unidad, tareas, repuestos, mano de obra y vinculación con inventario.</p>
@@ -56,14 +69,23 @@ export const WorkOrderForm = ({
       }}
     >
       <FormRow label="Unidad" errorMessage={errors.unitId}>
+        <input
+          className={inputClassName}
+          value={unitSearch}
+          onChange={(event) => setUnitSearch(event.target.value)}
+          placeholder="Buscar por patente/codigo, cliente, marca o modelo..."
+        />
         <select className={inputClassName} value={formData.unitId} onChange={(event) => onFieldChange('unitId', event.target.value)}>
           <option value="">Seleccionar unidad</option>
-          {fleetUnits.map((unit) => (
+          {filteredUnits.map((unit) => (
             <option key={unit.id} value={unit.id}>
               {unit.internalCode} - {unit.ownerCompany}
             </option>
           ))}
         </select>
+        {unitSearch.trim() && filteredUnits.length === 0 ? (
+          <span className="text-xs font-semibold text-slate-500">No hay unidades que coincidan con la busqueda.</span>
+        ) : null}
       </FormRow>
 
       <FormRow label="Estado">
@@ -158,5 +180,6 @@ export const WorkOrderForm = ({
         </button>
       </div>
     </form>
-  </section>
-)
+    </section>
+  )
+}

@@ -270,6 +270,14 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita bloquear OT independientes para un dominio que ya tenga una OT abierta por otra auditoria.
   Riesgo residual:
   - Puede aumentar la cantidad de OT abiertas en paralelo para una unidad; la operacion debe gestionar prioridad y cierre para evitar dispersion.
+- Fecha: 2026-03-05
+  Cambio: Buscador en selector de unidad dentro de formulario de OT (patente/codigo, cliente, marca y modelo).
+  Archivos:
+  - `src/modules/workOrders/components/WorkOrderForm.tsx`
+  Riesgo mitigado:
+  - Reduce errores operativos y tiempo en mobile al elegir unidad entre flotas grandes.
+  Riesgo residual:
+  - El filtro usa coincidencia por texto; si se requiere exactitud estricta por dominio, podria agregarse modo de busqueda exacta.
 
 ## 9) Riesgos abiertos (a seguir)
 
