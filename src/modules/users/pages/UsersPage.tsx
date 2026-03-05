@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
-import { apiRequest } from '../../../services/api/apiClient'
+import { ConfirmModal } from '../../../components/shared/ConfirmModal'
+import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
 import { permissionActions, permissionModules, userRoles, type PermissionAction, type PermissionModule, type UserPermissions, type UserRole } from '../../../types/domain'
 import { getRolePermissions } from '../../../core/auth/permissions'
 
@@ -81,6 +82,21 @@ const getAccessStateLabel = (timestamp?: string): { label: string; className: st
   return { label: 'Inactivo', className: 'text-rose-700' }
 }
 
+const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (!(error instanceof ApiRequestError)) {
+    return fallback
+  }
+  try {
+    const parsed = JSON.parse(error.responseBody) as { message?: string }
+    if (parsed?.message) {
+      return parsed.message
+    }
+  } catch {
+    // ignore
+  }
+  return fallback
+}
+
 export const UsersPage = () => {
   const {
     state: { users },
@@ -88,6 +104,7 @@ export const UsersPage = () => {
   } = useAppContext()
 
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const [userIdPendingDelete, setUserIdPendingDelete] = useState<string | null>(null)
   const [formData, setFormData] = useState(() => ({
     username: '',
     fullName: '',
@@ -207,14 +224,25 @@ export const UsersPage = () => {
     resetForm()
   }
 
-  const handleDeleteUser = (userId: string) => {
-    setUsers(users.filter((user) => user.id !== userId))
-    if (editingUserId === userId) {
-      resetForm()
+  const handleDeleteUser = async (userId: string) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setAppError('No podes eliminar usuarios sin conexion.')
+      return
     }
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest(`/users/${userId}`, { method: 'DELETE' }).catch(() => null)
+
+    try {
+      await apiRequest(`/users/${userId}`, { method: 'DELETE' })
+      setUsers(users.filter((user) => user.id !== userId))
+      if (editingUserId === userId) {
+        resetForm()
+      }
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo eliminar el usuario.'))
     }
+  }
+
+  const handleRequestDeleteUser = (userId: string) => {
+    setUserIdPendingDelete(userId)
   }
 
   const handleResetPassword = (userId: string) => {
@@ -506,7 +534,7 @@ export const UsersPage = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDeleteUser(user.id)}
+                  onClick={() => handleRequestDeleteUser(user.id)}
                   className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                 >
                   Eliminar
@@ -523,6 +551,22 @@ export const UsersPage = () => {
           ))}
         </div>
       </section>
+
+      <ConfirmModal
+        isOpen={Boolean(userIdPendingDelete)}
+        title="Eliminar usuario"
+        message={`¿Estas seguro que deseas eliminar a ${
+          users.find((user) => user.id === userIdPendingDelete)?.fullName ?? 'este usuario'
+        }?`}
+        onCancel={() => setUserIdPendingDelete(null)}
+        onConfirm={async () => {
+          if (!userIdPendingDelete) {
+            return
+          }
+          await handleDeleteUser(userIdPendingDelete)
+          setUserIdPendingDelete(null)
+        }}
+      />
     </section>
   )
 }

@@ -162,12 +162,25 @@ router.patch('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const existingUser = await prisma.user.findUnique({ where: { id: req.params.id } })
+  if (!existingUser) {
+    return res.status(404).json({ message: 'Usuario no encontrado.' })
+  }
   if (existingUser?.role === 'DEV') {
     return res.status(403).json({ message: 'No se puede eliminar un usuario DEV.' })
   }
 
-  await prisma.user.delete({ where: { id: req.params.id } })
-  return res.status(204).send()
+  try {
+    await prisma.user.delete({ where: { id: req.params.id } })
+    return res.status(204).send()
+  } catch (error: any) {
+    if (error?.code === 'P2003') {
+      return res.status(409).json({
+        message:
+          'No se puede eliminar este usuario porque tiene historial asociado (auditorias/tareas).',
+      })
+    }
+    return res.status(500).json({ message: 'No se pudo eliminar el usuario.' })
+  }
 })
 
 export default router

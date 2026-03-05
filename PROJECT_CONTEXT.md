@@ -302,6 +302,23 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita falsos "Sin registro" en usuarios que no reloguean pero usan la app con sesion activa.
   Riesgo residual:
   - La actividad se actualiza con throttle (5 min) para no sobrecargar DB; no representa segundos exactos.
+- Fecha: 2026-03-05
+  Cambio: Eliminacion de usuarios con confirmacion real de backend (sin borrado visual falso) y error explicito por historial asociado.
+  Archivos:
+  - `backend/src/routes/users.ts`
+  - `src/modules/users/pages/UsersPage.tsx`
+  Riesgo mitigado:
+  - Evita que un usuario parezca eliminado localmente pero reaparezca al recargar.
+  Riesgo residual:
+  - Usuarios con auditorias/tareas asociadas no se pueden eliminar fisicamente; requieren estrategia de desactivacion si negocio exige ocultarlos.
+- Fecha: 2026-03-05
+  Cambio: Doble confirmacion para eliminar usuario (modal con nombre del usuario).
+  Archivos:
+  - `src/modules/users/pages/UsersPage.tsx`
+  Riesgo mitigado:
+  - Reduce eliminaciones accidentales en panel de usuarios.
+  Riesgo residual:
+  - No reemplaza politicas de permisos; solo agrega capa de confirmacion UI.
 
 ## 9) Riesgos abiertos (a seguir)
 
