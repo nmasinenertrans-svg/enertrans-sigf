@@ -330,6 +330,14 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita carga manual/duplicada del numero de remito y estandariza nomenclatura operativa.
   Riesgo residual:
   - Si existe historico previo con otro formato, conviviran formatos antiguos y nuevos en listados.
+- Fecha: 2026-03-06
+  Cambio: Endurecimiento del alta de auditorias para mobile: subida previa de fotos a storage + timeout explicito en `POST /audits` y refresco.
+  Archivos:
+  - `src/modules/audits/pages/AuditsPage.tsx`
+  Riesgo mitigado:
+  - Evita cuelgues por payload grande en `POST /audits` y por requests sin timeout en redes inestables.
+  Riesgo residual:
+  - Si falla storage, la auditoria cae a flujo local/cola y depende de sincronizacion posterior.
 
 ## 9) Riesgos abiertos (a seguir)
 

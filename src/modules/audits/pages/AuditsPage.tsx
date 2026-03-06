@@ -27,6 +27,7 @@ import { apiRequest } from '../../../services/api/apiClient'
 const allUnitsFilter = 'ALL_UNITS'
 const AUDIT_DRAFT_KEY = 'enertrans.auditDraft'
 const AUDIT_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
+const AUDIT_SUBMIT_TIMEOUT_MS = 25000
 
 export const AuditsPage = () => {
   const navigate = useNavigate()
@@ -401,7 +402,7 @@ export const AuditsPage = () => {
     }
 
     try {
-      const auditsResponse = await apiRequest<any[]>('/audits')
+      const auditsResponse = await apiRequest<any[]>('/audits', { timeoutMs: AUDIT_SUBMIT_TIMEOUT_MS })
       const mappedAudits = (auditsResponse ?? []).map((audit) => mapServerAuditToClient(audit))
       const remoteIds = new Set(mappedAudits.map((audit) => audit.id))
       setAudits((previousAudits) => {
@@ -421,6 +422,25 @@ export const AuditsPage = () => {
     } catch {
       // keep local state on refresh failures
     }
+  }
+
+  const uploadAuditPhotos = async (auditId: string, photos: string[]): Promise<string[]> => {
+    const urls: string[] = []
+    for (let index = 0; index < photos.length; index += 1) {
+      const dataUrl = photos[index]
+      const upload = await apiRequest<{ url: string }>('/files/upload', {
+        method: 'POST',
+        body: {
+          fileName: `audit-${auditId}-${index + 1}.jpg`,
+          contentType: 'image/jpeg',
+          dataUrl,
+          folder: 'audits',
+        },
+        timeoutMs: AUDIT_SUBMIT_TIMEOUT_MS,
+      })
+      urls.push(upload.url)
+    }
+    return urls
   }
 
   const handleSubmitAudit = async () => {
@@ -534,7 +554,22 @@ export const AuditsPage = () => {
       : {}
 
     const isOnlineNow = typeof navigator !== 'undefined' && navigator.onLine
-    if (isOnlineNow) {
+    let forceQueueFallback = false
+    let onlinePhotoUrls = createdAudit.photoBase64List
+
+    if (isOnlineNow && createdAudit.photoBase64List.length > 0) {
+      try {
+        setGlobalLoading(true)
+        onlinePhotoUrls = await uploadAuditPhotos(createdAudit.id, createdAudit.photoBase64List)
+      } catch {
+        forceQueueFallback = true
+        setAppError('No se pudieron subir las fotos de la auditoria. Se guardara localmente y reintentara en segundo plano.')
+      } finally {
+        setGlobalLoading(false)
+      }
+    }
+
+    if (isOnlineNow && !forceQueueFallback) {
       const onlinePayload = {
         id: createdAudit.id,
         auditKind: createdAudit.auditKind,
@@ -544,7 +579,7 @@ export const AuditsPage = () => {
         performedAt: createdAudit.performedAt,
         result: createdAudit.result,
         observations: createdAudit.observations,
-        photoUrls: createdAudit.photoBase64List,
+        photoUrls: onlinePhotoUrls,
         checklist: {
           sections: createdAudit.checklistSections,
           meta: createdAudit.reportPdfFileUrl
@@ -564,6 +599,7 @@ export const AuditsPage = () => {
         const persistedAudit = await apiRequest<any>('/audits', {
           method: 'POST',
           body: onlinePayload,
+          timeoutMs: AUDIT_SUBMIT_TIMEOUT_MS,
         })
 
         const syncedAudit = mapServerAuditToClient(persistedAudit)
