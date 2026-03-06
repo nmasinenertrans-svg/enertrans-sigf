@@ -319,6 +319,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Reduce eliminaciones accidentales en panel de usuarios.
   Riesgo residual:
   - No reemplaza politicas de permisos; solo agrega capa de confirmacion UI.
+- Fecha: 2026-03-06
+  Cambio: Remitos con numeracion oficial automatica `R-0000001` incremental y etiqueta `ENTREGA` en UI.
+  Archivos:
+  - `backend/src/routes/movements.ts`
+  - `src/modules/movements/pages/MovementsPage.tsx`
+  - `src/modules/movements/services/movementsService.ts`
+  - `src/modules/fleet/components/FleetMovementsPanel.tsx`
+  Riesgo mitigado:
+  - Evita carga manual/duplicada del numero de remito y estandariza nomenclatura operativa.
+  Riesgo residual:
+  - Si existe historico previo con otro formato, conviviran formatos antiguos y nuevos en listados.
 
 ## 9) Riesgos abiertos (a seguir)
 

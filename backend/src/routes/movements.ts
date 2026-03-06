@@ -3,6 +3,7 @@ import { z } from 'zod'
 import pdfParse from 'pdf-parse'
 import { prisma } from '../db.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
+import { getNextSequence } from '../utils/sequence.js'
 
 const router = Router()
 
@@ -33,6 +34,16 @@ const parseSchema = z.object({
   contentType: z.string().min(1),
   dataUrl: z.string().min(10),
 })
+
+const formatRemitoNumber = (value: number) => `R-${String(value).padStart(7, '0')}`
+
+const resolveNextRemitoNumber = async (): Promise<string> => {
+  const current = await prisma.sequence.findUnique({
+    where: { key: 'remito' },
+    select: { value: true },
+  })
+  return formatRemitoNumber((current?.value ?? 0) + 1)
+}
 
 const normalizeLine = (value: string) => value.replace(/\s+/g, ' ').trim()
 
@@ -119,6 +130,15 @@ router.get('/', async (_req, res) => {
   }
 })
 
+router.get('/next-remito', async (_req, res) => {
+  try {
+    const remitoNumber = await resolveNextRemitoNumber()
+    return res.json({ remitoNumber })
+  } catch {
+    return res.status(500).json({ message: 'No se pudo calcular el siguiente remito.' })
+  }
+})
+
 router.post('/', async (req, res) => {
   const parsed = movementSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -129,10 +149,11 @@ router.post('/', async (req, res) => {
   const remitoDate = remitoDateValue ? new Date(toIsoDate(remitoDateValue)) : undefined
 
   try {
+    const remitoNumber = formatRemitoNumber(await getNextSequence('remito'))
     const created = await prisma.fleetMovement.create({
       data: {
         movementType: parsed.data.movementType,
-        remitoNumber: parsed.data.remitoNumber?.trim() ?? '',
+        remitoNumber,
         remitoDate: remitoDate && !Number.isNaN(remitoDate.getTime()) ? remitoDate : undefined,
         clientName: parsed.data.clientName?.trim() ?? '',
         workLocation: parsed.data.workLocation?.trim() ?? '',

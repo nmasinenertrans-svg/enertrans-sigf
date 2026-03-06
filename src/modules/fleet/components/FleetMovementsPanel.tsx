@@ -63,7 +63,7 @@ export const FleetMovementsPanel = ({ unitId, fleetUnits, movements }: FleetMove
                     <td className="px-3 py-2">{movement.remitoDate || movement.createdAt?.slice(0, 10) || ''}</td>
                     <td className="px-3 py-2">{movement.remitoNumber || 'Sin numero'}</td>
                     <td className="px-3 py-2">{movement.clientName || 'Sin cliente'}</td>
-                    <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'Entrada' : 'Devolucion'}</td>
+                    <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'ENTREGA' : 'Devolucion'}</td>
                     <td className="px-3 py-2">
                       {movement.pdfFileUrl ? (
                         <a

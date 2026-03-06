@@ -85,11 +85,6 @@ export const validateMovementFormData = (formData: MovementFormData, fleetUnits:
   } else if (!formData.unitIds.every((unitId) => fleetUnits.some((unit) => unit.id === unitId))) {
     errors.unitIds = 'Alguna unidad seleccionada no existe.'
   }
-
-  if (!formData.remitoNumber.trim()) {
-    errors.remitoNumber = 'El número de remito es obligatorio.'
-  }
-
   if (!formData.remitoDate.trim()) {
     errors.remitoDate = 'La fecha del remito es obligatoria.'
   }
@@ -165,10 +160,6 @@ export const applyParsedPayload = (
 ): MovementFormData => {
   const next = { ...formData, parsedPayload: parsed }
   const rawText = readParsedField(parsed, 'rawText')
-
-  const remitoNumber =
-    readParsedField(parsed, 'remitoNumber') ||
-    extractFromRawText(rawText, /remit[oó]\s*n[°ºo]?\s*[:\-]?\s*([0-9]{1,6}\s*-\s*[0-9]{1,12}|[0-9-]+)/i)
   const remitoDate =
     readParsedField(parsed, 'remitoDate') ||
     extractFromRawText(rawText, /fecha\s*[:\-]?\s*([0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{2,4})/i)
@@ -197,7 +188,7 @@ export const applyParsedPayload = (
 
   return {
     ...next,
-    remitoNumber: remitoNumber || next.remitoNumber,
+    remitoNumber: next.remitoNumber,
     remitoDate: remitoDate || next.remitoDate,
     clientName: clientName || next.clientName,
     workLocation: workLocation || next.workLocation,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BackLink } from '../../../components/shared/BackLink'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
@@ -12,6 +12,10 @@ import {
   type MovementFormData,
 } from '../services/movementsService'
 import { exportMovementPdf } from '../services/movementPdfService'
+
+type NextRemitoResponse = {
+  remitoNumber: string
+}
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -31,6 +35,7 @@ export const MovementsPage = () => {
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [unitSearch, setUnitSearch] = useState('')
+  const [nextRemitoNumber, setNextRemitoNumber] = useState('')
 
   const unitsOptions = useMemo(
     () =>
@@ -58,10 +63,23 @@ export const MovementsPage = () => {
 
   const canDeleteMovements = currentUser?.role === 'GERENTE'
 
+  useEffect(() => {
+    const loadNextRemito = async () => {
+      try {
+        const response = await apiRequest<NextRemitoResponse>('/movements/next-remito')
+        setNextRemitoNumber(response.remitoNumber)
+        setFormData((previous) => ({ ...previous, remitoNumber: response.remitoNumber }))
+      } catch {
+        // ignore
+      }
+    }
+    void loadNextRemito()
+  }, [])
+
   if (!featureFlags.showMovementsModule) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900">Entradas y devoluciones</h2>
+        <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
         <p className="mt-2 text-sm text-slate-600">Este módulo está deshabilitado por configuración.</p>
       </section>
     )
@@ -139,7 +157,14 @@ export const MovementsPage = () => {
       })
 
       setMovements([created, ...movements])
-      setFormData(createEmptyMovementFormData())
+      setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
+      try {
+        const response = await apiRequest<NextRemitoResponse>('/movements/next-remito')
+        setNextRemitoNumber(response.remitoNumber)
+        setFormData((previous) => ({ ...previous, remitoNumber: response.remitoNumber }))
+      } catch {
+        // ignore
+      }
     } catch {
       setAppError('No se pudo guardar el movimiento. Intenta nuevamente.')
     } finally {
@@ -190,7 +215,7 @@ export const MovementsPage = () => {
     <section className="space-y-6">
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
-        <h2 className="text-2xl font-bold text-slate-900">Entradas y devoluciones</h2>
+        <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
         <p className="text-sm text-slate-600">
           Cargá los remitos de entrada o devolución. Se intenta auto-lectura del PDF y luego podés corregir manualmente.
         </p>
@@ -271,7 +296,7 @@ export const MovementsPage = () => {
               onChange={(event) => handleFieldChange('movementType', event.target.value as MovementFormData['movementType'])}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             >
-              <option value="ENTRY">Entrada</option>
+              <option value="ENTRY">ENTREGA</option>
               <option value="RETURN">Devolución</option>
             </select>
           </label>
@@ -280,10 +305,10 @@ export const MovementsPage = () => {
             Número de remito
             <input
               value={formData.remitoNumber}
-              onChange={(event) => handleFieldChange('remitoNumber', event.target.value)}
+              readOnly
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             />
-            {errors.remitoNumber ? <span className="text-xs text-rose-700">{errors.remitoNumber}</span> : null}
+            <span className="text-xs text-slate-500">Se genera automaticamente al guardar.</span>
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
@@ -432,7 +457,7 @@ export const MovementsPage = () => {
           </button>
           <button
             type="button"
-            onClick={() => setFormData(createEmptyMovementFormData())}
+            onClick={() => setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
           >
             Limpiar
@@ -468,7 +493,7 @@ export const MovementsPage = () => {
                       <td className="px-3 py-2">{movement.remitoNumber || 'Sin número'}</td>
                       <td className="px-3 py-2">{unit?.internalCode ?? 'Unidad'}</td>
                       <td className="px-3 py-2">{movement.clientName || unit?.clientName || 'Sin cliente'}</td>
-                      <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'Entrada' : 'Devolución'}</td>
+                      <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'ENTREGA' : 'Devolución'}</td>
                       <td className="px-3 py-2">
                         <button
                           type="button"
