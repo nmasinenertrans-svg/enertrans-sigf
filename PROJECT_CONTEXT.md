@@ -338,6 +338,27 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita cuelgues por payload grande en `POST /audits` y por requests sin timeout en redes inestables.
   Riesgo residual:
   - Si falla storage, la auditoria cae a flujo local/cola y depende de sincronizacion posterior.
+- Fecha: 2026-03-07
+  Cambio: Compresion automatica de fotos en auditorias antes de guardar/subir (sin alterar PDFs).
+  Archivos:
+  - `src/modules/audits/services/auditsService.ts`
+  - `src/modules/audits/pages/AuditsPage.tsx`
+  Riesgo mitigado:
+  - Reduce uso de Storage/egreso en Supabase y baja probabilidad de fallos por cargas pesadas (ej. 60 fotos).
+  Riesgo residual:
+  - Si la foto ya esta optimizada, puede no reducirse; en ese caso se mantiene original para no degradar calidad innecesariamente.
+- Fecha: 2026-03-07
+  Cambio: Hardening anti-duplicados y red inestable para alta de auditorias/OT.
+  Archivos:
+  - `backend/src/routes/audits.ts`
+  - `backend/src/routes/workOrders.ts`
+  - `src/modules/audits/pages/AuditsPage.tsx`
+  - `src/modules/workOrders/pages/WorkOrdersPage.tsx`
+  - `src/modules/workOrders/components/WorkOrderForm.tsx`
+  Riesgo mitigado:
+  - Evita altas duplicadas por doble toque/reintento en red inestable (AU/RAU/OT) y muestra aviso explicito de red inestable.
+  Riesgo residual:
+  - El anti-duplicado usa ventana temporal y similitud de payload; casos operativos extremadamente similares en minutos cercanos podrian considerarse duplicado.
 
 ## 9) Riesgos abiertos (a seguir)
 

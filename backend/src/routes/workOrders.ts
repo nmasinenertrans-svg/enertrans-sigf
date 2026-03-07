@@ -4,6 +4,7 @@ import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 
 const router = Router()
+const WORK_ORDER_DUPLICATE_WINDOW_MS = 15 * 60 * 1000
 
 const isManualAuditModeEnabled = async (): Promise<boolean> => {
   const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
@@ -28,6 +29,20 @@ const workOrderSchema = z.object({
 
 const workOrderUpdateSchema = workOrderSchema.partial()
 
+const normalizeText = (value: string | null | undefined): string => (value ?? '').trim().replace(/\s+/g, ' ')
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
+  return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(',')}}`
+}
+
 router.get('/', async (_req, res) => {
   const items = await prisma.workOrder.findMany({ orderBy: { createdAt: 'desc' } })
   return res.json(items)
@@ -44,6 +59,30 @@ router.post('/', async (req, res) => {
     select: { internalCode: true },
   })
   const unitCode = unit?.internalCode ?? ''
+  const duplicateFrom = new Date(Date.now() - WORK_ORDER_DUPLICATE_WINDOW_MS)
+
+  const duplicateCandidates = await prisma.workOrder.findMany({
+    where: {
+      unitId: parsed.data.unitId,
+      createdAt: { gte: duplicateFrom },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  })
+
+  const duplicate = duplicateCandidates.find(
+    (candidate) =>
+      candidate.pendingReaudit === parsed.data.pendingReaudit &&
+      normalizeText(candidate.laborDetail) === normalizeText(parsed.data.laborDetail) &&
+      stableStringify(candidate.taskList) === stableStringify(parsed.data.taskList) &&
+      stableStringify(candidate.spareParts) === stableStringify(parsed.data.spareParts) &&
+      stableStringify(candidate.linkedInventorySkuList) === stableStringify(parsed.data.linkedInventorySkuList),
+  )
+
+  if (duplicate) {
+    return res.status(200).json(duplicate)
+  }
+
   const code = parsed.data.code ?? formatCode('OT', await getNextSequence('workOrder'), unitCode)
 
   try {

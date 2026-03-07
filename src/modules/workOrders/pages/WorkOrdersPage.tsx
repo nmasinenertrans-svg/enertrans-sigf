@@ -57,6 +57,7 @@ export const WorkOrdersPage = () => {
   const [resolutionPhoto, setResolutionPhoto] = useState<File | null>(null)
   const [resolutionPhotoBase64, setResolutionPhotoBase64] = useState('')
   const [draftChecked, setDraftChecked] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const workOrderViewList = useMemo(() => buildWorkOrderView(workOrders, fleetUnits), [workOrders, fleetUnits])
 
@@ -320,59 +321,87 @@ export const WorkOrdersPage = () => {
     }))
   }
 
-  const handleSubmit = () => {
+  const isLikelyUnstableNetwork = (error: unknown): boolean => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return true
+    }
+    const message = String((error as Error)?.message ?? '').toLowerCase()
+    return (
+      message.includes('timeout') ||
+      message.includes('failed to fetch') ||
+      message.includes('network') ||
+      message.includes('abort')
+    )
+  }
+
+  const handleSubmit = async () => {
+    if (isSubmitting) {
+      return
+    }
     if (editingWorkOrderId ? !canEdit : !canCreate) {
       return
     }
 
-    const validationErrors = validateWorkOrderFormData(formData, fleetUnits)
+    setIsSubmitting(true)
+    try {
+      const validationErrors = validateWorkOrderFormData(formData, fleetUnits)
 
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors)
-      return
-    }
+      if (Object.keys(validationErrors).length > 0) {
+        setErrors(validationErrors)
+        return
+      }
 
-    if (editingWorkOrderId) {
-      const selectedWorkOrder = workOrders.find((workOrder) => workOrder.id === editingWorkOrderId)
+      if (editingWorkOrderId) {
+        const selectedWorkOrder = workOrders.find((workOrder) => workOrder.id === editingWorkOrderId)
 
-      if (!selectedWorkOrder) {
+        if (!selectedWorkOrder) {
+          resetForm()
+          return
+        }
+
+        const updatedWorkOrder = mergeWorkOrderFromForm(selectedWorkOrder, formData)
+        updatedWorkOrder.status = selectedWorkOrder.status
+        const nextWorkOrders = workOrders.map((workOrder) =>
+          workOrder.id === editingWorkOrderId ? updatedWorkOrder : workOrder,
+        )
+
+        setWorkOrders(nextWorkOrders)
+        setInventoryItems(
+          updateInventoryLinks(
+            inventoryItems,
+            editingWorkOrderId,
+            selectedWorkOrder.linkedInventorySkuList,
+            updatedWorkOrder.linkedInventorySkuList,
+          ),
+        )
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          apiRequest(`/work-orders/${editingWorkOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(() => null)
+        }
         resetForm()
         return
       }
 
-      const updatedWorkOrder = mergeWorkOrderFromForm(selectedWorkOrder, formData)
-      updatedWorkOrder.status = selectedWorkOrder.status
-      const nextWorkOrders = workOrders.map((workOrder) =>
-        workOrder.id === editingWorkOrderId ? updatedWorkOrder : workOrder,
-      )
-
-      setWorkOrders(nextWorkOrders)
-      setInventoryItems(
-        updateInventoryLinks(
-          inventoryItems,
-          editingWorkOrderId,
-          selectedWorkOrder.linkedInventorySkuList,
-          updatedWorkOrder.linkedInventorySkuList,
-        ),
-      )
-      if (typeof navigator !== 'undefined' && navigator.onLine) {
-        apiRequest(`/work-orders/${editingWorkOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(() => null)
+      const unitCode = fleetUnits.find((unit) => unit.id === formData.unitId)?.internalCode ?? ''
+      const createdWorkOrder = toWorkOrder(formData, unitCode)
+      setWorkOrders([createdWorkOrder, ...workOrders])
+      setInventoryItems(updateInventoryLinks(inventoryItems, createdWorkOrder.id, [], createdWorkOrder.linkedInventorySkuList))
+      try {
+        await enqueueAndSync({
+          id: `workOrder.create.${createdWorkOrder.id}`,
+          type: 'workOrder.create',
+          payload: createdWorkOrder,
+          createdAt: new Date().toISOString(),
+        })
+      } catch (error) {
+        const message = isLikelyUnstableNetwork(error)
+          ? 'Red inestable detectada. La OT quedo guardada localmente y se sincronizara cuando haya mejor conexion.'
+          : 'No se pudo confirmar la OT en servidor. Quedo en cola para reintento.'
+        setAppError(message)
       }
       resetForm()
-      return
+    } finally {
+      setIsSubmitting(false)
     }
-
-    const unitCode = fleetUnits.find((unit) => unit.id === formData.unitId)?.internalCode ?? ''
-    const createdWorkOrder = toWorkOrder(formData, unitCode)
-    setWorkOrders([createdWorkOrder, ...workOrders])
-    setInventoryItems(updateInventoryLinks(inventoryItems, createdWorkOrder.id, [], createdWorkOrder.linkedInventorySkuList))
-    enqueueAndSync({
-      id: `workOrder.create.${createdWorkOrder.id}`,
-      type: 'workOrder.create',
-      payload: createdWorkOrder,
-      createdAt: new Date().toISOString(),
-    })
-    resetForm()
   }
 
   const handleEdit = (workOrderId: string) => {
@@ -628,12 +657,15 @@ export const WorkOrdersPage = () => {
               fleetUnits={fleetUnits}
               inventoryItems={inventoryItems}
               formData={formData}
-              errors={errors}
-              isEditing={Boolean(editingWorkOrderId)}
-              onFieldChange={handleFieldChange}
-              onSubmit={handleSubmit}
-              onCancelEdit={resetForm}
-            />
+          errors={errors}
+          isEditing={Boolean(editingWorkOrderId)}
+          isSubmitting={isSubmitting}
+          onFieldChange={handleFieldChange}
+          onSubmit={() => {
+            void handleSubmit()
+          }}
+          onCancelEdit={resetForm}
+        />
           ) : (
             <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
               No tenes permisos para crear o editar ordenes de trabajo.

@@ -5,6 +5,7 @@ import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 
 const router = Router()
+const AUDIT_DUPLICATE_WINDOW_MS = 10 * 60 * 1000
 
 const auditSchema = z.object({
   id: z.string().uuid().optional(),
@@ -99,6 +100,54 @@ const isManualAuditModeEnabled = async (): Promise<boolean> => {
       ? (settings.featureFlags as Record<string, unknown>)
       : {}
   return featureFlags.manualAuditMode === true
+}
+
+const normalizeText = (value: string | null | undefined): string => (value ?? '').trim().replace(/\s+/g, ' ')
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
+  return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(',')}}`
+}
+
+const areAuditPayloadsEquivalent = (
+  existing: {
+    workOrderId: string | null
+    observations: string
+    checklist: unknown
+    unitKilometers: number
+    engineHours: number
+    hydroHours: number
+    photoUrls: unknown
+  },
+  incoming: {
+    workOrderId?: string
+    observations?: string
+    checklist?: unknown
+    unitKilometers?: number
+    engineHours?: number
+    hydroHours?: number
+    photoUrls?: string[]
+  },
+) => {
+  const existingPhotoCount = Array.isArray(existing.photoUrls) ? existing.photoUrls.length : 0
+  const incomingPhotoCount = Array.isArray(incoming.photoUrls) ? incoming.photoUrls.length : 0
+
+  return (
+    (existing.workOrderId ?? null) === (incoming.workOrderId ?? null) &&
+    normalizeText(existing.observations) === normalizeText(incoming.observations) &&
+    existing.unitKilometers === (incoming.unitKilometers ?? 0) &&
+    existing.engineHours === (incoming.engineHours ?? 0) &&
+    existing.hydroHours === (incoming.hydroHours ?? 0) &&
+    existingPhotoCount === incomingPhotoCount &&
+    stableStringify(existing.checklist ?? {}) === stableStringify(incoming.checklist ?? {})
+  )
 }
 
 router.get('/', async (_req, res) => {
@@ -207,6 +256,46 @@ router.post('/', async (req, res) => {
 
   const manualAuditMode = await isManualAuditModeEnabled()
   const auditKind = manualAuditMode ? 'AUDIT' : parsed.data.auditKind ?? (await resolveAuditKind(parsed.data.unitId))
+  const performedAtDate = new Date(parsed.data.performedAt)
+
+  if (Number.isNaN(performedAtDate.getTime())) {
+    return res.status(400).json({ message: 'Fecha de auditoria invalida.' })
+  }
+
+  const performedAtFrom = new Date(performedAtDate.getTime() - AUDIT_DUPLICATE_WINDOW_MS)
+  const performedAtTo = new Date(performedAtDate.getTime() + AUDIT_DUPLICATE_WINDOW_MS)
+
+  const duplicateCandidates = await prisma.auditRecord.findMany({
+    where: {
+      unitId: parsed.data.unitId,
+      auditorUserId: parsed.data.auditorUserId,
+      result: parsed.data.result,
+      auditKind,
+      performedAt: {
+        gte: performedAtFrom,
+        lte: performedAtTo,
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  })
+
+  const duplicate = duplicateCandidates.find((candidate) =>
+    areAuditPayloadsEquivalent(candidate, {
+      workOrderId: parsed.data.workOrderId,
+      observations: parsed.data.observations,
+      checklist: parsed.data.checklist,
+      unitKilometers: parsed.data.unitKilometers,
+      engineHours: parsed.data.engineHours,
+      hydroHours: parsed.data.hydroHours,
+      photoUrls: parsed.data.photoUrls,
+    }),
+  )
+
+  if (duplicate) {
+    return res.status(200).json(duplicate)
+  }
+
   const unit = await prisma.fleetUnit.findUnique({
     where: { id: parsed.data.unitId },
     select: { internalCode: true },
@@ -223,7 +312,7 @@ router.post('/', async (req, res) => {
     unitId: parsed.data.unitId,
     auditorUserId: parsed.data.auditorUserId,
     auditorName: parsed.data.auditorName,
-    performedAt: new Date(parsed.data.performedAt),
+    performedAt: performedAtDate,
     result: parsed.data.result,
     observations: parsed.data.observations,
     photoUrls: parsed.data.photoUrls,

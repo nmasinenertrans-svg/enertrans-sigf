@@ -405,6 +405,70 @@ export const readFileAsDataUrl = (file: File): Promise<string> =>
     fileReader.readAsDataURL(file)
   })
 
+type ImageCompressionOptions = {
+  maxWidth?: number
+  maxHeight?: number
+  quality?: number
+  outputType?: 'image/jpeg' | 'image/webp'
+}
+
+const loadImageFromDataUrl = (dataUrl: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('No se pudo cargar la imagen para comprimir.'))
+    image.src = dataUrl
+  })
+
+export const readImageAsCompressedDataUrl = async (
+  file: File,
+  options: ImageCompressionOptions = {},
+): Promise<string> => {
+  const originalDataUrl = await readFileAsDataUrl(file)
+  if (!file.type.startsWith('image/')) {
+    return originalDataUrl
+  }
+
+  const maxWidth = options.maxWidth ?? 1600
+  const maxHeight = options.maxHeight ?? 1600
+  const quality = options.quality ?? 0.75
+  const outputType = options.outputType ?? 'image/jpeg'
+
+  try {
+    const image = await loadImageFromDataUrl(originalDataUrl)
+    const width = image.naturalWidth || image.width
+    const height = image.naturalHeight || image.height
+
+    if (!width || !height) {
+      return originalDataUrl
+    }
+
+    const scale = Math.min(1, maxWidth / width, maxHeight / height)
+    const targetWidth = Math.max(1, Math.round(width * scale))
+    const targetHeight = Math.max(1, Math.round(height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = targetWidth
+    canvas.height = targetHeight
+
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return originalDataUrl
+    }
+
+    context.drawImage(image, 0, 0, targetWidth, targetHeight)
+    const compressedDataUrl = canvas.toDataURL(outputType, quality)
+
+    if (!compressedDataUrl || compressedDataUrl.length >= originalDataUrl.length) {
+      return originalDataUrl
+    }
+
+    return compressedDataUrl
+  } catch {
+    return originalDataUrl
+  }
+}
+
 const resultLabelMap: Record<'APPROVED' | 'REJECTED', string> = {
   APPROVED: 'APROBADO',
   REJECTED: 'RECHAZADO',

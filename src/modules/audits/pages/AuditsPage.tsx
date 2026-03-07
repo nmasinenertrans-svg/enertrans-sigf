@@ -14,6 +14,7 @@ import {
   createChecklistFromDeviations,
   createEmptyAuditFormData,
   createWorkOrderFromAudit,
+  readImageAsCompressedDataUrl,
   readFileAsDataUrl,
   toAuditRecord,
   validateAuditFormData,
@@ -88,6 +89,7 @@ export const AuditsPage = () => {
   const [auditIdPendingDelete, setAuditIdPendingDelete] = useState<string | null>(null)
   const [auditIdPendingView, setAuditIdPendingView] = useState<string | null>(null)
   const [draftChecked, setDraftChecked] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const auditHistory = useMemo(() => buildAuditHistoryView(audits, fleetUnits), [audits, fleetUnits])
   const viewAudit = useMemo(() => audits.find((audit) => audit.id === auditIdPendingView) ?? null, [audits, auditIdPendingView])
@@ -313,7 +315,16 @@ export const AuditsPage = () => {
   const handleAddPhotoFiles = async (fileList: FileList) => {
     try {
       setGlobalLoading(true)
-      const photoDataList = await Promise.all(Array.from(fileList).map((file) => readFileAsDataUrl(file)))
+      const photoDataList = await Promise.all(
+        Array.from(fileList).map((file) =>
+          readImageAsCompressedDataUrl(file, {
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 0.75,
+            outputType: 'image/jpeg',
+          }),
+        ),
+      )
 
       setFormData((previousFormData) => ({
         ...previousFormData,
@@ -443,43 +454,66 @@ export const AuditsPage = () => {
     return urls
   }
 
+  const isLikelyUnstableNetwork = (error: unknown): boolean => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return true
+    }
+    const message = String((error as Error)?.message ?? '').toLowerCase()
+    return (
+      message.includes('timeout') ||
+      message.includes('failed to fetch') ||
+      message.includes('network') ||
+      message.includes('abort')
+    )
+  }
+
+  const withNetworkHint = (message: string, error: unknown): string =>
+    isLikelyUnstableNetwork(error)
+      ? `Red inestable detectada. ${message} Evita reenviar varias veces; el sistema reintentara sincronizar.`
+      : message
+
   const handleSubmitAudit = async () => {
+    if (isSubmitting) {
+      return
+    }
     if (!canCreate) {
       return
     }
 
-    const validationErrors = validateAuditFormData(formData, fleetUnits)
-    if (manualAuditMode && !formData.reportPdfFileBase64) {
-      validationErrors.reportPdfFileBase64 = 'Debes adjuntar el PDF de la auditoria manual.'
-    }
+    setIsSubmitting(true)
+    try {
+      const validationErrors = validateAuditFormData(formData, fleetUnits)
+      if (manualAuditMode && !formData.reportPdfFileBase64) {
+        validationErrors.reportPdfFileBase64 = 'Debes adjuntar el PDF de la auditoria manual.'
+      }
 
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors)
-      return
-    }
+      if (Object.keys(validationErrors).length > 0) {
+        setErrors(validationErrors)
+        return
+      }
 
-    const auditorId = currentUser?.id ?? 'audit-user-unknown'
-    const auditorName = currentUser?.fullName ?? 'Usuario no identificado'
-    const selectedUnit = fleetUnits.find((unit) => unit.id === formData.unitId)
-    const unitCode = selectedUnit?.internalCode ?? ''
-    const selectedExternalRequest = externalRequests.find((item) => item.id === formData.externalRequestId)
-    const externalRequestCode = selectedExternalRequest?.code
-    const createdAuditBase = toAuditRecord(
-      formData,
-      auditorId,
-      auditorName,
-      workOrders,
-      unitCode,
-      externalRequestCode,
-      { manualAuditMode },
-    )
-    let createdAudit = {
-      ...createdAuditBase,
-      syncState:
-        typeof navigator !== 'undefined' && navigator.onLine
-          ? ('PENDING' as const)
-          : ('LOCAL_ONLY' as const),
-    }
+      const auditorId = currentUser?.id ?? 'audit-user-unknown'
+      const auditorName = currentUser?.fullName ?? 'Usuario no identificado'
+      const selectedUnit = fleetUnits.find((unit) => unit.id === formData.unitId)
+      const unitCode = selectedUnit?.internalCode ?? ''
+      const selectedExternalRequest = externalRequests.find((item) => item.id === formData.externalRequestId)
+      const externalRequestCode = selectedExternalRequest?.code
+      const createdAuditBase = toAuditRecord(
+        formData,
+        auditorId,
+        auditorName,
+        workOrders,
+        unitCode,
+        externalRequestCode,
+        { manualAuditMode },
+      )
+      let createdAudit = {
+        ...createdAuditBase,
+        syncState:
+          typeof navigator !== 'undefined' && navigator.onLine
+            ? ('PENDING' as const)
+            : ('LOCAL_ONLY' as const),
+      }
 
     if (manualAuditMode && createdAudit.reportPdfFileBase64 && typeof navigator !== 'undefined' && navigator.onLine) {
       try {
@@ -498,8 +532,8 @@ export const AuditsPage = () => {
           reportPdfFileUrl: upload.url,
           reportPdfFileBase64: '',
         }
-      } catch {
-        setAppError('No se pudo subir el PDF de la auditoria manual.')
+      } catch (error) {
+        setAppError(withNetworkHint('No se pudo subir el PDF de la auditoria manual.', error))
         return
       } finally {
         setGlobalLoading(false)
@@ -561,9 +595,14 @@ export const AuditsPage = () => {
       try {
         setGlobalLoading(true)
         onlinePhotoUrls = await uploadAuditPhotos(createdAudit.id, createdAudit.photoBase64List)
-      } catch {
+      } catch (error) {
         forceQueueFallback = true
-        setAppError('No se pudieron subir las fotos de la auditoria. Se guardara localmente y reintentara en segundo plano.')
+        setAppError(
+          withNetworkHint(
+            'No se pudieron subir las fotos de la auditoria. Se guardara localmente y reintentara en segundo plano.',
+            error,
+          ),
+        )
       } finally {
         setGlobalLoading(false)
       }
@@ -612,8 +651,10 @@ export const AuditsPage = () => {
         resetAuditForm()
         await refreshAuditsFromServer()
         return
-      } catch {
-        setAppError('No se pudo confirmar la auditoria en servidor. Se guardara localmente hasta reintentar.')
+      } catch (error) {
+        setAppError(
+          withNetworkHint('No se pudo confirmar la auditoria en servidor. Se guardara localmente hasta reintentar.', error),
+        )
       }
     }
 
@@ -750,6 +791,9 @@ export const AuditsPage = () => {
     if (isFormOpen) {
       setIsFormOpen(false)
       navigate(ROUTE_PATHS.audits, { replace: true })
+    }
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -1064,9 +1108,16 @@ export const AuditsPage = () => {
                 <button
                   type="button"
                   onClick={handleSubmitAudit}
-                  className="mt-5 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
+                  disabled={isSubmitting}
+                  className="mt-5 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isReauditMode ? 'Cerrar re-auditoria' : manualAuditMode ? 'Guardar auditoria manual' : 'Crear auditoria'}
+                  {isSubmitting
+                    ? 'Enviando...'
+                    : isReauditMode
+                      ? 'Cerrar re-auditoria'
+                      : manualAuditMode
+                        ? 'Guardar auditoria manual'
+                        : 'Crear auditoria'}
                 </button>
               </section>
 
