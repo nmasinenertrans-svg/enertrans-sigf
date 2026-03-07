@@ -134,6 +134,7 @@ export const AppLayout = () => {
   const movementsRef = useRef(movements)
   const inventoryRef = useRef(inventoryItems)
   const featureFlagsRef = useRef(featureFlags)
+  const lastSyncErrorAtRef = useRef<Record<string, number>>({})
 
 
   useEffect(() => {
@@ -205,7 +206,17 @@ export const AppLayout = () => {
       let didInvalidateSession = false
       isFetchingRef.current = true
 
-      const safeRequest = async <T,>(path: string): Promise<T | null> => {
+      const reportSyncError = (path: string) => {
+        const now = Date.now()
+        const lastAt = lastSyncErrorAtRef.current[path] ?? 0
+        if (now - lastAt < 120000) {
+          return
+        }
+        lastSyncErrorAtRef.current[path] = now
+        setAppError(`No se pudo sincronizar ${path}.`)
+      }
+
+      const safeRequest = async <T,>(path: string, options?: { silent?: boolean }): Promise<T | null> => {
         try {
           return await apiRequest<T>(path, { timeoutMs: 15000 })
         } catch (error) {
@@ -221,7 +232,9 @@ export const AppLayout = () => {
             }
             return null
           }
-          setAppError(`No se pudo sincronizar ${path}.`)
+          if (!options?.silent) {
+            reportSyncError(path)
+          }
           return null
         }
       }
@@ -250,13 +263,15 @@ export const AppLayout = () => {
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
-          shouldSyncMaintenance ? safeRequest<MaintenancePlan[]>('/maintenance') : Promise.resolve(null),
+          shouldSyncMaintenance ? safeRequest<MaintenancePlan[]>('/maintenance', { silent: true }) : Promise.resolve(null),
           shouldSyncAudits ? safeRequest<any[]>('/audits') : Promise.resolve(null),
           shouldSyncWorkOrders ? safeRequest<WorkOrder[]>('/work-orders') : Promise.resolve(null),
-          shouldSyncRepairs ? safeRequest<RepairRecord[]>('/repairs') : Promise.resolve(null),
-          shouldSyncExternalRequests ? safeRequest<ExternalRequest[]>('/external-requests') : Promise.resolve(null),
-          shouldSyncMovements ? safeRequest<FleetMovement[]>('/movements') : Promise.resolve(null),
-          shouldSyncInventory ? safeRequest<InventoryItem[]>('/inventory') : Promise.resolve(null),
+          shouldSyncRepairs ? safeRequest<RepairRecord[]>('/repairs', { silent: true }) : Promise.resolve(null),
+          shouldSyncExternalRequests
+            ? safeRequest<ExternalRequest[]>('/external-requests', { silent: true })
+            : Promise.resolve(null),
+          shouldSyncMovements ? safeRequest<FleetMovement[]>('/movements', { silent: true }) : Promise.resolve(null),
+          shouldSyncInventory ? safeRequest<InventoryItem[]>('/inventory', { silent: true }) : Promise.resolve(null),
         ])
 
         const mappedAudits: AuditRecord[] | null = auditsResponse
