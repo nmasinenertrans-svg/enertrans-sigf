@@ -359,6 +359,20 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita altas duplicadas por doble toque/reintento en red inestable (AU/RAU/OT) y muestra aviso explicito de red inestable.
   Riesgo residual:
   - El anti-duplicado usa ventana temporal y similitud de payload; casos operativos extremadamente similares en minutos cercanos podrian considerarse duplicado.
+- Fecha: 2026-03-07
+  Cambio: Refuerzo de ciclo de vida de archivos de auditoria (prevencion de huérfanos).
+  Archivos:
+  - `backend/src/routes/files.ts`
+  - `backend/src/routes/audits.ts`
+  - `src/services/offline/sync.ts`
+  - `src/modules/audits/pages/AuditsPage.tsx`
+  - `backend/scripts/reconcileAuditStorage.ts`
+  - `backend/package.json`
+  Riesgo mitigado:
+  - Evita re-subir fotos ya pre-cargadas en reintentos offline y elimina adjuntos de storage al borrar auditorias.
+  - Agrega script operativo para detectar/limpiar huérfanos de `audits/` contra DB real por schema.
+  Riesgo residual:
+  - La limpieza automatica de huérfanos por cron externo aun no esta cableada; se ejecuta manual por comando.
 
 ## 9) Riesgos abiertos (a seguir)
 

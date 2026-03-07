@@ -590,6 +590,7 @@ export const AuditsPage = () => {
     const isOnlineNow = typeof navigator !== 'undefined' && navigator.onLine
     let forceQueueFallback = false
     let onlinePhotoUrls = createdAudit.photoBase64List
+    let usePreUploadedPhotoUrlsInQueue = false
 
     if (isOnlineNow && createdAudit.photoBase64List.length > 0) {
       try {
@@ -655,6 +656,9 @@ export const AuditsPage = () => {
         setAppError(
           withNetworkHint('No se pudo confirmar la auditoria en servidor. Se guardara localmente hasta reintentar.', error),
         )
+        if (onlinePhotoUrls.length > 0) {
+          usePreUploadedPhotoUrlsInQueue = true
+        }
       }
     }
 
@@ -670,7 +674,12 @@ export const AuditsPage = () => {
       void enqueueAndSync({
         id: `audit.create.${createdAudit.id}`,
         type: 'audit.create',
-        payload: { ...createdAudit, workOrderId: createdWorkOrder.id, workOrderCode: createdWorkOrder.code },
+        payload: {
+          ...createdAudit,
+          workOrderId: createdWorkOrder.id,
+          workOrderCode: createdWorkOrder.code,
+          photoUrls: usePreUploadedPhotoUrlsInQueue ? onlinePhotoUrls : undefined,
+        },
         createdAt: new Date().toISOString(),
       }).then(async () => {
         const queueItems = await getQueueItems().catch(() => [])
@@ -736,7 +745,11 @@ export const AuditsPage = () => {
       void enqueueAndSync({
         id: `audit.create.${createdAudit.id}`,
         type: 'audit.create',
-        payload: { ...createdAudit, ...workOrderPayload },
+        payload: {
+          ...createdAudit,
+          ...workOrderPayload,
+          photoUrls: usePreUploadedPhotoUrlsInQueue ? onlinePhotoUrls : undefined,
+        },
         createdAt: new Date().toISOString(),
       }).then(async () => {
         const queueItems = await getQueueItems().catch(() => [])

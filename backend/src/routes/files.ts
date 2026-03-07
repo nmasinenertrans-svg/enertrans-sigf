@@ -11,6 +11,28 @@ const uploadSchema = z.object({
   folder: z.string().optional(),
 })
 
+const deleteManySchema = z.object({
+  paths: z.array(z.string().min(1)).max(500),
+})
+
+const parseStoragePath = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return trimmed
+  }
+
+  const marker = `/storage/v1/object/public/${supabaseBucket}/`
+  const markerIndex = trimmed.indexOf(marker)
+  if (markerIndex < 0) {
+    return null
+  }
+  return trimmed.slice(markerIndex + marker.length)
+}
+
 router.post('/upload', async (req, res) => {
   const parsed = uploadSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -38,6 +60,35 @@ router.post('/upload', async (req, res) => {
   return res.status(201).json({
     path: objectName,
     url: data.publicUrl,
+  })
+})
+
+router.post('/delete-many', async (req, res) => {
+  const parsed = deleteManySchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Datos invalidos.' })
+  }
+
+  const normalizedPaths = Array.from(
+    new Set(
+      parsed.data.paths
+        .map((item) => parseStoragePath(item))
+        .filter((item): item is string => Boolean(item)),
+    ),
+  )
+
+  if (normalizedPaths.length === 0) {
+    return res.json({ deletedCount: 0 })
+  }
+
+  const { data, error } = await supabase.storage.from(supabaseBucket).remove(normalizedPaths)
+
+  if (error) {
+    return res.status(500).json({ message: 'No se pudieron eliminar archivos.', detail: error.message })
+  }
+
+  return res.json({
+    deletedCount: Array.isArray(data) ? data.length : normalizedPaths.length,
   })
 })
 

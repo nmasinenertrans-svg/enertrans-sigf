@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
+import { supabase, supabaseBucket } from '../storage/supabase.js'
 
 const router = Router()
 const AUDIT_DUPLICATE_WINDOW_MS = 10 * 60 * 1000
@@ -148,6 +149,19 @@ const areAuditPayloadsEquivalent = (
     existingPhotoCount === incomingPhotoCount &&
     stableStringify(existing.checklist ?? {}) === stableStringify(incoming.checklist ?? {})
   )
+}
+
+const extractStoragePath = (url: string | null | undefined): string | null => {
+  const value = (url ?? '').trim()
+  if (!value) {
+    return null
+  }
+  const marker = `/storage/v1/object/public/${supabaseBucket}/`
+  const markerIndex = value.indexOf(marker)
+  if (markerIndex < 0) {
+    return null
+  }
+  return value.slice(markerIndex + marker.length)
 }
 
 router.get('/', async (_req, res) => {
@@ -407,7 +421,40 @@ router.post('/', async (req, res) => {
 })
 
 router.delete('/:id', async (req, res) => {
+  const record = await prisma.auditRecord.findUnique({
+    where: { id: req.params.id },
+    select: { photoUrls: true, checklist: true },
+  })
+
   await prisma.auditRecord.delete({ where: { id: req.params.id } })
+
+  const candidatePaths = new Set<string>()
+  if (Array.isArray(record?.photoUrls)) {
+    record.photoUrls.forEach((value) => {
+      if (typeof value === 'string') {
+        const path = extractStoragePath(value)
+        if (path) {
+          candidatePaths.add(path)
+        }
+      }
+    })
+  }
+
+  const reportUrl =
+    record?.checklist && typeof record.checklist === 'object' && !Array.isArray(record.checklist)
+      ? (record.checklist as any)?.meta?.reportPdfFileUrl
+      : ''
+  if (typeof reportUrl === 'string') {
+    const path = extractStoragePath(reportUrl)
+    if (path) {
+      candidatePaths.add(path)
+    }
+  }
+
+  if (candidatePaths.size > 0) {
+    await supabase.storage.from(supabaseBucket).remove(Array.from(candidatePaths))
+  }
+
   return res.status(204).send()
 })
 

@@ -32,6 +32,7 @@ type AuditPayload = {
   performedAt: string
   result: string
   observations?: string
+  photoUrls?: string[]
   photoBase64List?: string[]
   reportPdfFileName?: string
   reportPdfFileBase64?: string
@@ -76,17 +77,19 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 }
 
 const syncAudit = async (payload: AuditPayload) => {
-  const photoUrls: string[] = []
+  const photoUrls: string[] = Array.isArray(payload.photoUrls) ? [...payload.photoUrls] : []
   const photoList: string[] = payload.photoBase64List || []
 
-  for (let index = 0; index < photoList.length; index += 1) {
-    const dataUrl = photoList[index]
-    try {
-      const url = await uploadDataUrl(dataUrl, `audit-${payload.id}-${index}.jpg`, 'audits')
-      photoUrls.push(url)
-    } catch (error: unknown) {
-      const message = getErrorMessage(error, 'Error de carga de adjunto')
-      throw new Error(`AUDIT_PHOTO_UPLOAD_FAILED [${index + 1}/${photoList.length}] ${message}`)
+  if (photoUrls.length === 0) {
+    for (let index = 0; index < photoList.length; index += 1) {
+      const dataUrl = photoList[index]
+      try {
+        const url = await uploadDataUrl(dataUrl, `audit-${payload.id}-${index}.jpg`, 'audits')
+        photoUrls.push(url)
+      } catch (error: unknown) {
+        const message = getErrorMessage(error, 'Error de carga de adjunto')
+        throw new Error(`AUDIT_PHOTO_UPLOAD_FAILED [${index + 1}/${photoList.length}] ${message}`)
+      }
     }
   }
 
