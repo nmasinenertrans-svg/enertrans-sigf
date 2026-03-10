@@ -29,6 +29,7 @@ const allUnitsFilter = 'ALL_UNITS'
 const AUDIT_DRAFT_KEY = 'enertrans.auditDraft'
 const AUDIT_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 const AUDIT_SUBMIT_TIMEOUT_MS = 25000
+const MAX_AUDIT_PHOTOS = 30
 
 export const AuditsPage = () => {
   const navigate = useNavigate()
@@ -313,14 +314,25 @@ export const AuditsPage = () => {
   }
 
   const handleAddPhotoFiles = async (fileList: FileList) => {
+    const remainingSlots = MAX_AUDIT_PHOTOS - formData.photoBase64List.length
+    if (remainingSlots <= 0) {
+      setAppError(`Limite alcanzado: maximo ${MAX_AUDIT_PHOTOS} fotos por auditoria.`)
+      return
+    }
+
+    const filesToProcess = Array.from(fileList).slice(0, remainingSlots)
+    if (filesToProcess.length < fileList.length) {
+      setAppError(`Solo se agregaron ${filesToProcess.length} fotos. Limite: ${MAX_AUDIT_PHOTOS}.`)
+    }
+
     try {
       setGlobalLoading(true)
       const photoDataList = await Promise.all(
-        Array.from(fileList).map((file) =>
+        filesToProcess.map((file) =>
           readImageAsCompressedDataUrl(file, {
-            maxWidth: 1600,
-            maxHeight: 1600,
-            quality: 0.75,
+            maxWidth: 1280,
+            maxHeight: 1280,
+            quality: 0.65,
             outputType: 'image/jpeg',
           }),
         ),

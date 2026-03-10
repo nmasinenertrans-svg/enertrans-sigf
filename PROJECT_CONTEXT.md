@@ -373,6 +373,14 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Agrega script operativo para detectar/limpiar huérfanos de `audits/` contra DB real por schema.
   Riesgo residual:
   - La limpieza automatica de huérfanos por cron externo aun no esta cableada; se ejecuta manual por comando.
+- Fecha: 2026-03-09
+  Cambio: Optimizacion fuerte de peso de auditorias en frontend: compresion a `1280x1280` calidad `0.65` y limite de `30` fotos por auditoria.
+  Archivos:
+  - `src/modules/audits/pages/AuditsPage.tsx`
+  Riesgo mitigado:
+  - Reduce crecimiento de storage por auditoria y evita cargas extremas por exceso de fotos.
+  Riesgo residual:
+  - Si operacion requiere evidencia mayor a 30 fotos, se necesita criterio de excepcion o anexos externos.
 
 ## 9) Riesgos abiertos (a seguir)
 
