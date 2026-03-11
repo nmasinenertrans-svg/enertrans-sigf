@@ -1,6 +1,6 @@
 # ENERTRANS SIGF - Contexto Vivo del Proyecto
 
-Ultima actualizacion: 2026-03-05
+Ultima actualizacion: 2026-03-11
 Responsable de actualizacion: Codex (este chat)
 Objetivo: que cualquier dev (o nuevo chat) tenga contexto operativo completo sin depender del historial conversacional.
 
@@ -399,6 +399,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Los usuarios objetivo reciben alertas claras cuando otro usuario crea NDP o reparaciones, con persistencia por usuario en backend.
   Riesgo residual:
   - Destinatarios por defecto acotados a usernames (`Rbottero`, `Galonso`) con fallback a roles de gestion; si cambian usuarios, conviene parametrizar `NOTIFICATION_TARGET_USERNAMES` en entorno.
+- Fecha: 2026-03-11
+  Cambio: Ajuste de circuito de notificaciones operativas para incluir a Nicolas (`nmasin`) en el grupo por defecto.
+  Archivos:
+  - `backend/src/services/userNotifications.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Si falta la variable `NOTIFICATION_TARGET_USERNAMES`, el fallback por codigo mantiene el circuito completo entre `nmasin`, `rbottero` y `galonso` (siempre excluyendo al actor).
+  Riesgo residual:
+  - En produccion sigue siendo recomendable fijar `NOTIFICATION_TARGET_USERNAMES=rbottero,galonso,nmasin` para que cambios futuros de codigo no alteren destinatarios operativos.
 
 ## 9) Riesgos abiertos (a seguir)
 

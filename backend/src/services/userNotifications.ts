@@ -3,7 +3,7 @@ import { prisma } from '../db.js'
 
 const USER_NOTIFICATIONS_BY_USER_KEY = '__userNotificationsByUser'
 const MAX_NOTIFICATIONS_PER_USER = 200
-const DEFAULT_TARGET_USERNAMES = ['rbottero', 'galonso']
+const DEFAULT_TARGET_USERNAMES = ['rbottero', 'galonso', 'nmasin']
 
 export type UserNotificationSeverity = 'info' | 'warning' | 'danger'
 
