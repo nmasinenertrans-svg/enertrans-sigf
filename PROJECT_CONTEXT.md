@@ -408,6 +408,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Si falta la variable `NOTIFICATION_TARGET_USERNAMES`, el fallback por codigo mantiene el circuito completo entre `nmasin`, `rbottero` y `galonso` (siempre excluyendo al actor).
   Riesgo residual:
   - En produccion sigue siendo recomendable fijar `NOTIFICATION_TARGET_USERNAMES=rbottero,galonso,nmasin` para que cambios futuros de codigo no alteren destinatarios operativos.
+- Fecha: 2026-03-11
+  Cambio: Upgrade premium del modulo de reportes con tableros analiticos de cumplimiento y performance operativa.
+  Archivos:
+  - `src/modules/reports/pages/ReportsPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Reportes deja de ser solo exportacion y pasa a incluir KPIs accionables: cumplimiento de tareas, ranking de reparaciones y comparativa proveedor vs proveedor por tiempo/costo/margen.
+  Riesgo residual:
+  - El indicador "quien realizo mas reparaciones" se infiere por proveedor (`supplierName`), no por usuario mecanico, porque `RepairRecord` aun no persiste autor de carga/resolucion.
 
 ## 9) Riesgos abiertos (a seguir)
 

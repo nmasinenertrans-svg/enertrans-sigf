@@ -1,11 +1,31 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { jsPDF } from 'jspdf'
 import * as XLSX from 'xlsx'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
+import { apiRequest } from '../../../services/api/apiClient'
 import { getFleetUnitTypeLabel } from '../../fleet/services/fleetService'
-import type { FleetUnit } from '../../../types/domain'
+import type { ExternalRequest, FleetUnit, RepairRecord, TaskRecord, WorkOrder } from '../../../types/domain'
+
+type ProviderMetrics = {
+  providerName: string
+  repairsCount: number
+  totalCost: number
+  totalInvoiced: number
+  totalMargin: number
+  leadHoursTotal: number
+  leadCount: number
+  avgLeadHours: number | null
+  maxLeadHours: number | null
+}
+
+type AssigneeCompliance = {
+  assignee: string
+  total: number
+  done: number
+  completionRate: number
+}
 
 const formatDateTime = (value?: string) => {
   if (!value) {
@@ -13,6 +33,21 @@ const formatDateTime = (value?: string) => {
   }
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-AR')
+}
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(
+    Number.isFinite(value) ? value : 0,
+  )
+
+const formatHoursToHuman = (hours: number | null) => {
+  if (!hours || hours <= 0) {
+    return 'Sin datos'
+  }
+  if (hours >= 24) {
+    return `${(hours / 24).toFixed(1)} dias`
+  }
+  return `${hours.toFixed(1)} hs`
 }
 
 const toCsvValue = (value: string | number | null | undefined) => {
@@ -112,15 +147,80 @@ const isWithinRange = (value: string | undefined, startDate?: string, endDate?: 
   return true
 }
 
+const getRepairLeadHours = (
+  repair: RepairRecord,
+  workOrderMap: Map<string, WorkOrder>,
+  externalRequestMap: Map<string, ExternalRequest>,
+) => {
+  if (!repair.createdAt) {
+    return null
+  }
+  const repairDate = new Date(repair.createdAt)
+  if (Number.isNaN(repairDate.getTime())) {
+    return null
+  }
+
+  let sourceDateValue = ''
+  if (repair.sourceType === 'EXTERNAL_REQUEST') {
+    sourceDateValue = externalRequestMap.get(repair.externalRequestId ?? '')?.createdAt ?? ''
+  } else {
+    sourceDateValue = workOrderMap.get(repair.workOrderId ?? '')?.createdAt ?? ''
+  }
+  if (!sourceDateValue) {
+    return null
+  }
+
+  const sourceDate = new Date(sourceDateValue)
+  if (Number.isNaN(sourceDate.getTime())) {
+    return null
+  }
+  const hours = (repairDate.getTime() - sourceDate.getTime()) / (1000 * 60 * 60)
+  if (!Number.isFinite(hours) || hours < 0) {
+    return null
+  }
+  return hours
+}
+
+const percentage = (part: number, total: number) => (total > 0 ? (part / total) * 100 : 0)
+
 const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
 
 export const ReportsPage = () => {
   const {
-    state: { audits, workOrders, repairs, fleetUnits, featureFlags },
+    state: { audits, workOrders, repairs, fleetUnits, externalRequests, featureFlags },
+    actions: { setAppError },
   } = useAppContext()
 
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [tasks, setTasks] = useState<TaskRecord[]>([])
+  const [isTasksLoading, setIsTasksLoading] = useState(true)
+  const [leftProvider, setLeftProvider] = useState('')
+  const [rightProvider, setRightProvider] = useState('')
+
+  useEffect(() => {
+    let isMounted = true
+    void apiRequest<TaskRecord[]>('/tasks')
+      .then((response) => {
+        if (isMounted) {
+          setTasks(Array.isArray(response) ? response : [])
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setTasks([])
+          setAppError('No se pudieron cargar tareas para reportes avanzados.')
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsTasksLoading(false)
+        }
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [setAppError])
 
   const unitMap = useMemo(() => {
     const map = new Map<string, { domain: string; client: string; typeLabel: string }>()
@@ -133,6 +233,12 @@ export const ReportsPage = () => {
     })
     return map
   }, [fleetUnits])
+
+  const workOrderMap = useMemo(() => new Map(workOrders.map((order) => [order.id, order])), [workOrders])
+  const externalRequestMap = useMemo(
+    () => new Map(externalRequests.map((request) => [request.id, request])),
+    [externalRequests],
+  )
 
   const filteredAudits = useMemo(
     () => audits.filter((audit) => isWithinRange(audit.performedAt, startDate, endDate)),
@@ -149,7 +255,12 @@ export const ReportsPage = () => {
     [repairs, startDate, endDate],
   )
 
-  const rangeLabel = startDate || endDate ? `Periodo: ${startDate || 'Inicio'} → ${endDate || 'Hoy'}` : 'Periodo completo'
+  const filteredTasks = useMemo(
+    () => tasks.filter((task) => isWithinRange(task.createdAt, startDate, endDate)),
+    [tasks, startDate, endDate],
+  )
+
+  const rangeLabel = startDate || endDate ? `Periodo: ${startDate || 'Inicio'} -> ${endDate || 'Hoy'}` : 'Periodo completo'
 
   const occupancyByClient = useMemo(() => {
     const counts = new Map<string, { count: number; units: FleetUnit[] }>()
@@ -171,6 +282,172 @@ export const ReportsPage = () => {
     return { segments, detail: sorted }
   }, [fleetUnits])
 
+  const taskMetrics = useMemo(() => {
+    const operational = filteredTasks.filter((task) => !task.isInTaskBank)
+    const actionable = operational.filter((task) => task.status !== 'CANCELED')
+    const done = actionable.filter((task) => task.status === 'DONE')
+    const inProgress = actionable.filter((task) => task.status === 'IN_PROGRESS').length
+    const blocked = actionable.filter((task) => task.status === 'BLOCKED').length
+
+    return {
+      total: operational.length,
+      actionable: actionable.length,
+      done: done.length,
+      inProgress,
+      blocked,
+      canceled: operational.length - actionable.length,
+      completionRate: percentage(done.length, actionable.length),
+    }
+  }, [filteredTasks])
+
+  const assigneeCompliance = useMemo<AssigneeCompliance[]>(() => {
+    const map = new Map<string, { total: number; done: number }>()
+    filteredTasks
+      .filter((task) => !task.isInTaskBank && task.status !== 'CANCELED')
+      .forEach((task) => {
+        const assignee = task.assignedToUserName?.trim() || 'Sin asignar'
+        const current = map.get(assignee) ?? { total: 0, done: 0 }
+        current.total += 1
+        if (task.status === 'DONE') {
+          current.done += 1
+        }
+        map.set(assignee, current)
+      })
+
+    return Array.from(map.entries())
+      .map(([assignee, values]) => ({
+        assignee,
+        total: values.total,
+        done: values.done,
+        completionRate: percentage(values.done, values.total),
+      }))
+      .sort((a, b) => {
+        if (b.done !== a.done) {
+          return b.done - a.done
+        }
+        if (b.completionRate !== a.completionRate) {
+          return b.completionRate - a.completionRate
+        }
+        return b.total - a.total
+      })
+  }, [filteredTasks])
+
+  const providerMetrics = useMemo<ProviderMetrics[]>(() => {
+    const map = new Map<
+      string,
+      {
+        repairsCount: number
+        totalCost: number
+        totalInvoiced: number
+        totalMargin: number
+        leadHoursTotal: number
+        leadCount: number
+        maxLeadHours: number | null
+      }
+    >()
+
+    filteredRepairs.forEach((repair) => {
+      const providerName = repair.supplierName?.trim() || 'Sin proveedor'
+      const current = map.get(providerName) ?? {
+        repairsCount: 0,
+        totalCost: 0,
+        totalInvoiced: 0,
+        totalMargin: 0,
+        leadHoursTotal: 0,
+        leadCount: 0,
+        maxLeadHours: null,
+      }
+
+      current.repairsCount += 1
+      current.totalCost += repair.realCost ?? 0
+      current.totalInvoiced += repair.invoicedToClient ?? 0
+      current.totalMargin += repair.margin ?? 0
+
+      const leadHours = getRepairLeadHours(repair, workOrderMap, externalRequestMap)
+      if (leadHours !== null) {
+        current.leadHoursTotal += leadHours
+        current.leadCount += 1
+        current.maxLeadHours =
+          current.maxLeadHours === null ? leadHours : Math.max(current.maxLeadHours, leadHours)
+      }
+
+      map.set(providerName, current)
+    })
+
+    return Array.from(map.entries())
+      .map(([providerName, values]) => ({
+        providerName,
+        repairsCount: values.repairsCount,
+        totalCost: values.totalCost,
+        totalInvoiced: values.totalInvoiced,
+        totalMargin: values.totalMargin,
+        leadHoursTotal: values.leadHoursTotal,
+        leadCount: values.leadCount,
+        avgLeadHours: values.leadCount > 0 ? values.leadHoursTotal / values.leadCount : null,
+        maxLeadHours: values.maxLeadHours,
+      }))
+      .sort((a, b) => {
+        if (b.repairsCount !== a.repairsCount) {
+          return b.repairsCount - a.repairsCount
+        }
+        return b.totalCost - a.totalCost
+      })
+  }, [filteredRepairs, workOrderMap, externalRequestMap])
+
+  const repairsLeadAverage = useMemo(() => {
+    const totalLead = providerMetrics.reduce((accumulator, item) => accumulator + item.leadHoursTotal, 0)
+    const totalLeadCount = providerMetrics.reduce((accumulator, item) => accumulator + item.leadCount, 0)
+    return totalLeadCount > 0 ? totalLead / totalLeadCount : null
+  }, [providerMetrics])
+
+  const totalRepairCost = useMemo(
+    () => filteredRepairs.reduce((accumulator, repair) => accumulator + (repair.realCost ?? 0), 0),
+    [filteredRepairs],
+  )
+  const totalRepairInvoiced = useMemo(
+    () => filteredRepairs.reduce((accumulator, repair) => accumulator + (repair.invoicedToClient ?? 0), 0),
+    [filteredRepairs],
+  )
+  const totalRepairMargin = useMemo(
+    () => filteredRepairs.reduce((accumulator, repair) => accumulator + (repair.margin ?? 0), 0),
+    [filteredRepairs],
+  )
+
+  const approvedAudits = useMemo(
+    () => filteredAudits.filter((audit) => audit.result === 'APPROVED').length,
+    [filteredAudits],
+  )
+  const auditApprovalRate = percentage(approvedAudits, filteredAudits.length)
+
+  const effectiveLeftProvider = useMemo(() => {
+    if (providerMetrics.length === 0) {
+      return ''
+    }
+    if (providerMetrics.some((item) => item.providerName === leftProvider)) {
+      return leftProvider
+    }
+    return providerMetrics[0]?.providerName ?? ''
+  }, [providerMetrics, leftProvider])
+
+  const effectiveRightProvider = useMemo(() => {
+    if (providerMetrics.length === 0) {
+      return ''
+    }
+    if (providerMetrics.some((item) => item.providerName === rightProvider)) {
+      return rightProvider
+    }
+    return providerMetrics[1]?.providerName ?? effectiveLeftProvider
+  }, [providerMetrics, rightProvider, effectiveLeftProvider])
+
+  const leftProviderMetrics = useMemo(
+    () => providerMetrics.find((item) => item.providerName === effectiveLeftProvider) ?? null,
+    [providerMetrics, effectiveLeftProvider],
+  )
+  const rightProviderMetrics = useMemo(
+    () => providerMetrics.find((item) => item.providerName === effectiveRightProvider) ?? null,
+    [providerMetrics, effectiveRightProvider],
+  )
+
   if (!featureFlags.showReportsModule) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -178,6 +455,13 @@ export const ReportsPage = () => {
         <p className="mt-2 text-sm text-slate-600">Este modulo esta deshabilitado por configuracion.</p>
       </section>
     )
+  }
+
+  const resolveRepairSourceCode = (repair: RepairRecord) => {
+    if (repair.sourceType === 'EXTERNAL_REQUEST') {
+      return externalRequestMap.get(repair.externalRequestId ?? '')?.code ?? 'N/A'
+    }
+    return workOrderMap.get(repair.workOrderId ?? '')?.code ?? 'N/A'
   }
 
   const exportAuditsCsv = () => {
@@ -273,13 +557,13 @@ export const ReportsPage = () => {
   }
 
   const exportRepairsCsv = () => {
-    const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'OT', 'Proveedor', 'Costo', 'Facturado', 'Margen']
+    const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Origen', 'Proveedor', 'Costo', 'Facturado', 'Margen']
     const rows = filteredRepairs.map((repair) => [
       formatDateTime(repair.createdAt),
       unitMap.get(repair.unitId)?.domain ?? 'Unidad no disponible',
       unitMap.get(repair.unitId)?.client ?? 'Sin cliente',
       unitMap.get(repair.unitId)?.typeLabel ?? 'Sin tipo',
-      repair.workOrderId.slice(0, 8),
+      resolveRepairSourceCode(repair),
       repair.supplierName,
       repair.realCost,
       repair.invoicedToClient,
@@ -289,13 +573,13 @@ export const ReportsPage = () => {
   }
 
   const exportRepairsPdf = () => {
-    const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo', 'OT', 'Proveedor', 'Costo', 'Facturado', 'Margen']
+    const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo', 'Origen', 'Proveedor', 'Costo', 'Facturado', 'Margen']
     const rows = filteredRepairs.map((repair) => [
       formatDateTime(repair.createdAt),
       unitMap.get(repair.unitId)?.domain ?? 'Unidad no disponible',
       unitMap.get(repair.unitId)?.client ?? 'Sin cliente',
       unitMap.get(repair.unitId)?.typeLabel ?? 'Sin tipo',
-      repair.workOrderId.slice(0, 8),
+      resolveRepairSourceCode(repair),
       repair.supplierName,
       repair.realCost.toFixed(2),
       repair.invoicedToClient.toFixed(2),
@@ -306,13 +590,13 @@ export const ReportsPage = () => {
   }
 
   const exportRepairsXlsx = () => {
-    const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'OT', 'Proveedor', 'Costo', 'Facturado', 'Margen']
+    const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Origen', 'Proveedor', 'Costo', 'Facturado', 'Margen']
     const rows = filteredRepairs.map((repair) => [
       formatDateTime(repair.createdAt),
       unitMap.get(repair.unitId)?.domain ?? 'Unidad no disponible',
       unitMap.get(repair.unitId)?.client ?? 'Sin cliente',
       unitMap.get(repair.unitId)?.typeLabel ?? 'Sin tipo',
-      repair.workOrderId.slice(0, 8),
+      resolveRepairSourceCode(repair),
       repair.supplierName,
       repair.realCost,
       repair.invoicedToClient,
@@ -325,8 +609,15 @@ export const ReportsPage = () => {
     <section className="space-y-5">
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
-        <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
-        <p className="text-sm text-slate-600">Exportaciones en PDF y CSV para Auditorias, OT y Reparaciones.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
+          <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+            Premium analytics
+          </span>
+        </div>
+        <p className="text-sm text-slate-600">
+          Cumplimiento de tareas, ranking de reparaciones y comparativa proveedor vs proveedor en tiempo y costos.
+        </p>
       </header>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -432,6 +723,196 @@ export const ReportsPage = () => {
         </div>
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cumplimiento tareas</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{taskMetrics.completionRate.toFixed(1)}%</p>
+          <p className="mt-1 text-xs text-slate-600">
+            {taskMetrics.done} hechas de {taskMetrics.actionable} evaluables
+          </p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reparaciones</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{filteredRepairs.length}</p>
+          <p className="mt-1 text-xs text-slate-600">Registradas en el periodo</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tiempo prom. reparacion</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{formatHoursToHuman(repairsLeadAverage)}</p>
+          <p className="mt-1 text-xs text-slate-600">Desde origen (OT/NDP) hasta carga</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aprobacion auditorias</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{auditApprovalRate.toFixed(1)}%</p>
+          <p className="mt-1 text-xs text-slate-600">
+            {approvedAudits}/{filteredAudits.length || 0} aprobadas
+          </p>
+        </article>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-lg font-semibold text-slate-900">Cumplimiento de tareas por responsable</h3>
+            <span className="text-xs text-slate-500">
+              {isTasksLoading ? 'Cargando tareas...' : `${assigneeCompliance.length} responsables`}
+            </span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {assigneeCompliance.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay tareas operativas para el rango seleccionado.</p>
+            ) : (
+              assigneeCompliance.slice(0, 8).map((item) => (
+                <div key={item.assignee} className="rounded-lg border border-slate-200 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">{item.assignee}</p>
+                    <p className="text-xs font-semibold text-slate-600">
+                      {item.done}/{item.total} ({item.completionRate.toFixed(1)}%)
+                    </p>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      style={{ width: `${Math.max(4, Math.min(100, item.completionRate))}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-lg font-semibold text-slate-900">Quien realizo mas reparaciones</h3>
+            <span className="text-xs text-slate-500">Ranking por proveedor</span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {providerMetrics.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay reparaciones en el rango seleccionado.</p>
+            ) : (
+              providerMetrics.slice(0, 6).map((provider, index) => (
+                <div key={provider.providerName} className="rounded-lg border border-slate-200 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {index + 1}. {provider.providerName}
+                    </p>
+                    <p className="text-xs font-semibold text-slate-600">{provider.repairsCount} reparaciones</p>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-sky-500 transition-all"
+                      style={{
+                        width: `${Math.max(
+                          6,
+                          Math.min(100, (provider.repairsCount / (providerMetrics[0]?.repairsCount || 1)) * 100),
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+      </div>
+
+      <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-slate-900">Proveedor vs proveedor (tiempo y plata)</h3>
+          <span className="text-xs text-slate-500">{providerMetrics.length} proveedores detectados</span>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            Proveedor A
+            <select
+              value={effectiveLeftProvider}
+              onChange={(event) => setLeftProvider(event.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              {providerMetrics.map((item) => (
+                <option key={`left-${item.providerName}`} value={item.providerName}>
+                  {item.providerName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            Proveedor B
+            <select
+              value={effectiveRightProvider}
+              onChange={(event) => setRightProvider(event.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              {providerMetrics.map((item) => (
+                <option key={`right-${item.providerName}`} value={item.providerName}>
+                  {item.providerName}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          {[leftProviderMetrics, rightProviderMetrics].map((provider, index) => (
+            <div key={provider?.providerName ?? `provider-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              {provider ? (
+                <>
+                  <p className="text-sm font-bold text-slate-900">{provider.providerName}</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <p className="text-slate-500">Reparaciones</p>
+                      <p className="font-semibold text-slate-900">{provider.repairsCount}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <p className="text-slate-500">Costo total</p>
+                      <p className="font-semibold text-slate-900">{formatCurrency(provider.totalCost)}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <p className="text-slate-500">Ticket promedio</p>
+                      <p className="font-semibold text-slate-900">{formatCurrency(provider.totalCost / provider.repairsCount)}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <p className="text-slate-500">Tiempo promedio</p>
+                      <p className="font-semibold text-slate-900">{formatHoursToHuman(provider.avgLeadHours)}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <p className="text-slate-500">Margen total</p>
+                      <p className="font-semibold text-slate-900">{formatCurrency(provider.totalMargin)}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                      <p className="text-slate-500">Max tiempo</p>
+                      <p className="font-semibold text-slate-900">{formatHoursToHuman(provider.maxLeadHours)}</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Sin datos para comparar.</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-900">Resultado economico del periodo</h3>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Costo total reparaciones</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(totalRepairCost)}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Facturado cliente</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(totalRepairInvoiced)}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 sm:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Margen total</p>
+            <p className={`mt-1 text-lg font-bold ${totalRepairMargin >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {formatCurrency(totalRepairMargin)}
+            </p>
+          </div>
+        </div>
+      </article>
+
       <div className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-lg font-bold text-slate-900">Auditorias</h3>
@@ -520,5 +1001,7 @@ export const ReportsPage = () => {
     </section>
   )
 }
+
+
 
 
