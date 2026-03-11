@@ -426,6 +426,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Reduce errores recurrentes de "No se pudo autenticar en el servidor" cuando Render tarda en despertar o hay red inestable al iniciar sesion.
   Riesgo residual:
   - Si backend/API sigue caido de forma sostenida, login online no va a completar; solo mejora la tolerancia a fallos intermitentes.
+- Fecha: 2026-03-11
+  Cambio: Rediseno visual de "Ocupacion por cliente" en Reportes para mejorar legibilidad operativa.
+  Archivos:
+  - `src/modules/reports/pages/ReportsPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Elimina listados ilegibles de patentes en bloque, unifica clientes por nombre normalizado y agrega vista top con porcentajes/chips expandibles.
+  Riesgo residual:
+  - La comparacion por cliente depende de la calidad del dato `clientName`; si operacion carga nombres inconsistentes, conviene gobernanza de catalogo.
 
 ## 9) Riesgos abiertos (a seguir)
 

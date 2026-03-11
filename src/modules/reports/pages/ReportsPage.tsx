@@ -6,7 +6,7 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
 import { getFleetUnitTypeLabel } from '../../fleet/services/fleetService'
-import type { ExternalRequest, FleetUnit, RepairRecord, TaskRecord, WorkOrder } from '../../../types/domain'
+import type { ExternalRequest, RepairRecord, TaskRecord, WorkOrder } from '../../../types/domain'
 
 type ProviderMetrics = {
   providerName: string
@@ -197,6 +197,8 @@ export const ReportsPage = () => {
   const [isTasksLoading, setIsTasksLoading] = useState(true)
   const [leftProvider, setLeftProvider] = useState('')
   const [rightProvider, setRightProvider] = useState('')
+  const [showAllClients, setShowAllClients] = useState(false)
+  const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     let isMounted = true
@@ -263,24 +265,73 @@ export const ReportsPage = () => {
   const rangeLabel = startDate || endDate ? `Periodo: ${startDate || 'Inicio'} -> ${endDate || 'Hoy'}` : 'Periodo completo'
 
   const occupancyByClient = useMemo(() => {
-    const counts = new Map<string, { count: number; units: FleetUnit[] }>()
+    const normalizeClient = (value: string) => value.replace(/\s+/g, ' ').trim().toUpperCase()
+    const map = new Map<string, { label: string; count: number; unitCodes: string[] }>()
+
     fleetUnits.forEach((unit) => {
-      const client = unit.clientName?.trim() || 'Sin asignar'
-      const current = counts.get(client) ?? { count: 0, units: [] }
+      const rawClient = unit.clientName?.trim() || 'Sin asignar'
+      const normalized = normalizeClient(rawClient)
+      const key = normalized || 'SIN ASIGNAR'
+      const current = map.get(key) ?? {
+        label: key === 'SIN ASIGNAR' ? 'Sin asignar' : normalized,
+        count: 0,
+        unitCodes: [],
+      }
       current.count += 1
-      current.units.push(unit)
-      counts.set(client, current)
+      current.unitCodes.push(unit.internalCode)
+      map.set(key, current)
     })
 
-    const sorted = Array.from(counts.entries()).sort((a, b) => b[1].count - a[1].count)
-    const segments = sorted.map(([label, value], index) => ({
-      label,
-      value: value.count,
+    const detail = Array.from(map.values())
+      .map((entry) => ({
+        ...entry,
+        unitCodes: Array.from(new Set(entry.unitCodes)).sort((a, b) => a.localeCompare(b)),
+      }))
+      .sort((a, b) => b.count - a.count)
+
+    const topLimit = 8
+    const top = detail.slice(0, topLimit)
+    const remainder = detail.slice(topLimit)
+    const remainderCount = remainder.reduce((accumulator, item) => accumulator + item.count, 0)
+    const totalUnits = detail.reduce((accumulator, item) => accumulator + item.count, 0)
+
+    const segments = top.map((entry, index) => ({
+      label: entry.label,
+      value: entry.count,
       color: palette[index % palette.length],
     }))
 
-    return { segments, detail: sorted }
+    if (remainderCount > 0) {
+      segments.push({
+        label: `Otros (${remainder.length})`,
+        value: remainderCount,
+        color: '#64748b',
+      })
+    }
+
+    const segmentsWithShare = segments.map((segment) => ({
+      ...segment,
+      share: percentage(segment.value, totalUnits),
+    }))
+
+    const detailWithShare = detail.map((entry) => ({
+      ...entry,
+      share: percentage(entry.count, totalUnits),
+    }))
+
+    return {
+      segments: segmentsWithShare,
+      detail: detailWithShare,
+      totalUnits,
+      totalClients: detail.length,
+      unassignedUnits: detail.find((item) => item.label === 'Sin asignar')?.count ?? 0,
+    }
   }, [fleetUnits])
+
+  const visibleClientRows = useMemo(
+    () => (showAllClients ? occupancyByClient.detail : occupancyByClient.detail.slice(0, 10)),
+    [occupancyByClient.detail, showAllClients],
+  )
 
   const taskMetrics = useMemo(() => {
     const operational = filteredTasks.filter((task) => !task.isInTaskBank)
@@ -620,14 +671,25 @@ export const ReportsPage = () => {
         </p>
       </header>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr]">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-lg font-semibold text-slate-900">Ocupación por cliente</h3>
-            <span className="text-xs text-slate-500">Unidades activas por cliente</span>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Ocupacion por cliente</h3>
+              <p className="text-xs text-slate-500">Distribucion de unidades activas (top 8 + otros)</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700">
+                Clientes: {occupancyByClient.totalClients}
+              </span>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
+                Sin asignar: {occupancyByClient.unassignedUnits}
+              </span>
+            </div>
           </div>
-          <div className="mt-4 grid gap-6 lg:grid-cols-[220px_1fr]">
-            <div className="flex items-center justify-center">
+
+          <div className="mt-4 grid gap-5 lg:grid-cols-[220px_1fr]">
+            <div className="relative flex items-center justify-center">
               <svg width={200} height={200} viewBox="0 0 200 200">
                 <g transform="translate(100,100)">
                   <circle r={70} fill="transparent" stroke="#e2e8f0" strokeWidth={18} />
@@ -655,48 +717,85 @@ export const ReportsPage = () => {
                   ).elements}
                 </g>
               </svg>
+              <div className="pointer-events-none absolute text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Unidades</p>
+                <p className="text-2xl font-bold text-slate-900">{occupancyByClient.totalUnits}</p>
+              </div>
             </div>
-            <div className="grid gap-2">
-              {occupancyByClient.segments.length === 0 ? (
-                <p className="text-sm text-slate-500">No hay unidades activas.</p>
-              ) : (
-                occupancyByClient.segments.map((segment) => (
-                  <div key={segment.label} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                    <div className="flex items-center gap-2 text-sm text-slate-700">
+            <div className="space-y-2">
+              {occupancyByClient.segments.map((segment) => (
+                <div key={segment.label} className="rounded-lg border border-slate-200 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <div className="flex items-center gap-2 font-semibold text-slate-800">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />
                       {segment.label}
                     </div>
-                    <div className="text-sm font-semibold text-slate-900">{segment.value}</div>
+                    <span className="text-xs font-semibold text-slate-600">{segment.value} ({segment.share.toFixed(1)}%)</span>
                   </div>
-                ))
-              )}
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full rounded-full" style={{ width: `${Math.max(4, Math.min(100, segment.share))}%`, backgroundColor: segment.color }} />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Unidades por cliente</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-lg font-semibold text-slate-900">Unidades por cliente</h3>
+            {occupancyByClient.detail.length > 10 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllClients((previous) => !previous)}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                {showAllClients ? 'Ver menos' : 'Ver todos'}
+              </button>
+            ) : null}
+          </div>
           <div className="mt-4 space-y-3">
-            {occupancyByClient.detail.length === 0 ? (
+            {visibleClientRows.length === 0 ? (
               <p className="text-sm text-slate-500">No hay unidades activas.</p>
             ) : (
-              occupancyByClient.detail.map(([client, data]) => (
-                <div key={client} className="rounded-lg border border-slate-200 px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-800">{client}</p>
-                    <span className="text-sm font-semibold text-slate-900">{data.count}</span>
+              visibleClientRows.map((entry) => {
+                const isExpanded = Boolean(expandedClients[entry.label])
+                const visibleCodes = isExpanded ? entry.unitCodes : entry.unitCodes.slice(0, 6)
+                const hiddenCount = Math.max(0, entry.unitCodes.length - visibleCodes.length)
+                return (
+                  <div key={entry.label} className="rounded-lg border border-slate-200 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-800">{entry.label}</p>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                        {entry.count} ({entry.share.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {visibleCodes.map((code) => (
+                        <span key={`${entry.label}-${code}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+                          {code}
+                        </span>
+                      ))}
+                      {hiddenCount > 0 ? (
+                        <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">+{hiddenCount} mas</span>
+                      ) : null}
+                    </div>
+                    {entry.unitCodes.length > 6 ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedClients((previous) => ({ ...previous, [entry.label]: !isExpanded }))}
+                        className="mt-2 text-[11px] font-semibold text-amber-700 hover:text-amber-800"
+                      >
+                        {isExpanded ? 'Ocultar patentes' : 'Ver todas las patentes'}
+                      </button>
+                    ) : null}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {data.units.map((unit) => unit.internalCode).join(', ') || 'Sin unidades'}
-                  </p>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </article>
       </div>
-
-
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-3">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
