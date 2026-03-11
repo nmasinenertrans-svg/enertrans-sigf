@@ -44,8 +44,13 @@ const stableStringify = (value: unknown): string => {
 }
 
 router.get('/', async (_req, res) => {
-  const items = await prisma.workOrder.findMany({ orderBy: { createdAt: 'desc' } })
-  return res.json(items)
+  try {
+    const items = await prisma.workOrder.findMany({ orderBy: { createdAt: 'desc' } })
+    return res.json(items)
+  } catch (error) {
+    console.error('WorkOrder GET error:', error)
+    return res.status(500).json({ message: 'No se pudo listar las OT.' })
+  }
 })
 
 router.post('/', async (req, res) => {

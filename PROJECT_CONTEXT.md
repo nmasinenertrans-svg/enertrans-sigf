@@ -435,6 +435,16 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Elimina listados ilegibles de patentes en bloque, unifica clientes por nombre normalizado y agrega vista top con porcentajes/chips expandibles.
   Riesgo residual:
   - La comparacion por cliente depende de la calidad del dato `clientName`; si operacion carga nombres inconsistentes, conviene gobernanza de catalogo.
+- Fecha: 2026-03-11
+  Cambio: Hardening de sincronizacion de OT para red inestable (reintentos + refresco automatico en background cada 20s).
+  Archivos:
+  - `src/core/layout/AppLayout.tsx`
+  - `backend/src/routes/workOrders.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Reduce errores intermitentes de `No se pudo sincronizar /work-orders` por timeout/red movil y evita depender de recargar varias veces para ver OT nuevas.
+  Riesgo residual:
+  - Si backend queda caido de forma sostenida o sin conectividad, la sincronizacion seguira fallando aunque con reintentos y refresco automatico.
 
 ## 9) Riesgos abiertos (a seguir)
 

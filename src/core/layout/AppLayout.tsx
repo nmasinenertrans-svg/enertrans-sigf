@@ -26,6 +26,17 @@ import { TopHeader } from './TopHeader'
 import { buildAppNotifications } from '../notifications/notifications'
 
 const SIDEBAR_KEY = 'enertrans.sidebar.open'
+const RETRYABLE_SYNC_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
+const WORK_ORDERS_SYNC_INTERVAL_MS = 20000
+
+const waitMs = (ms: number) => new Promise<void>((resolve) => globalThis.setTimeout(resolve, ms))
+
+const isRetryableSyncError = (error: unknown): boolean => {
+  if (error instanceof ApiRequestError) {
+    return RETRYABLE_SYNC_STATUS_CODES.has(error.status)
+  }
+  return true
+}
 
 const readSidebarState = () => {
   if (typeof window === 'undefined') {
@@ -138,6 +149,7 @@ export const AppLayout = () => {
   const inventoryRef = useRef(inventoryItems)
   const featureFlagsRef = useRef(featureFlags)
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
+  const workOrdersRefreshInProgressRef = useRef(false)
 
 
   useEffect(() => {
@@ -219,27 +231,48 @@ export const AppLayout = () => {
         setAppError(`No se pudo sincronizar ${path}.`)
       }
 
-      const safeRequest = async <T,>(path: string, options?: { silent?: boolean }): Promise<T | null> => {
-        try {
-          return await apiRequest<T>(path, { timeoutMs: 15000 })
-        } catch (error) {
-          if (error instanceof ApiRequestError && error.status === 403) {
-            return null
-          }
-          if (error instanceof ApiRequestError && error.status === 401) {
-            if (!didInvalidateSession) {
-              didInvalidateSession = true
-              setAuthToken(null)
-              setCurrentUser(null)
-              setAppError('Sesión expirada. Iniciá sesión nuevamente.')
+      const safeRequest = async <T,>(
+        path: string,
+        options?: { silent?: boolean; maxAttempts?: number; timeoutMs?: number },
+      ): Promise<T | null> => {
+        const maxAttempts = Math.max(1, options?.maxAttempts ?? 1)
+        const baseTimeoutMs = options?.timeoutMs ?? 15000
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          try {
+            const timeoutMs = baseTimeoutMs + (attempt - 1) * 5000
+            return await apiRequest<T>(path, { timeoutMs })
+          } catch (error) {
+            if (error instanceof ApiRequestError && error.status === 403) {
+              return null
+            }
+            if (error instanceof ApiRequestError && error.status === 401) {
+              if (!didInvalidateSession) {
+                didInvalidateSession = true
+                setAuthToken(null)
+                setCurrentUser(null)
+                setAppError('Sesión expirada. Iniciá sesión nuevamente.')
+              }
+              return null
+            }
+
+            const canRetry = attempt < maxAttempts && isRetryableSyncError(error)
+            if (canRetry) {
+              await waitMs(attempt * 600)
+              continue
+            }
+
+            if (!options?.silent) {
+              reportSyncError(path)
             }
             return null
           }
-          if (!options?.silent) {
-            reportSyncError(path)
-          }
-          return null
         }
+
+        if (!options?.silent) {
+          reportSyncError(path)
+        }
+        return null
       }
 
       setGlobalLoading(true)
@@ -268,8 +301,10 @@ export const AppLayout = () => {
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
           shouldSyncMaintenance ? safeRequest<MaintenancePlan[]>('/maintenance', { silent: true }) : Promise.resolve(null),
-          shouldSyncAudits ? safeRequest<any[]>('/audits') : Promise.resolve(null),
-          shouldSyncWorkOrders ? safeRequest<WorkOrder[]>('/work-orders') : Promise.resolve(null),
+          shouldSyncAudits ? safeRequest<any[]>('/audits', { maxAttempts: 2, timeoutMs: 20000 }) : Promise.resolve(null),
+          shouldSyncWorkOrders
+            ? safeRequest<WorkOrder[]>('/work-orders', { maxAttempts: 3, timeoutMs: 22000 })
+            : Promise.resolve(null),
           shouldSyncRepairs ? safeRequest<RepairRecord[]>('/repairs', { silent: true }) : Promise.resolve(null),
           shouldSyncExternalRequests
             ? safeRequest<ExternalRequest[]>('/external-requests', { silent: true })
@@ -449,6 +484,78 @@ export const AppLayout = () => {
 
     loadMaintenance()
   }, [currentUser?.id, syncStatus.isOnline, setMaintenanceStatus])
+
+  useEffect(() => {
+    if (!currentUser?.id || !syncStatus.isOnline) {
+      return
+    }
+
+    if (!featureFlags.showWorkOrdersModule) {
+      return
+    }
+
+    const refreshWorkOrders = async () => {
+      if (workOrdersRefreshInProgressRef.current || isFetchingRef.current) {
+        return
+      }
+
+      const token = getAuthToken()
+      if (!token) {
+        return
+      }
+
+      workOrdersRefreshInProgressRef.current = true
+      try {
+        let response: WorkOrder[] | null = null
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try {
+            response = await apiRequest<WorkOrder[]>('/work-orders', { timeoutMs: 22000 + (attempt - 1) * 5000 })
+            break
+          } catch (error) {
+            if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
+              return
+            }
+            if (attempt >= 3 || !isRetryableSyncError(error)) {
+              throw error
+            }
+            await waitMs(attempt * 600)
+          }
+        }
+
+        if (!response) {
+          return
+        }
+
+        const queueItems = await getQueueItems()
+        const queuedWorkOrders = queueItems
+          .filter((item) => item.type === 'workOrder.create')
+          .map((item) => item.payload as WorkOrder)
+        const merged =
+          mergeByIdWithLocal(response, workOrdersRef.current, queuedWorkOrders) ??
+          response
+        setWorkOrders(merged)
+      } catch {
+        const now = Date.now()
+        const lastAt = lastSyncErrorAtRef.current['/work-orders'] ?? 0
+        if (now - lastAt >= 120000) {
+          lastSyncErrorAtRef.current['/work-orders'] = now
+          setAppError('No se pudo sincronizar /work-orders.')
+        }
+      } finally {
+        workOrdersRefreshInProgressRef.current = false
+      }
+    }
+
+    void refreshWorkOrders()
+    const intervalId = window.setInterval(() => {
+      void refreshWorkOrders()
+    }, WORK_ORDERS_SYNC_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+      workOrdersRefreshInProgressRef.current = false
+    }
+  }, [currentUser?.id, syncStatus.isOnline, featureFlags.showWorkOrdersModule, setAppError, setWorkOrders])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
