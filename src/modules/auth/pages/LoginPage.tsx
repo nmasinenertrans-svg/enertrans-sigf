@@ -26,6 +26,25 @@ type LoginResponse = {
 }
 
 const isUserRole = (value: string): value is UserRole => userRoles.includes(value as UserRole)
+const RETRYABLE_LOGIN_STATUS = new Set([408, 429, 500, 502, 503, 504])
+
+const isRetryableLoginError = (error: unknown) => {
+  if (error instanceof ApiRequestError) {
+    return RETRYABLE_LOGIN_STATUS.has(error.status)
+  }
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+    return (
+      message.includes('timeout') ||
+      message.includes('failed to fetch') ||
+      message.includes('networkerror') ||
+      message.includes('network')
+    )
+  }
+  return false
+}
+
+const wait = (ms: number) => new Promise((resolve) => globalThis.setTimeout(resolve, ms))
 
 const toStoredUser = (value: unknown): AppUser | null => {
   if (!value || typeof value !== 'object') {
@@ -110,6 +129,43 @@ export const LoginPage = () => {
     }
   }
 
+  const performOnlineLogin = async (): Promise<LoginResponse> => {
+    const attempts = [
+      { timeoutMs: 12000, warmup: false },
+      { timeoutMs: 22000, warmup: true },
+    ]
+    let lastError: unknown = null
+
+    for (let index = 0; index < attempts.length; index += 1) {
+      const attempt = attempts[index]
+      if (attempt.warmup) {
+        try {
+          await apiRequest<{ status: string }>('/health', { token: null, timeoutMs: 8000 })
+        } catch {
+          // ignore, login attempt below will decide retry/fail
+        }
+      }
+
+      try {
+        return await apiRequest<LoginResponse>('/auth/login', {
+          method: 'POST',
+          body: { username, password },
+          token: null,
+          timeoutMs: attempt.timeoutMs,
+        })
+      } catch (error) {
+        lastError = error
+        const hasMoreAttempts = index < attempts.length - 1
+        if (!hasMoreAttempts || !isRetryableLoginError(error)) {
+          throw error
+        }
+        await wait(1200)
+      }
+    }
+
+    throw lastError ?? new Error('Fallo de autenticacion')
+  }
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (isSubmitting) {
@@ -127,12 +183,7 @@ export const LoginPage = () => {
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       try {
-        const response = await apiRequest<LoginResponse>('/auth/login', {
-          method: 'POST',
-          body: { username, password },
-          token: null,
-          timeoutMs: 12000,
-        })
+        const response = await performOnlineLogin()
 
         setAuthToken(response.token)
         const role = isUserRole(response.user.role) ? response.user.role : ('AUDITOR' as UserRole)
@@ -163,6 +214,11 @@ export const LoginPage = () => {
         }
         if (error instanceof ApiRequestError && error.status === 401) {
           setErrorMessage('Usuario o contrasena incorrectos.')
+          setIsSubmitting(false)
+          return
+        }
+        if (isRetryableLoginError(error)) {
+          setErrorMessage('Servidor no disponible temporalmente (arranque/red). Espera unos segundos y reintenta.')
           setIsSubmitting(false)
           return
         }

@@ -417,6 +417,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Reportes deja de ser solo exportacion y pasa a incluir KPIs accionables: cumplimiento de tareas, ranking de reparaciones y comparativa proveedor vs proveedor por tiempo/costo/margen.
   Riesgo residual:
   - El indicador "quien realizo mas reparaciones" se infiere por proveedor (`supplierName`), no por usuario mecanico, porque `RepairRecord` aun no persiste autor de carga/resolucion.
+- Fecha: 2026-03-11
+  Cambio: Hardening de login online con reintento automatico para fallos transitorios (sleep/red/timeout backend).
+  Archivos:
+  - `src/modules/auth/pages/LoginPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Reduce errores recurrentes de "No se pudo autenticar en el servidor" cuando Render tarda en despertar o hay red inestable al iniciar sesion.
+  Riesgo residual:
+  - Si backend/API sigue caido de forma sostenida, login online no va a completar; solo mejora la tolerancia a fallos intermitentes.
 
 ## 9) Riesgos abiertos (a seguir)
 
