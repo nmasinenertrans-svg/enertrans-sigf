@@ -99,6 +99,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setUserNotifications: (notifications) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, userNotifications: notifications }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setFeatureFlags: (flags) => {
         setState((previousState) => {
           const nextState = { ...previousState, featureFlags: flags }

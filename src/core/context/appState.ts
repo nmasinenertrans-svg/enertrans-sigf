@@ -10,6 +10,7 @@ import type {
   InventoryItem,
   MaintenancePlan,
   RepairRecord,
+  UserInboxNotification,
   WorkOrder,
   MaintenanceStatus,
 } from '../../types/domain'
@@ -29,6 +30,7 @@ interface PersistedAppState {
   externalRequests: ExternalRequest[]
   movements: FleetMovement[]
   inventoryItems: InventoryItem[]
+  userNotifications: UserInboxNotification[]
   featureFlags: FeatureFlags
 }
 
@@ -50,6 +52,7 @@ export interface AppActions {
   setExternalRequests: (requests: ExternalRequest[]) => void
   setMovements: (movements: FleetMovement[]) => void
   setInventoryItems: (items: InventoryItem[]) => void
+  setUserNotifications: (notifications: UserInboxNotification[]) => void
   setFeatureFlags: (flags: FeatureFlags) => void
   setGlobalLoading: (value: boolean) => void
   setAppError: (errorMessage: string | null) => void
@@ -99,6 +102,7 @@ const defaultPersistedState: PersistedAppState = {
   externalRequests: [],
   movements: [],
   inventoryItems: [],
+  userNotifications: [],
   featureFlags: defaultFeatureFlags,
 }
 
@@ -149,6 +153,7 @@ export const getInitialAppState = (): AppState => {
     externalRequests: persistedState.externalRequests ?? [],
     movements: persistedState.movements ?? [],
     inventoryItems: persistedState.inventoryItems ?? [],
+    userNotifications: persistedState.userNotifications ?? [],
     featureFlags: { ...defaultFeatureFlags, ...(persistedState.featureFlags ?? {}) },
   }
   const fallbackUserId = typeof window !== 'undefined' ? window.localStorage.getItem(CURRENT_USER_KEY) : null
@@ -182,6 +187,7 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   externalRequests: state.externalRequests,
   movements: state.movements,
   inventoryItems: state.inventoryItems,
+  userNotifications: state.userNotifications,
   featureFlags: state.featureFlags,
 })
 

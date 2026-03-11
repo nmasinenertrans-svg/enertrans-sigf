@@ -381,6 +381,24 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Reduce crecimiento de storage por auditoria y evita cargas extremas por exceso de fotos.
   Riesgo residual:
   - Si operacion requiere evidencia mayor a 30 fotos, se necesita criterio de excepcion o anexos externos.
+- Fecha: 2026-03-10
+  Cambio: Notificaciones entre usuarios por eventos operativos (alta de nota de pedido externo y alta de reparacion).
+  Archivos:
+  - `backend/src/services/userNotifications.ts`
+  - `backend/src/routes/notifications.ts`
+  - `backend/src/routes/externalRequests.ts`
+  - `backend/src/routes/repairs.ts`
+  - `backend/src/index.ts`
+  - `src/core/context/appState.ts`
+  - `src/core/context/AppContext.tsx`
+  - `src/core/layout/AppLayout.tsx`
+  - `src/core/notifications/notifications.ts`
+  - `src/modules/system/pages/NotificationsPage.tsx`
+  - `src/types/domain.ts`
+  Riesgo mitigado:
+  - Los usuarios objetivo reciben alertas claras cuando otro usuario crea NDP o reparaciones, con persistencia por usuario en backend.
+  Riesgo residual:
+  - Destinatarios por defecto acotados a usernames (`Rbottero`, `Galonso`) con fallback a roles de gestion; si cambian usuarios, conviene parametrizar `NOTIFICATION_TARGET_USERNAMES` en entorno.
 
 ## 9) Riesgos abiertos (a seguir)
 

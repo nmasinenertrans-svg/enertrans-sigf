@@ -17,6 +17,7 @@ import movementsRoutes from './routes/movements.js'
 import tasksRoutes from './routes/tasks.js'
 import settingsRoutes from './routes/settings.js'
 import profileRoutes from './routes/profile.js'
+import notificationsRoutes from './routes/notifications.js'
 import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
@@ -49,6 +50,7 @@ app.use('/auth', authRoutes)
 app.use(maintenanceGuard)
 
 app.use('/settings', requireAuth, settingsRoutes)
+app.use('/notifications', requireAuth, notificationsRoutes)
 app.use('/users/me', requireAuth, profileRoutes)
 app.use('/users', requireAuth, requirePermission('USERS', 'view'), usersRoutes)
 app.use('/fleet', requireAuth, requirePermission('FLEET', 'view'), fleetRoutes)

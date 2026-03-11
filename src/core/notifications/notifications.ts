@@ -1,5 +1,5 @@
 import { ROUTE_PATHS, buildFleetDetailPath } from '../routing/routePaths'
-import type { AuditRecord, FleetUnit, WorkOrder } from '../../types/domain'
+import type { AuditRecord, FleetUnit, UserInboxNotification, WorkOrder } from '../../types/domain'
 import { apiRequest, getAuthToken } from '../../services/api/apiClient'
 
 export type AppNotification = {
@@ -186,8 +186,9 @@ export const buildAppNotifications = (params: {
   fleetUnits: FleetUnit[]
   audits: AuditRecord[]
   workOrders: WorkOrder[]
+  userNotifications?: UserInboxNotification[]
 }): AppNotification[] => {
-  const { fleetUnits, audits, workOrders } = params
+  const { fleetUnits, audits, workOrders, userNotifications = [] } = params
   const items: AppNotification[] = []
 
   const documentLabelMap = {
@@ -287,8 +288,20 @@ export const buildAppNotifications = (params: {
     })
   }
 
+  userNotifications.forEach((item) => {
+    items.push({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      severity: item.severity,
+      createdAt: item.createdAt,
+      target: item.target,
+    })
+  })
+
   const severityRank = { danger: 0, warning: 1, info: 2 } as const
-  return items.sort((left, right) => {
+  const uniqueItems = Array.from(new Map(items.map((item) => [item.id, item])).values())
+  return uniqueItems.sort((left, right) => {
     const severityDelta = severityRank[left.severity] - severityRank[right.severity]
     if (severityDelta !== 0) {
       return severityDelta

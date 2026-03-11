@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
+import type { AuthenticatedRequest } from '../middleware/auth.js'
+import { pushUserNotifications, resolveOperationalNotificationRecipients } from '../services/userNotifications.js'
 
 const router = Router()
 
@@ -28,7 +30,7 @@ router.get('/', async (_req, res) => {
   }
 })
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthenticatedRequest, res) => {
   const parsed = externalRequestSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: 'Datos invalidos.' })
@@ -36,6 +38,21 @@ router.post('/', async (req, res) => {
 
   try {
     const item = await prisma.externalRequest.create({ data: parsed.data })
+    const [actor, unit] = await Promise.all([
+      req.userId ? prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }) : Promise.resolve(null),
+      prisma.fleetUnit.findUnique({ where: { id: item.unitId }, select: { internalCode: true } }),
+    ])
+
+    const recipients = await resolveOperationalNotificationRecipients(req.userId)
+    await pushUserNotifications(recipients, {
+      title: 'Nueva nota de pedido',
+      description: `${actor?.fullName ?? 'Un usuario'} creo ${item.code}${unit?.internalCode ? ` para ${unit.internalCode}` : ''}.`,
+      severity: 'info',
+      target: '/work-orders/external-requests',
+      actorUserId: req.userId,
+      eventType: 'EXTERNAL_REQUEST_CREATED',
+    })
+
     return res.status(201).json(item)
   } catch (error: any) {
     if (error?.code === 'P2002') {

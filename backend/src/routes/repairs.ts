@@ -1,6 +1,8 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
+import type { AuthenticatedRequest } from '../middleware/auth.js'
+import { pushUserNotifications, resolveOperationalNotificationRecipients } from '../services/userNotifications.js'
 
 const router = Router()
 
@@ -26,7 +28,7 @@ router.get('/', async (_req, res) => {
   return res.json(items)
 })
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthenticatedRequest, res) => {
   const parsed = repairSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: 'Datos invalidos.' })
@@ -41,6 +43,25 @@ router.post('/', async (req, res) => {
     }
 
     const item = await prisma.repairRecord.create({ data: parsed.data })
+    const [actor, workOrder, externalRequest] = await Promise.all([
+      req.userId ? prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }) : Promise.resolve(null),
+      item.workOrderId ? prisma.workOrder.findUnique({ where: { id: item.workOrderId }, select: { code: true } }) : Promise.resolve(null),
+      item.externalRequestId
+        ? prisma.externalRequest.findUnique({ where: { id: item.externalRequestId }, select: { code: true } })
+        : Promise.resolve(null),
+    ])
+
+    const sourceLabel = workOrder?.code ?? externalRequest?.code ?? 'sin origen'
+    const recipients = await resolveOperationalNotificationRecipients(req.userId)
+    await pushUserNotifications(recipients, {
+      title: 'Nueva reparacion cargada',
+      description: `${actor?.fullName ?? 'Un usuario'} cargo una reparacion (${sourceLabel}) con proveedor ${item.supplierName}.`,
+      severity: 'warning',
+      target: '/repairs',
+      actorUserId: req.userId,
+      eventType: 'REPAIR_CREATED',
+    })
+
     return res.status(201).json(item)
   } catch (error: any) {
     if (error?.code === 'P2002') {

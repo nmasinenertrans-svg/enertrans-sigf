@@ -15,12 +15,12 @@ type NotificationFilter = 'ALL' | 'UNREAD' | 'DANGER' | 'WARNING' | 'INFO'
 export const NotificationsPage = () => {
   const navigate = useNavigate()
   const {
-    state: { fleetUnits, audits, workOrders },
+    state: { fleetUnits, audits, workOrders, userNotifications },
   } = useAppContext()
 
   const notifications = useMemo(
-    () => buildAppNotifications({ fleetUnits, audits, workOrders }),
-    [fleetUnits, audits, workOrders],
+    () => buildAppNotifications({ fleetUnits, audits, workOrders, userNotifications }),
+    [fleetUnits, audits, workOrders, userNotifications],
   )
   const [filter, setFilter] = useState<NotificationFilter>('ALL')
   const [searchTerm, setSearchTerm] = useState('')

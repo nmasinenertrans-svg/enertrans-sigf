@@ -111,6 +111,17 @@ export interface FeatureFlags {
   interactiveDashboard: boolean
 }
 
+export interface UserInboxNotification {
+  id: string
+  title: string
+  description: string
+  severity: 'info' | 'warning' | 'danger'
+  createdAt: string
+  target?: string
+  actorUserId?: string
+  eventType?: string
+}
+
 export interface FleetUnit {
   id: string
   qrId: string

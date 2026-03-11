@@ -15,6 +15,7 @@ import type {
   InventoryItem,
   MaintenancePlan,
   RepairRecord,
+  UserInboxNotification,
   WorkOrder,
 } from '../../types/domain'
 import { useAppContext } from '../hooks/useAppContext'
@@ -98,6 +99,7 @@ export const AppLayout = () => {
       workOrders,
       repairs,
       externalRequests,
+      userNotifications,
       movements,
       inventoryItems,
       users,
@@ -112,6 +114,7 @@ export const AppLayout = () => {
       setWorkOrders,
       setRepairs,
       setExternalRequests,
+      setUserNotifications,
       setMovements,
       setInventoryItems,
       setUsers,
@@ -182,8 +185,8 @@ export const AppLayout = () => {
   }, [featureFlags])
 
   const notifications = useMemo(() => {
-    return buildAppNotifications({ fleetUnits, audits, workOrders })
-  }, [audits, fleetUnits, workOrders])
+    return buildAppNotifications({ fleetUnits, audits, workOrders, userNotifications })
+  }, [audits, fleetUnits, workOrders, userNotifications])
 
   useEffect(() => {
     const currentUserId = currentUserRef.current?.id ?? null
@@ -260,6 +263,7 @@ export const AppLayout = () => {
           externalRequestsResponse,
           movementsResponse,
           inventoryResponse,
+          userNotificationsResponse,
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
@@ -272,6 +276,7 @@ export const AppLayout = () => {
             : Promise.resolve(null),
           shouldSyncMovements ? safeRequest<FleetMovement[]>('/movements', { silent: true }) : Promise.resolve(null),
           shouldSyncInventory ? safeRequest<InventoryItem[]>('/inventory', { silent: true }) : Promise.resolve(null),
+          safeRequest<UserInboxNotification[]>('/notifications', { silent: true }),
         ])
 
         const mappedAudits: AuditRecord[] | null = auditsResponse
@@ -375,6 +380,9 @@ export const AppLayout = () => {
             ) ?? inventoryResponse,
           )
         }
+        if (userNotificationsResponse) {
+          setUserNotifications(userNotificationsResponse)
+        }
       } finally {
         setGlobalLoading(false)
         isFetchingRef.current = false
@@ -393,6 +401,7 @@ export const AppLayout = () => {
     setExternalRequests,
     setMovements,
     setInventoryItems,
+    setUserNotifications,
     setUsers,
     setAppError,
     setGlobalLoading,
