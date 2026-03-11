@@ -445,6 +445,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Reduce errores intermitentes de `No se pudo sincronizar /work-orders` por timeout/red movil y evita depender de recargar varias veces para ver OT nuevas.
   Riesgo residual:
   - Si backend queda caido de forma sostenida o sin conectividad, la sincronizacion seguira fallando aunque con reintentos y refresco automatico.
+- Fecha: 2026-03-11
+  Cambio: PDF de OT habilitado aunque existan desvios sin resolver; el bloqueo de cierre se mantiene sin cambios.
+  Archivos:
+  - `src/modules/workOrders/pages/WorkOrdersPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Permite emitir reporte PDF operativo durante ejecucion de la OT sin forzar cierre anticipado.
+  Riesgo residual:
+  - Puede circular un PDF con desvios pendientes; el control estricto sigue estando en la accion de cierre de OT.
 
 ## 9) Riesgos abiertos (a seguir)
 
