@@ -8,6 +8,8 @@ import {
   applyParsedPayload,
   createEmptyMovementFormData,
   expandMovementUnitIdsWithAssociations,
+  formatMovementDateForView,
+  normalizeRemitoDateInput,
   validateMovementFormData,
   type MovementFormData,
 } from '../services/movementsService'
@@ -36,6 +38,7 @@ export const MovementsPage = () => {
   const [isSaving, setIsSaving] = useState(false)
   const [unitSearch, setUnitSearch] = useState('')
   const [nextRemitoNumber, setNextRemitoNumber] = useState('')
+  const [editingMovementId, setEditingMovementId] = useState<string | null>(null)
 
   const unitsOptions = useMemo(
     () =>
@@ -61,7 +64,7 @@ export const MovementsPage = () => {
     return available.filter((unit) => unit.searchText.includes(query)).slice(0, 12)
   }, [unitSearch, unitsOptions, formData.unitIds])
 
-  const canDeleteMovements = currentUser?.role === 'GERENTE'
+  const canManageMovements = currentUser?.role === 'GERENTE' || currentUser?.role === 'DEV'
 
   useEffect(() => {
     const loadNextRemito = async () => {
@@ -80,7 +83,7 @@ export const MovementsPage = () => {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
-        <p className="mt-2 text-sm text-slate-600">Este módulo está deshabilitado por configuración.</p>
+        <p className="mt-2 text-sm text-slate-600">Este modulo esta deshabilitado por configuracion.</p>
       </section>
     )
   }
@@ -116,7 +119,7 @@ export const MovementsPage = () => {
 
       setFormData((previous) => applyParsedPayload(previous, parsed ?? {}, fleetUnits))
     } catch {
-      setAppError('No se pudo leer el PDF automáticamente. Completa los datos manualmente.')
+      setAppError('No se pudo leer el PDF automaticamente. Completa los datos manualmente.')
     } finally {
       setIsParsing(false)
     }
@@ -148,22 +151,33 @@ export const MovementsPage = () => {
       const payload = {
         ...formData,
         unitIds: expandMovementUnitIdsWithAssociations(formData.unitIds, fleetUnits),
+        remitoDate: normalizeRemitoDateInput(formData.remitoDate),
         pdfFileUrl: pdfUrl,
       }
 
-      const created = await apiRequest<FleetMovement>('/movements', {
-        method: 'POST',
-        body: payload,
-      })
+      if (editingMovementId) {
+        const updated = await apiRequest<FleetMovement>(`/movements/${editingMovementId}`, {
+          method: 'PATCH',
+          body: payload,
+        })
+        setMovements(movements.map((movement) => (movement.id === editingMovementId ? updated : movement)))
+        setEditingMovementId(null)
+        setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
+      } else {
+        const created = await apiRequest<FleetMovement>('/movements', {
+          method: 'POST',
+          body: payload,
+        })
 
-      setMovements([created, ...movements])
-      setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
-      try {
-        const response = await apiRequest<NextRemitoResponse>('/movements/next-remito')
-        setNextRemitoNumber(response.remitoNumber)
-        setFormData((previous) => ({ ...previous, remitoNumber: response.remitoNumber }))
-      } catch {
-        // ignore
+        setMovements([created, ...movements])
+        setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
+        try {
+          const response = await apiRequest<NextRemitoResponse>('/movements/next-remito')
+          setNextRemitoNumber(response.remitoNumber)
+          setFormData((previous) => ({ ...previous, remitoNumber: response.remitoNumber }))
+        } catch {
+          // ignore
+        }
       }
     } catch {
       setAppError('No se pudo guardar el movimiento. Intenta nuevamente.')
@@ -198,6 +212,9 @@ export const MovementsPage = () => {
   }
 
   const handleDeleteMovement = async (movementId: string) => {
+    if (!canManageMovements) {
+      return
+    }
     const confirmed = window.confirm('¿Eliminar este remito? Esta acción no se puede deshacer.')
     if (!confirmed) {
       return
@@ -211,18 +228,54 @@ export const MovementsPage = () => {
     }
   }
 
+  const handleEditMovement = (movementId: string) => {
+    if (!canManageMovements) {
+      return
+    }
+
+    const selected = movements.find((movement) => movement.id === movementId)
+    if (!selected) {
+      return
+    }
+
+    const normalizedDate = normalizeRemitoDateInput(selected.remitoDate ?? '')
+    setEditingMovementId(selected.id)
+    setFormData({
+      unitIds: selected.unitIds ?? [],
+      movementType: selected.movementType,
+      remitoNumber: selected.remitoNumber ?? '',
+      remitoDate: normalizedDate,
+      clientName: selected.clientName ?? '',
+      workLocation: selected.workLocation ?? '',
+      equipmentDescription: selected.equipmentDescription ?? '',
+      observations: selected.observations ?? '',
+      deliveryContactName: selected.deliveryContactName ?? '',
+      deliveryContactDni: selected.deliveryContactDni ?? '',
+      deliveryContactSector: selected.deliveryContactSector ?? '',
+      deliveryContactRole: selected.deliveryContactRole ?? '',
+      receiverContactName: selected.receiverContactName ?? '',
+      receiverContactDni: selected.receiverContactDni ?? '',
+      receiverContactSector: selected.receiverContactSector ?? '',
+      receiverContactRole: selected.receiverContactRole ?? '',
+      pdfFileName: selected.pdfFileName ?? '',
+      pdfFileBase64: '',
+      pdfFileUrl: selected.pdfFileUrl ?? '',
+      parsedPayload: selected.parsedPayload,
+    })
+  }
+
   return (
     <section className="space-y-6">
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
         <p className="text-sm text-slate-600">
-          Cargá los remitos de entrada o devolución. Se intenta auto-lectura del PDF y luego podés corregir manualmente.
+          Carga los remitos de entrada o devolucion. Se intenta auto-lectura del PDF y luego podes corregir manualmente.
         </p>
       </header>
 
       <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900">Nuevo remito</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{editingMovementId ? 'Editar remito' : 'Nuevo remito'}</h3>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Unidades
@@ -285,7 +338,7 @@ export const MovementsPage = () => {
                 ))}
               </div>
             ) : null}
-            <span className="text-xs text-slate-500">Seleccioná una o más unidades.</span>
+            <span className="text-xs text-slate-500">Selecciona una o mas unidades.</span>
             {errors.unitIds ? <span className="text-xs text-rose-700">{errors.unitIds}</span> : null}
           </label>
 
@@ -297,12 +350,12 @@ export const MovementsPage = () => {
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             >
               <option value="ENTRY">ENTREGA</option>
-              <option value="RETURN">Devolución</option>
+              <option value="RETURN">Devolucion</option>
             </select>
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
-            Número de remito
+            Numero de remito
             <input
               value={formData.remitoNumber}
               readOnly
@@ -343,7 +396,7 @@ export const MovementsPage = () => {
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 lg:col-span-2">
-            Equipo / Descripción
+            Equipo / Descripcion
             <textarea
               value={formData.equipmentDescription}
               onChange={(event) => handleFieldChange('equipmentDescription', event.target.value)}
@@ -440,7 +493,7 @@ export const MovementsPage = () => {
             Remito (PDF)
             <input type="file" accept="application/pdf" onChange={handleFileSelection} />
             <span className="text-xs text-slate-500">
-              {formData.pdfFileName ? `Archivo: ${formData.pdfFileName}` : 'Adjuntá el PDF para autoleer datos.'}
+              {formData.pdfFileName ? `Archivo: ${formData.pdfFileName}` : 'Adjunta el PDF para autoleer datos.'}
             </span>
             {isParsing ? <span className="text-xs text-amber-600">Leyendo PDF...</span> : null}
           </label>
@@ -453,14 +506,17 @@ export const MovementsPage = () => {
             disabled={isSaving}
             className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-400 disabled:opacity-70"
           >
-            {isSaving ? 'Guardando...' : 'Guardar remito'}
+            {isSaving ? 'Guardando...' : editingMovementId ? 'Guardar cambios' : 'Guardar remito'}
           </button>
           <button
             type="button"
-            onClick={() => setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })}
+            onClick={() => {
+              setEditingMovementId(null)
+              setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
+            }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
           >
-            Limpiar
+            {editingMovementId ? 'Cancelar edicion' : 'Limpiar'}
           </button>
         </div>
       </article>
@@ -468,7 +524,7 @@ export const MovementsPage = () => {
       <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-lg font-semibold text-slate-900">Historial de remitos</h3>
         {movements.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">Aún no hay movimientos cargados.</p>
+          <p className="mt-3 text-sm text-slate-500">Aun no hay movimientos cargados.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
@@ -481,7 +537,7 @@ export const MovementsPage = () => {
                   <th className="px-3 py-2">Tipo</th>
                   <th className="px-3 py-2">PDF app</th>
                   <th className="px-3 py-2">PDF</th>
-                  {canDeleteMovements ? <th className="px-3 py-2">Acciones</th> : null}
+                  {canManageMovements ? <th className="px-3 py-2">Acciones</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -489,11 +545,11 @@ export const MovementsPage = () => {
                   const unit = fleetUnits.find((item) => movement.unitIds.includes(item.id))
                   return (
                     <tr key={movement.id} className="border-t border-slate-200">
-                      <td className="px-3 py-2">{movement.remitoDate || movement.createdAt?.slice(0, 10) || ''}</td>
-                      <td className="px-3 py-2">{movement.remitoNumber || 'Sin número'}</td>
+                      <td className="px-3 py-2">{formatMovementDateForView(movement.remitoDate ?? movement.createdAt)}</td>
+                      <td className="px-3 py-2">{movement.remitoNumber || 'Sin numero'}</td>
                       <td className="px-3 py-2">{unit?.internalCode ?? 'Unidad'}</td>
                       <td className="px-3 py-2">{movement.clientName || unit?.clientName || 'Sin cliente'}</td>
-                      <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'ENTREGA' : 'Devolución'}</td>
+                      <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'ENTREGA' : 'Devolucion'}</td>
                       <td className="px-3 py-2">
                         <button
                           type="button"
@@ -517,8 +573,15 @@ export const MovementsPage = () => {
                           'Sin adjunto'
                         )}
                       </td>
-                      {canDeleteMovements ? (
+                      {canManageMovements ? (
                         <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditMovement(movement.id)}
+                            className="mr-3 text-slate-700 hover:underline"
+                          >
+                            Editar
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteMovement(movement.id)}

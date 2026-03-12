@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { FleetMovement, FleetUnit } from '../../../types/domain'
+import { formatMovementDateForView, normalizeRemitoDateInput } from './movementsService'
 
 interface MovementPdfPayload {
   movement: FleetMovement
@@ -56,9 +57,11 @@ const addWatermark = (pdf: jsPDF, logoDataUrl: string | null) => {
 
 const formatDate = (value?: string) => {
   if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('es-AR')
+  const normalized = normalizeRemitoDateInput(value)
+  if (normalized) {
+    return formatMovementDateForView(normalized)
+  }
+  return formatMovementDateForView(value)
 }
 
 export const exportMovementPdf = async ({ movement, units }: MovementPdfPayload): Promise<void> => {

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import type { FleetMovement, FleetUnit } from '../../../types/domain'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { formatMovementDateForView } from '../../movements/services/movementsService'
 
 interface FleetMovementsPanelProps {
   unitId: string
@@ -60,7 +61,7 @@ export const FleetMovementsPanel = ({ unitId, fleetUnits, movements }: FleetMove
               <tbody>
                 {unitMovements.map((movement) => (
                   <tr key={movement.id} className="border-t border-slate-200">
-                    <td className="px-3 py-2">{movement.remitoDate || movement.createdAt?.slice(0, 10) || ''}</td>
+                    <td className="px-3 py-2">{formatMovementDateForView(movement.remitoDate ?? movement.createdAt)}</td>
                     <td className="px-3 py-2">{movement.remitoNumber || 'Sin numero'}</td>
                     <td className="px-3 py-2">{movement.clientName || 'Sin cliente'}</td>
                     <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'ENTREGA' : 'Devolucion'}</td>

@@ -35,6 +35,8 @@ const parseSchema = z.object({
   dataUrl: z.string().min(10),
 })
 
+const movementUpdateSchema = movementSchema.partial()
+
 const formatRemitoNumber = (value: number) => `R-${String(value).padStart(7, '0')}`
 
 const resolveNextRemitoNumber = async (): Promise<string> => {
@@ -73,21 +75,55 @@ const extractDate = (text: string) => {
 
 const toIsoDate = (value: string) => {
   const cleaned = value.trim()
-  const match = cleaned.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/)
-  if (!match) {
-    return cleaned
+  const datePrefix = cleaned.match(/^(\d{4}-\d{1,2}-\d{1,2})/)?.[1] ?? cleaned
+  const isoMatch = datePrefix.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  const dmyMatch = datePrefix.match(/^(\d{1,2})[\/\-.]+(\d{1,2})[\/\-.]+(\d{2,4})$/)
+  if (!isoMatch && !dmyMatch) {
+    return ''
   }
-  const day = Number(match[1])
-  const month = Number(match[2])
-  let year = Number(match[3])
+
+  const day = Number(isoMatch ? isoMatch[3] : dmyMatch?.[1])
+  const month = Number(isoMatch ? isoMatch[2] : dmyMatch?.[2])
+  let year = Number(isoMatch ? isoMatch[1] : dmyMatch?.[3])
   if (year < 100) {
     year += 2000
   }
-  const date = new Date(year, month - 1, day)
-  if (Number.isNaN(date.getTime())) {
-    return cleaned
+
+  const nowYear = new Date().getFullYear()
+  if (year < nowYear - 6 || year > nowYear + 2) {
+    return ''
   }
-  return date.toISOString().slice(0, 10)
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return ''
+  }
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+const toDateForStorage = (value: string): Date | undefined => {
+  const isoDate = toIsoDate(value)
+  if (!isoDate) {
+    return undefined
+  }
+  const date = new Date(`${isoDate}T12:00:00.000Z`)
+  return Number.isNaN(date.getTime()) ? undefined : date
+}
+
+const resolveAuthorizedRole = async (req: AuthenticatedRequest): Promise<'DEV' | 'GERENTE' | null> => {
+  const userId = req.userId
+  if (!userId) {
+    return null
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  })
+  if (!user) {
+    return null
+  }
+  if (user.role === 'DEV' || user.role === 'GERENTE') {
+    return user.role
+  }
+  return null
 }
 
 const parseRemitoText = (rawText: string) => {
@@ -146,7 +182,10 @@ router.post('/', async (req, res) => {
   }
 
   const remitoDateValue = parsed.data.remitoDate?.trim()
-  const remitoDate = remitoDateValue ? new Date(toIsoDate(remitoDateValue)) : undefined
+  const remitoDate = remitoDateValue ? toDateForStorage(remitoDateValue) : undefined
+  if (remitoDateValue && !remitoDate) {
+    return res.status(400).json({ message: 'Fecha de remito invalida.' })
+  }
 
   try {
     const remitoNumber = formatRemitoNumber(await getNextSequence('remito'))
@@ -154,7 +193,7 @@ router.post('/', async (req, res) => {
       data: {
         movementType: parsed.data.movementType,
         remitoNumber,
-        remitoDate: remitoDate && !Number.isNaN(remitoDate.getTime()) ? remitoDate : undefined,
+        remitoDate: remitoDate ?? undefined,
         clientName: parsed.data.clientName?.trim() ?? '',
         workLocation: parsed.data.workLocation?.trim() ?? '',
         equipmentDescription: parsed.data.equipmentDescription?.trim() ?? '',
@@ -215,6 +254,79 @@ router.post('/parse', async (req, res) => {
   }
 })
 
+router.patch('/:id', async (req: AuthenticatedRequest, res) => {
+  const role = await resolveAuthorizedRole(req)
+  if (!role) {
+    return res.status(403).json({ message: 'Solo DEV y GERENTE pueden editar remitos.' })
+  }
+
+  const rawMovementId = req.params.id
+  const movementId = Array.isArray(rawMovementId) ? rawMovementId[0] : rawMovementId
+  if (!movementId) {
+    return res.status(400).json({ message: 'Id de movimiento requerido.' })
+  }
+
+  const parsed = movementUpdateSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Datos invalidos.' })
+  }
+
+  const remitoDateValue = parsed.data.remitoDate?.trim()
+  const remitoDate = remitoDateValue ? toDateForStorage(remitoDateValue) : undefined
+  const normalizedRemitoDate = remitoDateValue ? remitoDate : undefined
+  if (remitoDateValue && !normalizedRemitoDate) {
+    return res.status(400).json({ message: 'Fecha de remito invalida.' })
+  }
+
+  try {
+    await prisma.fleetMovement.update({
+      where: { id: movementId },
+      data: {
+        movementType: parsed.data.movementType,
+        remitoNumber: parsed.data.remitoNumber?.trim(),
+        remitoDate: remitoDateValue ? remitoDate : undefined,
+        clientName: parsed.data.clientName?.trim(),
+        workLocation: parsed.data.workLocation?.trim(),
+        equipmentDescription: parsed.data.equipmentDescription?.trim(),
+        observations: parsed.data.observations?.trim(),
+        deliveryContactName: parsed.data.deliveryContactName?.trim(),
+        deliveryContactDni: parsed.data.deliveryContactDni?.trim(),
+        deliveryContactSector: parsed.data.deliveryContactSector?.trim(),
+        deliveryContactRole: parsed.data.deliveryContactRole?.trim(),
+        receiverContactName: parsed.data.receiverContactName?.trim(),
+        receiverContactDni: parsed.data.receiverContactDni?.trim(),
+        receiverContactSector: parsed.data.receiverContactSector?.trim(),
+        receiverContactRole: parsed.data.receiverContactRole?.trim(),
+        pdfFileName: parsed.data.pdfFileName?.trim(),
+        pdfFileUrl: parsed.data.pdfFileUrl?.trim(),
+        parsedPayload: parsed.data.parsedPayload,
+        units: parsed.data.unitIds
+          ? {
+              deleteMany: {},
+              create: parsed.data.unitIds.map((unitId) => ({ unitId })),
+            }
+          : undefined,
+      },
+    })
+
+    const updated = await prisma.fleetMovement.findUnique({
+      where: { id: movementId },
+      include: { units: { select: { unitId: true } } },
+    })
+    if (!updated) {
+      return res.status(404).json({ message: 'Movimiento no encontrado.' })
+    }
+
+    return res.json({
+      ...updated,
+      unitIds: updated.units.map((unit) => unit.unitId),
+    })
+  } catch (error) {
+    console.error('Movements PATCH error:', error)
+    return res.status(500).json({ message: 'No se pudo editar el movimiento.' })
+  }
+})
+
 router.delete('/:id', async (req: AuthenticatedRequest, res) => {
   const rawMovementId = req.params.id
   const movementId = Array.isArray(rawMovementId) ? rawMovementId[0] : rawMovementId
@@ -223,22 +335,9 @@ router.delete('/:id', async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const userId = req.userId
-    if (!userId) {
-      return res.status(401).json({ message: 'Token invalido.' })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    })
-
-    if (!user) {
-      return res.status(401).json({ message: 'Usuario no encontrado.' })
-    }
-
-    if (user.role !== 'GERENTE') {
-      return res.status(403).json({ message: 'Solo gerencia puede eliminar remitos.' })
+    const role = await resolveAuthorizedRole(req)
+    if (!role) {
+      return res.status(403).json({ message: 'Solo DEV y GERENTE pueden eliminar remitos.' })
     }
 
     await prisma.fleetMovement.delete({

@@ -472,6 +472,19 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Mejora trazabilidad real de cada reparacion (cuando se hizo, con cuantos km y en que moneda) y evita mezclar montos ARS/USD en un total unico.
   Riesgo residual:
   - Requiere aplicar migracion en base de datos para que backend quede alineado con los nuevos campos de `RepairRecord`.
+- Fecha: 2026-03-12
+  Cambio: Correccion robusta de fecha en Remitos + permisos de edicion/eliminacion solo para roles DEV y GERENTE.
+  Archivos:
+  - `backend/src/routes/movements.ts`
+  - `src/modules/movements/services/movementsService.ts`
+  - `src/modules/movements/pages/MovementsPage.tsx`
+  - `src/modules/movements/services/movementPdfService.ts`
+  - `src/modules/fleet/components/FleetMovementsPanel.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Evita parseos ambiguos de fecha (casos como `dd/mm/yyyy` mal interpretados) y bloquea cambios/eliminaciones de remitos por roles no autorizados.
+  Riesgo residual:
+  - Si un PDF trae fecha ilegible o fuera de rango operativo, se exigira correccion manual antes de guardar.
 
 ## 9) Riesgos abiertos (a seguir)
 

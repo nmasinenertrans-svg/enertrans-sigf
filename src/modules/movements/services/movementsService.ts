@@ -34,6 +34,47 @@ export type MovementFormErrors = Partial<Record<keyof MovementFormData, string>>
 
 const uniqueIds = (ids: string[]): string[] => Array.from(new Set(ids))
 
+export const normalizeRemitoDateInput = (value: string): string => {
+  const trimmed = value.trim()
+  const datePrefix = trimmed.match(/^(\d{4}-\d{1,2}-\d{1,2})/)?.[1] ?? trimmed
+  const isoMatch = datePrefix.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  const dmyMatch = datePrefix.match(/^(\d{1,2})[\/\-.]+(\d{1,2})[\/\-.]+(\d{2,4})$/)
+
+  if (!isoMatch && !dmyMatch) {
+    return ''
+  }
+
+  const day = Number(isoMatch ? isoMatch[3] : dmyMatch?.[1])
+  const month = Number(isoMatch ? isoMatch[2] : dmyMatch?.[2])
+  let year = Number(isoMatch ? isoMatch[1] : dmyMatch?.[3])
+
+  if (year < 100) {
+    year += 2000
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return ''
+  }
+
+  const nowYear = new Date().getFullYear()
+  if (year < nowYear - 6 || year > nowYear + 2) {
+    return ''
+  }
+
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+export const formatMovementDateForView = (value?: string): string => {
+  if (!value) {
+    return ''
+  }
+  const normalized = normalizeRemitoDateInput(value)
+  const date = normalized ? new Date(`${normalized}T12:00:00.000Z`) : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 10)
+  }
+  return date.toLocaleDateString('es-AR')
+}
+
 export const expandMovementUnitIdsWithAssociations = (unitIds: string[], fleetUnits: FleetUnit[]): string[] => {
   const unitById = new Map(fleetUnits.map((unit) => [unit.id, unit] as const))
   const nextIds = new Set(unitIds)
@@ -87,6 +128,8 @@ export const validateMovementFormData = (formData: MovementFormData, fleetUnits:
   }
   if (!formData.remitoDate.trim()) {
     errors.remitoDate = 'La fecha del remito es obligatoria.'
+  } else if (!normalizeRemitoDateInput(formData.remitoDate)) {
+    errors.remitoDate = 'La fecha del remito es invalida.'
   }
 
   if (!formData.clientName.trim()) {
@@ -105,7 +148,7 @@ export const toFleetMovement = (formData: MovementFormData): FleetMovement => ({
   unitIds: formData.unitIds,
   movementType: formData.movementType,
   remitoNumber: formData.remitoNumber.trim(),
-  remitoDate: formData.remitoDate.trim(),
+  remitoDate: normalizeRemitoDateInput(formData.remitoDate.trim()),
   clientName: formData.clientName.trim(),
   workLocation: formData.workLocation.trim(),
   equipmentDescription: formData.equipmentDescription.trim(),
@@ -189,7 +232,7 @@ export const applyParsedPayload = (
   return {
     ...next,
     remitoNumber: next.remitoNumber,
-    remitoDate: remitoDate || next.remitoDate,
+    remitoDate: normalizeRemitoDateInput(remitoDate) || next.remitoDate,
     clientName: clientName || next.clientName,
     workLocation: workLocation || next.workLocation,
     equipmentDescription: equipmentDescription || next.equipmentDescription,
