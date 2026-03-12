@@ -1,50 +1,57 @@
-﻿interface RepairCostCardProps {
+interface RepairCostCardProps {
   totalRepairs: number
-  totalRealCost: number
-  totalInvoiced: number
-  totalMargin: number
+  totalsByCurrency: Record<
+    'ARS' | 'USD',
+    {
+      repairs: number
+      realCost: number
+      invoiced: number
+      margin: number
+    }
+  >
 }
 
-export const RepairCostCard = ({
-  totalRepairs,
-  totalRealCost,
-  totalInvoiced,
-  totalMargin,
-}: RepairCostCardProps) => {
-  const formatMoney = (value: number) =>
-    new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
-  const recargoPercent = totalRealCost > 0 ? ((totalInvoiced - totalRealCost) / totalRealCost) * 100 : 0
+const CurrencySummaryCard = ({
+  currency,
+  repairs,
+  realCost,
+  invoiced,
+  margin,
+}: {
+  currency: 'ARS' | 'USD'
+  repairs: number
+  realCost: number
+  invoiced: number
+  margin: number
+}) => {
+  const formatter = new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'es-AR', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 
   return (
-    <div className="grid gap-3 md:grid-cols-5">
-      <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total reparaciones</p>
-        <p className="mt-2 text-2xl font-bold text-slate-900">{totalRepairs}</p>
-      </article>
-
-      <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Costo real total</p>
-        <p className="mt-2 text-2xl font-bold text-slate-900">{formatMoney(totalRealCost)}</p>
-      </article>
-
-      <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Facturado total</p>
-        <p className="mt-2 text-2xl font-bold text-slate-900">{formatMoney(totalInvoiced)}</p>
-      </article>
-
-      <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recargo promedio</p>
-        <p className="mt-2 text-2xl font-bold text-slate-900">
-          {new Intl.NumberFormat('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(recargoPercent)}%
-        </p>
-      </article>
-
-      <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Margen total</p>
-        <p className={`mt-2 text-2xl font-bold ${totalMargin >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-          {formatMoney(totalMargin)}
-        </p>
-      </article>
-    </div>
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Totales {currency}</p>
+      <p className="mt-2 text-sm font-semibold text-slate-700">Reparaciones: {repairs}</p>
+      <p className="mt-1 text-sm text-slate-700">Costo real: {formatter.format(realCost)}</p>
+      <p className="mt-1 text-sm text-slate-700">Facturado: {formatter.format(invoiced)}</p>
+      <p className={`mt-1 text-sm font-semibold ${margin >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+        Margen: {formatter.format(margin)}
+      </p>
+    </article>
   )
 }
+
+export const RepairCostCard = ({ totalRepairs, totalsByCurrency }: RepairCostCardProps) => (
+  <div className="grid gap-3 md:grid-cols-3">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total reparaciones</p>
+      <p className="mt-2 text-2xl font-bold text-slate-900">{totalRepairs}</p>
+      <p className="mt-1 text-xs text-slate-500">Resumen separado por moneda</p>
+    </article>
+    <CurrencySummaryCard currency="ARS" {...totalsByCurrency.ARS} />
+    <CurrencySummaryCard currency="USD" {...totalsByCurrency.USD} />
+  </div>
+)

@@ -50,12 +50,25 @@ export const RepairsPage = () => {
   )
 
   const summary = useMemo(
-    () => ({
-      totalRepairs: repairViewList.length,
-      totalRealCost: repairViewList.reduce((accumulator, item) => accumulator + item.realCost, 0),
-      totalInvoiced: repairViewList.reduce((accumulator, item) => accumulator + item.invoicedToClient, 0),
-      totalMargin: repairViewList.reduce((accumulator, item) => accumulator + item.margin, 0),
-    }),
+    () =>
+      repairViewList.reduce(
+        (accumulator, item) => {
+          accumulator.totalRepairs += 1
+          const bucket = item.currency === 'USD' ? accumulator.totalsByCurrency.USD : accumulator.totalsByCurrency.ARS
+          bucket.repairs += 1
+          bucket.realCost += item.realCost
+          bucket.invoiced += item.invoicedToClient
+          bucket.margin += item.margin
+          return accumulator
+        },
+        {
+          totalRepairs: 0,
+          totalsByCurrency: {
+            ARS: { repairs: 0, realCost: 0, invoiced: 0, margin: 0 },
+            USD: { repairs: 0, realCost: 0, invoiced: 0, margin: 0 },
+          },
+        },
+      ),
     [repairViewList],
   )
 
@@ -196,14 +209,14 @@ export const RepairsPage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Reparaciones</h2>
-        <p className="text-sm text-slate-600">Registro de costo real, facturacion cliente, proveedor y margen por unidad.</p>
+        <p className="text-sm text-slate-600">
+          Registro profesional de reparaciones con fecha, hora, kilometraje, moneda y costos por unidad.
+        </p>
       </header>
 
       <RepairCostCard
         totalRepairs={summary.totalRepairs}
-        totalRealCost={summary.totalRealCost}
-        totalInvoiced={summary.totalInvoiced}
-        totalMargin={summary.totalMargin}
+        totalsByCurrency={summary.totalsByCurrency}
       />
 
       <div className="grid gap-4 xl:grid-cols-3">

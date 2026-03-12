@@ -45,12 +45,18 @@ export const RepairsForm = ({
   const surchargePercent = Number(formData.surchargePercentInput.replace(/\./g, '').replace(',', '.')) || 0
   const invoicedToClient = calculateInvoicedFromSurcharge(realCost, surchargePercent)
   const margin = calculateMargin(realCost, invoicedToClient)
+  const moneyFormatter = new Intl.NumberFormat(formData.currency === 'USD' ? 'en-US' : 'es-AR', {
+    style: 'currency',
+    currency: formData.currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <header>
         <h3 className="text-lg font-bold text-slate-900">{isEditing ? 'Editar reparacion' : 'Registrar reparacion'}</h3>
-        <p className="mt-1 text-sm text-slate-600">Asocia OT o nota externa, proveedor y costos.</p>
+        <p className="mt-1 text-sm text-slate-600">Asocia OT o nota externa, proveedor, fecha/hora, km y costos.</p>
       </header>
 
       <form
@@ -111,6 +117,51 @@ export const RepairsForm = ({
         </FormRow>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FormRow label="Fecha de reparacion" errorMessage={errors.performedDate}>
+            <input
+              type="date"
+              className={inputClassName}
+              value={formData.performedDate}
+              onChange={(event) => onFieldChange('performedDate', event.target.value)}
+            />
+          </FormRow>
+
+          <FormRow label="Hora de reparacion" errorMessage={errors.performedTime}>
+            <input
+              type="time"
+              className={inputClassName}
+              value={formData.performedTime}
+              onChange={(event) => onFieldChange('performedTime', event.target.value)}
+            />
+          </FormRow>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FormRow label="KM de la unidad" errorMessage={errors.unitKilometersInput}>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              className={inputClassName}
+              value={formData.unitKilometersInput}
+              onChange={(event) => onFieldChange('unitKilometersInput', event.target.value)}
+              placeholder="Ej: 245120"
+            />
+          </FormRow>
+
+          <FormRow label="Moneda" errorMessage={errors.currency}>
+            <select
+              className={inputClassName}
+              value={formData.currency}
+              onChange={(event) => onFieldChange('currency', event.target.value as RepairFormData['currency'])}
+            >
+              <option value="ARS">ARS - Peso argentino</option>
+              <option value="USD">USD - Dolar estadounidense</option>
+            </select>
+          </FormRow>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <FormRow label="Costo real" errorMessage={errors.realCostInput}>
             <input
               className={inputClassName}
@@ -131,10 +182,9 @@ export const RepairsForm = ({
         </div>
 
         <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          <span className="font-semibold">Costo al cliente:</span>{' '}
-          {new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(invoicedToClient)}
+          <span className="font-semibold">Costo al cliente:</span> {moneyFormatter.format(invoicedToClient)}
           <span className="ml-3 font-semibold">Margen:</span>{' '}
-          {new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(margin)}
+          {moneyFormatter.format(margin)}
         </p>
 
         {formData.sourceType === 'EXTERNAL_REQUEST' ? (

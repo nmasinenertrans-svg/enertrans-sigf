@@ -12,6 +12,9 @@ const repairSchema = z.object({
   sourceType: z.enum(['WORK_ORDER', 'EXTERNAL_REQUEST']).optional().default('WORK_ORDER'),
   workOrderId: z.string().optional(),
   externalRequestId: z.string().optional(),
+  performedAt: z.string().datetime().optional(),
+  unitKilometers: z.number().int().min(0).optional().default(0),
+  currency: z.enum(['ARS', 'USD']).optional().default('ARS'),
   supplierName: z.string().min(1),
   realCost: z.number(),
   invoicedToClient: z.number(),
@@ -42,7 +45,14 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ message: 'Debes seleccionar una nota externa.' })
     }
 
-    const item = await prisma.repairRecord.create({ data: parsed.data })
+    const item = await prisma.repairRecord.create({
+      data: {
+        ...parsed.data,
+        performedAt: parsed.data.performedAt ?? new Date().toISOString(),
+        unitKilometers: parsed.data.unitKilometers ?? 0,
+        currency: parsed.data.currency ?? 'ARS',
+      },
+    })
     const [actor, workOrder, externalRequest] = await Promise.all([
       req.userId ? prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }) : Promise.resolve(null),
       item.workOrderId ? prisma.workOrder.findUnique({ where: { id: item.workOrderId }, select: { code: true } }) : Promise.resolve(null),
@@ -77,7 +87,16 @@ router.patch('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
-  const item = await prisma.repairRecord.update({ where: { id: req.params.id }, data: parsed.data })
+  const item = await prisma.repairRecord.update({
+    where: { id: req.params.id },
+    data: {
+      ...parsed.data,
+      unitKilometers:
+        typeof parsed.data.unitKilometers === 'number'
+          ? Math.max(0, Math.trunc(parsed.data.unitKilometers))
+          : parsed.data.unitKilometers,
+    },
+  })
   return res.json(item)
 })
 

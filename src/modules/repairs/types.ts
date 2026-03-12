@@ -2,6 +2,10 @@ export interface RepairFormData {
   sourceType: 'WORK_ORDER' | 'EXTERNAL_REQUEST'
   workOrderId: string
   externalRequestId: string
+  performedDate: string
+  performedTime: string
+  unitKilometersInput: string
+  currency: 'ARS' | 'USD'
   supplierName: string
   realCostInput: string
   surchargePercentInput: string
@@ -23,6 +27,9 @@ export interface RepairViewItem {
   workOrderLabel: string
   externalRequestId: string
   externalRequestLabel: string
+  performedAt: string
+  unitKilometers: number
+  currency: 'ARS' | 'USD'
   supplierName: string
   realCost: number
   invoicedToClient: number

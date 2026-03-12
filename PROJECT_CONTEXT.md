@@ -454,6 +454,24 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Permite emitir reporte PDF operativo durante ejecucion de la OT sin forzar cierre anticipado.
   Riesgo residual:
   - Puede circular un PDF con desvios pendientes; el control estricto sigue estando en la accion de cierre de OT.
+- Fecha: 2026-03-12
+  Cambio: Upgrade profesional del modulo Reparaciones con nuevos campos operativos: fecha, hora, km unidad y moneda (ARS/USD), con persistencia backend.
+  Archivos:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260312103000_add_repair_operational_fields/migration.sql`
+  - `backend/src/routes/repairs.ts`
+  - `src/types/domain.ts`
+  - `src/modules/repairs/types.ts`
+  - `src/modules/repairs/services/repairsService.ts`
+  - `src/modules/repairs/components/RepairsForm.tsx`
+  - `src/modules/repairs/components/RepairCostCard.tsx`
+  - `src/modules/repairs/components/RepairsHistoryCard.tsx`
+  - `src/modules/repairs/pages/RepairsPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Mejora trazabilidad real de cada reparacion (cuando se hizo, con cuantos km y en que moneda) y evita mezclar montos ARS/USD en un total unico.
+  Riesgo residual:
+  - Requiere aplicar migracion en base de datos para que backend quede alineado con los nuevos campos de `RepairRecord`.
 
 ## 9) Riesgos abiertos (a seguir)
 

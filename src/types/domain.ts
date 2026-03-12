@@ -314,6 +314,9 @@ export interface RepairRecord {
   workOrderId: string
   externalRequestId?: string
   sourceType?: 'WORK_ORDER' | 'EXTERNAL_REQUEST'
+  performedAt?: string
+  unitKilometers: number
+  currency: 'ARS' | 'USD'
   supplierName: string
   createdAt?: string
   realCost: number
