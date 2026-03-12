@@ -485,6 +485,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita parseos ambiguos de fecha (casos como `dd/mm/yyyy` mal interpretados) y bloquea cambios/eliminaciones de remitos por roles no autorizados.
   Riesgo residual:
   - Si un PDF trae fecha ilegible o fuera de rango operativo, se exigira correccion manual antes de guardar.
+- Fecha: 2026-03-12
+  Cambio: Hardening de compatibilidad en `/repairs` para evitar "desaparicion" de reparaciones ante desfasaje entre schema Prisma y columnas reales en DB.
+  Archivos:
+  - `backend/src/routes/repairs.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Si faltan columnas nuevas (`performedAt`, `unitKilometers`, `currency`) en produccion, el backend sigue listando/creando/actualizando reparaciones con fallback legacy en vez de fallar en bloque.
+  Riesgo residual:
+  - El fallback mantiene operacion, pero se recomienda alinear DB con migraciones para persistir campos nuevos de reparaciones sin modo compatibilidad.
 
 ## 9) Riesgos abiertos (a seguir)
 
