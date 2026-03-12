@@ -494,6 +494,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Si faltan columnas nuevas (`performedAt`, `unitKilometers`, `currency`) en produccion, el backend sigue listando/creando/actualizando reparaciones con fallback legacy en vez de fallar en bloque.
   Riesgo residual:
   - El fallback mantiene operacion, pero se recomienda alinear DB con migraciones para persistir campos nuevos de reparaciones sin modo compatibilidad.
+- Fecha: 2026-03-12
+  Cambio: Recuperacion cruzada de reparaciones por schema (`enertrans_prod` + `public`) en `GET /repairs`, con merge/dedupe por `id`.
+  Archivos:
+  - `backend/src/routes/repairs.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Evita que reparaciones "desaparezcan" cuando el backend queda apuntando a un schema distinto al que contiene los datos historicos.
+  Riesgo residual:
+  - Si hay escrituras repartidas entre schemas, la operacion sigue funcionando por lectura combinada, pero se recomienda unificar `DATABASE_URL` con `schema=enertrans_prod` para eliminar ambiguedad estructural.
 
 ## 9) Riesgos abiertos (a seguir)
 

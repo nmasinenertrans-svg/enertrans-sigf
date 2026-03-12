@@ -48,6 +48,28 @@ type LegacyRepairRow = {
   updatedAt: Date
 }
 
+type RecoveryRepairRow = {
+  id: string
+  unitId: string
+  workOrderId: string | null
+  externalRequestId: string | null
+  sourceType: string | null
+  supplierName: string
+  realCost: number
+  invoicedToClient: number
+  margin: number
+  invoiceFileName: string | null
+  invoiceFileBase64: string | null
+  invoiceFileUrl: string | null
+  createdAt: Date | string
+  updatedAt: Date | string
+  performedAt: Date | string | null
+  unitKilometers: number | null
+  currency: string | null
+}
+
+const REPAIR_RECOVERY_SCHEMAS = ['enertrans_prod', 'public'] as const
+
 let repairColumnsSupportCache: { checkedAt: number; supported: boolean } | null = null
 
 const createId = (): string => {
@@ -67,6 +89,143 @@ const isMissingOperationalColumnError = (error: unknown): boolean => {
   }
   const message = String(maybeError.message ?? '').toLowerCase()
   return message.includes('column') && message.includes('repairrecord')
+}
+
+const asIsoString = (value: Date | string | null | undefined): string | undefined => {
+  if (!value) {
+    return undefined
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString()
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined
+  }
+  return parsed.toISOString()
+}
+
+const mapRecoveryRepairToPublicShape = (row: RecoveryRepairRow) => ({
+  id: row.id,
+  unitId: row.unitId,
+  workOrderId: row.workOrderId ?? '',
+  externalRequestId: row.externalRequestId ?? undefined,
+  sourceType: row.sourceType === 'EXTERNAL_REQUEST' ? 'EXTERNAL_REQUEST' : 'WORK_ORDER',
+  performedAt: asIsoString(row.performedAt) ?? asIsoString(row.createdAt),
+  unitKilometers: Number.isFinite(row.unitKilometers ?? NaN) ? Number(row.unitKilometers) : 0,
+  currency: row.currency === 'USD' ? 'USD' : 'ARS',
+  supplierName: row.supplierName,
+  createdAt: asIsoString(row.createdAt),
+  realCost: row.realCost,
+  invoicedToClient: row.invoicedToClient,
+  margin: row.margin,
+  invoiceFileName: row.invoiceFileName || undefined,
+  invoiceFileBase64: row.invoiceFileBase64 || undefined,
+  invoiceFileUrl: row.invoiceFileUrl || undefined,
+})
+
+const mergeRepairCollections = (primary: any[], secondary: any[]) => {
+  const map = new Map<string, any>()
+  const push = (item: any) => {
+    if (!item?.id) return
+    const prev = map.get(item.id)
+    if (!prev) {
+      map.set(item.id, item)
+      return
+    }
+    const prevTime = new Date(prev.createdAt ?? 0).getTime()
+    const nextTime = new Date(item.createdAt ?? 0).getTime()
+    if (nextTime >= prevTime) {
+      map.set(item.id, item)
+    }
+  }
+
+  primary.forEach(push)
+  secondary.forEach(push)
+
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+  )
+}
+
+const isSafeSqlIdentifier = (value: string) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)
+
+const listRepairsFromRecoverySchemas = async (): Promise<ReturnType<typeof mapRecoveryRepairToPublicShape>[]> => {
+  const schemaRows = await prisma.$queryRaw<{ schema_name: string }[]>`
+    SELECT DISTINCT n.nspname AS schema_name
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname = 'RepairRecord'
+  `
+
+  const targetSchemas = schemaRows
+    .map((row) => row.schema_name)
+    .filter((schema) => REPAIR_RECOVERY_SCHEMAS.includes(schema as (typeof REPAIR_RECOVERY_SCHEMAS)[number]))
+  if (targetSchemas.length === 0) {
+    const currentSchemaRows = await prisma.$queryRaw<{ schema_name: string }[]>`
+      SELECT current_schema() AS schema_name
+    `
+    const currentSchema = currentSchemaRows[0]?.schema_name
+    if (currentSchema && REPAIR_RECOVERY_SCHEMAS.includes(currentSchema as (typeof REPAIR_RECOVERY_SCHEMAS)[number])) {
+      targetSchemas.push(currentSchema)
+    }
+  }
+
+  const allRows: RecoveryRepairRow[] = []
+  for (const schema of targetSchemas) {
+    if (!isSafeSqlIdentifier(schema)) {
+      continue
+    }
+
+    const columnRows = await prisma.$queryRaw<{ column_name: string }[]>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = ${schema}
+        AND table_name = 'RepairRecord'
+    `
+    const columns = new Set(columnRows.map((row) => row.column_name))
+    const performedAtSelect = columns.has('performedAt') ? `"performedAt"` : `"createdAt" AS "performedAt"`
+    const unitKilometersSelect = columns.has('unitKilometers') ? `"unitKilometers"` : `0 AS "unitKilometers"`
+    const currencySelect = columns.has('currency') ? `"currency"::text` : `'ARS'::text AS "currency"`
+    const externalRequestIdSelect = columns.has('externalRequestId')
+      ? `"externalRequestId"`
+      : `NULL::text AS "externalRequestId"`
+    const sourceTypeSelect = columns.has('sourceType') ? `"sourceType"` : `'WORK_ORDER'::text AS "sourceType"`
+    const invoiceFileNameSelect = columns.has('invoiceFileName') ? `"invoiceFileName"` : `''::text AS "invoiceFileName"`
+    const invoiceFileBase64Select = columns.has('invoiceFileBase64')
+      ? `"invoiceFileBase64"`
+      : `''::text AS "invoiceFileBase64"`
+    const invoiceFileUrlSelect = columns.has('invoiceFileUrl') ? `"invoiceFileUrl"` : `''::text AS "invoiceFileUrl"`
+
+    const query = `
+      SELECT
+        "id",
+        "unitId",
+        "workOrderId",
+        ${externalRequestIdSelect},
+        ${sourceTypeSelect},
+        "supplierName",
+        "realCost",
+        "invoicedToClient",
+        "margin",
+        ${invoiceFileNameSelect},
+        ${invoiceFileBase64Select},
+        ${invoiceFileUrlSelect},
+        "createdAt",
+        "updatedAt",
+        ${performedAtSelect},
+        ${unitKilometersSelect},
+        ${currencySelect}
+      FROM "${schema}"."RepairRecord"
+      ORDER BY "createdAt" DESC
+    `
+
+    const rows = await prisma.$queryRawUnsafe<RecoveryRepairRow[]>(query)
+    allRows.push(...rows)
+  }
+
+  const mapped = allRows.map(mapRecoveryRepairToPublicShape)
+  return mergeRepairCollections(mapped, [])
 }
 
 const supportsRepairOperationalColumns = async (): Promise<boolean> => {
@@ -217,19 +376,27 @@ const createLegacyRepair = async (input: RepairInput) => {
 
 router.get('/', async (_req, res) => {
   const supportsOperational = await supportsRepairOperationalColumns()
+  const recoveryPromise = listRepairsFromRecoverySchemas().catch((error) => {
+    console.error('Repairs recovery read error:', error)
+    return []
+  })
+
   try {
     if (supportsOperational) {
       const items = await prisma.repairRecord.findMany({ orderBy: { createdAt: 'desc' } })
-      return res.json(items)
+      const recovered = await recoveryPromise
+      return res.json(mergeRepairCollections(items, recovered))
     }
-    const legacyItems = await listLegacyRepairs()
-    return res.json(legacyItems)
+    return res.json(await recoveryPromise)
   } catch (error) {
     if (!supportsOperational || isMissingOperationalColumnError(error)) {
-      const legacyItems = await listLegacyRepairs()
-      return res.json(legacyItems)
+      return res.json(await recoveryPromise)
     }
     console.error('Repairs GET error:', error)
+    const recovered = await recoveryPromise
+    if (recovered.length > 0) {
+      return res.json(recovered)
+    }
     return res.status(500).json({ message: 'No se pudieron cargar las reparaciones.' })
   }
 })
