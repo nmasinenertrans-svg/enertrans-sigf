@@ -55,11 +55,6 @@ export const normalizeRemitoDateInput = (value: string): string => {
     return ''
   }
 
-  const nowYear = new Date().getFullYear()
-  if (year < nowYear - 6 || year > nowYear + 2) {
-    return ''
-  }
-
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 

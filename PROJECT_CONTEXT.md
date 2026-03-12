@@ -503,6 +503,16 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita que reparaciones "desaparezcan" cuando el backend queda apuntando a un schema distinto al que contiene los datos historicos.
   Riesgo residual:
   - Si hay escrituras repartidas entre schemas, la operacion sigue funcionando por lectura combinada, pero se recomienda unificar `DATABASE_URL` con `schema=enertrans_prod` para eliminar ambiguedad estructural.
+- Fecha: 2026-03-12
+  Cambio: Correccion de edicion de fecha en remitos existentes (PATCH) con schema de update sin defaults implicitos y parseo de fecha sin recorte artificial por anio.
+  Archivos:
+  - `backend/src/routes/movements.ts`
+  - `src/modules/movements/services/movementsService.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - La fecha ingresada al editar un remito se persiste correctamente y se refleja en PDF/listados sin quedar atada a defaults vacios del schema de edicion.
+  Riesgo residual:
+  - Remitos historicos con fecha mal cargada previamente requieren edicion puntual para corregir el dato almacenado.
 
 ## 9) Riesgos abiertos (a seguir)
 

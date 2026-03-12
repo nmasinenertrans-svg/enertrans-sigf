@@ -35,7 +35,27 @@ const parseSchema = z.object({
   dataUrl: z.string().min(10),
 })
 
-const movementUpdateSchema = movementSchema.partial()
+const movementUpdateSchema = z.object({
+  unitIds: z.array(z.string().min(1)).min(1).optional(),
+  movementType: z.enum(['ENTRY', 'RETURN']).optional(),
+  remitoNumber: z.string().optional(),
+  remitoDate: z.string().optional(),
+  clientName: z.string().optional(),
+  workLocation: z.string().optional(),
+  equipmentDescription: z.string().optional(),
+  observations: z.string().optional(),
+  deliveryContactName: z.string().optional(),
+  deliveryContactDni: z.string().optional(),
+  deliveryContactSector: z.string().optional(),
+  deliveryContactRole: z.string().optional(),
+  receiverContactName: z.string().optional(),
+  receiverContactDni: z.string().optional(),
+  receiverContactSector: z.string().optional(),
+  receiverContactRole: z.string().optional(),
+  pdfFileName: z.string().optional(),
+  pdfFileUrl: z.string().optional(),
+  parsedPayload: z.any().optional(),
+})
 
 const formatRemitoNumber = (value: number) => `R-${String(value).padStart(7, '0')}`
 
@@ -89,10 +109,6 @@ const toIsoDate = (value: string) => {
     year += 2000
   }
 
-  const nowYear = new Date().getFullYear()
-  if (year < nowYear - 6 || year > nowYear + 2) {
-    return ''
-  }
   if (month < 1 || month > 12 || day < 1 || day > 31) {
     return ''
   }
