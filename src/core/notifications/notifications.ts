@@ -1,4 +1,4 @@
-import { ROUTE_PATHS, buildFleetDetailPath } from '../routing/routePaths'
+﻿import { ROUTE_PATHS, buildFleetDetailPath } from '../routing/routePaths'
 import type { AuditRecord, FleetUnit, UserInboxNotification, WorkOrder } from '../../types/domain'
 import { apiRequest, getAuthToken } from '../../services/api/apiClient'
 
@@ -256,7 +256,7 @@ export const buildAppNotifications = (params: {
     const unit = fleetUnits.find((fleetUnit) => fleetUnit.id === audit.unitId)
     items.push({
       id: `audit-${audit.id}`,
-      title: 'Auditoria rechazada',
+      title: 'Inspeccion rechazada',
       description: `${unit?.internalCode ?? 'Unidad'} - ${formatDate(audit.performedAt)}`,
       severity: 'danger',
       createdAt: audit.performedAt,
@@ -280,7 +280,7 @@ export const buildAppNotifications = (params: {
   if (pendingReauditCount > 0) {
     items.push({
       id: 'reaudit-pending',
-      title: 'Re-auditorias pendientes',
+      title: 'Re-inspecciones pendientes',
       description: `${pendingReauditCount} unidades en espera`,
       severity: 'warning',
       createdAt: getLatestIsoDate(workOrders.filter((order) => order.pendingReaudit).map((order) => order.createdAt)),
@@ -309,4 +309,6 @@ export const buildAppNotifications = (params: {
     return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
   })
 }
+
+
 

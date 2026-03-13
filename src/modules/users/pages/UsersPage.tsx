@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
@@ -12,7 +12,7 @@ const buildEmptyPermissions = (): UserPermissions => getRolePermissions('AUDITOR
 const permissionModuleLabelMap: Record<PermissionModule, string> = {
   FLEET: 'Flota',
   MAINTENANCE: 'Plan de mantenimiento',
-  AUDITS: 'Auditorias',
+  AUDITS: 'Inspecciones',
   WORK_ORDERS: 'Ordenes de trabajo',
   TASKS: 'Tareas',
   REPAIRS: 'Reparaciones',
@@ -246,9 +246,9 @@ export const UsersPage = () => {
   }
 
   const handleResetPassword = (userId: string) => {
-    const newPassword = window.prompt('Nueva contraseña temporal (min 6 caracteres):')
+    const newPassword = window.prompt('Nueva contraseÃ±a temporal (min 6 caracteres):')
     if (!newPassword || newPassword.trim().length < 6) {
-      setAppError('La contraseña debe tener al menos 6 caracteres.')
+      setAppError('La contraseÃ±a debe tener al menos 6 caracteres.')
       return
     }
     setUsers(
@@ -328,7 +328,7 @@ export const UsersPage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Usuarios y permisos</h2>
-        <p className="text-sm text-slate-600">Gestión de usuarios, roles y permisos por módulo.</p>
+        <p className="text-sm text-slate-600">GestiÃ³n de usuarios, roles y permisos por mÃ³dulo.</p>
       </header>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -354,7 +354,7 @@ export const UsersPage = () => {
           </label>
 
           <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
-            Contraseña
+            ContraseÃ±a
             <input
               type="password"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
@@ -399,11 +399,11 @@ export const UsersPage = () => {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <h3 className="text-lg font-bold text-slate-900">Permisos por módulo</h3>
+          <h3 className="text-lg font-bold text-slate-900">Permisos por mÃ³dulo</h3>
           <div className="mt-4 overflow-x-auto">
             <div className="min-w-[640px]">
               <div className="grid grid-cols-[180px_repeat(4,1fr)] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <span>Módulo</span>
+                <span>MÃ³dulo</span>
                 {permissionActions.map((action) => (
                   <span key={action} className="text-center">
                     {action}
@@ -544,7 +544,7 @@ export const UsersPage = () => {
                   onClick={() => handleResetPassword(user.id)}
                   className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                 >
-                  Resetear contraseña
+                  Resetear contraseÃ±a
                 </button>
               </div>
             </div>
@@ -555,7 +555,7 @@ export const UsersPage = () => {
       <ConfirmModal
         isOpen={Boolean(userIdPendingDelete)}
         title="Eliminar usuario"
-        message={`¿Estas seguro que deseas eliminar a ${
+        message={`Â¿Estas seguro que deseas eliminar a ${
           users.find((user) => user.id === userIdPendingDelete)?.fullName ?? 'este usuario'
         }?`}
         onCancel={() => setUserIdPendingDelete(null)}
@@ -570,3 +570,5 @@ export const UsersPage = () => {
     </section>
   )
 }
+
+

@@ -18,7 +18,7 @@ import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
 
 const detailTabs = [
   { id: 'maintenancePlan', label: 'Plan de mantenimiento' },
-  { id: 'audits', label: 'Auditorias' },
+  { id: 'audits', label: 'Inspecciones' },
   { id: 'workOrders', label: 'Ordenes de trabajo' },
   { id: 'repairs', label: 'Reparaciones' },
   { id: 'externalRequests', label: 'Notas externas' },
@@ -843,18 +843,18 @@ export const FleetDetailPage = () => {
 
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima auditoria</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima inspeccion</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestAudit ? auditResultLabelMap[latestAudit.result] : 'Sin auditorias'}
+              {latestAudit ? auditResultLabelMap[latestAudit.result] : 'Sin inspecciones'}
             </p>
             <p className="text-xs text-slate-600">
               {latestAudit ? formatDateTime(latestAudit.performedAt) : '—'}
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima re-auditoria</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ultima re-inspeccion</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestReaudit ? auditResultLabelMap[latestReaudit.result] : 'Sin re-auditorias'}
+              {latestReaudit ? auditResultLabelMap[latestReaudit.result] : 'Sin re-inspecciones'}
             </p>
             <p className="text-xs text-slate-600">
               {latestReaudit ? formatDateTime(latestReaudit.performedAt) : '—'}
@@ -1297,13 +1297,13 @@ export const FleetDetailPage = () => {
           {activeTab === 'audits' ? (
             <div className="space-y-3 text-sm text-slate-700">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p>Auditorias registradas: {unitAudits.length}</p>
+                <p>Inspecciones registradas: {unitAudits.length}</p>
                 {canCreateAudits ? (
                   <Link
                     to={`${ROUTE_PATHS.audits}?unitId=${selectedUnit.id}&create=1`}
                     className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
                   >
-                    Nueva auditoria
+                    Nueva inspeccion
                   </Link>
                 ) : null}
               </div>
@@ -1317,7 +1317,7 @@ export const FleetDetailPage = () => {
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-slate-500">Sin auditorias cargadas.</p>
+                <p className="text-xs text-slate-500">Sin inspecciones cargadas.</p>
               )}
             </div>
           ) : null}
@@ -1495,4 +1495,6 @@ export const FleetDetailPage = () => {
     </section>
   )
 }
+
+
 

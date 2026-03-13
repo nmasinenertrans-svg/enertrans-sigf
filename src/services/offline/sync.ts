@@ -224,13 +224,13 @@ const classifySyncError = (item: OfflineQueueItem, error: unknown) => {
   }
 
   if (item.type === 'audit.create' && statusCode === 409) {
-    return { shouldDrop: true, message: `409 conflicto: auditoria ya existente en servidor.` }
+    return { shouldDrop: true, message: `409 conflicto: inspeccion ya existente en servidor.` }
   }
 
   if (item.type === 'audit.create' && NON_RETRYABLE_STATUS_CODES.has(statusCode)) {
     return {
       shouldDrop: false,
-      message: `${statusCode} error en auditoria. Se conserva en cola para revision y reintento manual.`,
+      message: `${statusCode} error en inspeccion. Se conserva en cola para revision y reintento manual.`,
     }
   }
 

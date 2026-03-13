@@ -100,13 +100,19 @@ const createStandardChecklist = (): AuditChecklistSectionDraft[] => [
     'Gancho de hidr. y estib.',
     'Niv. de Liq. hidraulico',
     'Instrumental',
-    'Estabilizadores',
-    'Estab. Delantero',
-    'Estab. Trasero',
+    'Extensibles',
+    'Extensible delantero',
+    'Extensible trasero',
     'Certificado',
     'Diagrama de carga',
   ]),
-  createChecklistSectionDraftWithItems('DOCUMENTACION', ['Cedula verde', 'Ruta', 'VTV', 'Seguro']),
+  createChecklistSectionDraftWithItems('ELASTICOS Y AMORTIGUACION', [
+    'Elasticos delanteros',
+    'Elasticos traseros',
+    'Amortiguadores delanteros',
+    'Amortiguadores traseros',
+  ]),
+  createChecklistSectionDraftWithItems('DOCUMENTACION', ['Cedula verde', 'VTV', 'Seguro']),
 ]
 
 export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
@@ -258,7 +264,7 @@ const buildDeviationList = (sections: AuditChecklistSection[]): WorkOrderDeviati
     {
       id: createId(),
       section: 'GENERAL',
-      item: 'Desvios detectados en auditoria',
+      item: 'Desvios detectados en inspeccion',
       observation: '',
       status: 'PENDING',
       resolutionNote: '',
@@ -281,7 +287,7 @@ export const createWorkOrderFromAudit = (audit: AuditRecord, unitCode: string): 
     createdAt: new Date().toISOString(),
     taskList: buildDeviationList(audit.checklistSections),
     spareParts: [],
-    laborDetail: `Desvios detectados en auditoria ${audit.code}`,
+    laborDetail: `Desvios detectados en inspeccion ${audit.code}`,
     linkedInventorySkuList: [],
   }
 }
@@ -296,13 +302,13 @@ const resolveAuditKind = (unitId: string, workOrders: WorkOrder[]): 'AUDIT' | 'R
 }
 
 const buildAuditCode = (kind: 'AUDIT' | 'REAUDIT', unitCode: string, sequenceOverride?: number | null) => {
-  const prefix = kind === 'REAUDIT' ? 'RAU' : 'AU'
+  const prefix = kind === 'REAUDIT' ? 'RINS' : 'INS'
   if (sequenceOverride && Number.isFinite(sequenceOverride)) {
     return formatSequenceCode(prefix, sequenceOverride, unitCode)
   }
   return kind === 'REAUDIT'
-    ? getNextSequenceCode('reaudit', 'RAU', unitCode)
-    : getNextSequenceCode('audit', 'AU', unitCode)
+    ? getNextSequenceCode('reaudit', 'RINS', unitCode)
+    : getNextSequenceCode('audit', 'INS', unitCode)
 }
 
 export const toAuditRecord = (
@@ -347,7 +353,7 @@ export const toAuditRecord = (
     checklistSections = [
       {
         id: createId(),
-        title: 'AUDITORIA MANUAL',
+        title: 'INSPECCION MANUAL',
         items: [
           {
             id: createId(),
@@ -486,7 +492,7 @@ const normalizeLegacyAuditRecord = (audit: AuditRecord): AuditRecord => {
   return {
     ...audit,
     auditKind: audit.auditKind ?? 'AUDIT',
-    code: audit.code ?? 'AU-LEGACY',
+    code: audit.code ?? 'INS-LEGACY',
     auditorName: audit.auditorName ?? 'Usuario no identificado',
     checklistSections,
     result: hasValidResult ? audit.result : evaluateAuditResult(checklistSections),
@@ -507,7 +513,7 @@ export const buildAuditHistoryView = (
 
       return {
         id: audit.id,
-        code: audit.code ?? 'AU-LEGACY',
+        code: audit.code ?? 'INS-LEGACY',
         auditKind: audit.auditKind ?? 'AUDIT',
         unitId: audit.unitId,
         unitLabel: unit ? `${unit.internalCode} - ${unit.ownerCompany}` : 'Unidad no disponible',
@@ -526,3 +532,4 @@ export const buildAuditHistoryView = (
       }
     })
     .sort((left, right) => new Date(right.performedAt).getTime() - new Date(left.performedAt).getTime())
+

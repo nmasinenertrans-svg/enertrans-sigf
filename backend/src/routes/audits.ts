@@ -1,4 +1,4 @@
-import { Router } from 'express'
+﻿import { Router } from 'express'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../db.js'
@@ -71,7 +71,7 @@ const extractBadItems = (checklist: any): any[] => {
     {
       id: createDeviationId(),
       section: 'GENERAL',
-      item: 'Desvios detectados en auditoria',
+      item: 'Desvios detectados en inspeccion',
       observation: '',
       status: 'PENDING',
       resolutionNote: '',
@@ -273,7 +273,7 @@ router.post('/', async (req, res) => {
   const performedAtDate = new Date(parsed.data.performedAt)
 
   if (Number.isNaN(performedAtDate.getTime())) {
-    return res.status(400).json({ message: 'Fecha de auditoria invalida.' })
+    return res.status(400).json({ message: 'Fecha de inspeccion invalida.' })
   }
 
   const performedAtFrom = new Date(performedAtDate.getTime() - AUDIT_DUPLICATE_WINDOW_MS)
@@ -317,7 +317,7 @@ router.post('/', async (req, res) => {
   const unitCode = unit?.internalCode ?? ''
   // Server must be the source of truth for audit codes.
   // Frontend/local sequence can drift (PWA/offline/cache/reset) and cause collisions.
-  const code = formatCode(auditKind === 'REAUDIT' ? 'RAU' : 'AU', await getNextSequence(auditKind), unitCode)
+  const code = formatCode(auditKind === 'REAUDIT' ? 'RINS' : 'INS', await getNextSequence(auditKind), unitCode)
 
   const data = {
     id: parsed.data.id,
@@ -364,7 +364,7 @@ router.post('/', async (req, res) => {
             status: 'OPEN',
             taskList: extractBadItems(parsed.data.checklist),
             spareParts: [],
-            laborDetail: `Desvios detectados en auditoria ${code}`,
+            laborDetail: `Desvios detectados en inspeccion ${code}`,
             linkedInventorySkuList: [],
           },
         })
@@ -415,8 +415,8 @@ router.post('/', async (req, res) => {
     if (error?.code === 'P2025') {
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
-    console.error('Error creando auditoria:', error)
-    return res.status(500).json({ message: 'No se pudo crear la auditoria.' })
+    console.error('Error creando inspeccion:', error)
+    return res.status(500).json({ message: 'No se pudo crear la inspeccion.' })
   }
 })
 
@@ -459,5 +459,6 @@ router.delete('/:id', async (req, res) => {
 })
 
 export default router
+
 
 

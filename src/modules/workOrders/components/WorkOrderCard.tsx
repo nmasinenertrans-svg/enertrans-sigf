@@ -34,7 +34,7 @@ export const WorkOrderCard = ({
     </div>
 
     <div className="mt-4 space-y-2 text-sm text-slate-700">
-      {item.pendingReaudit ? <p className="text-xs font-semibold text-amber-700">Pendiente de re-auditoria</p> : null}
+      {item.pendingReaudit ? <p className="text-xs font-semibold text-amber-700">Pendiente de re-inspeccion</p> : null}
       <p>
         <span className="font-semibold">Desvios:</span> {item.taskList.length}
       </p>

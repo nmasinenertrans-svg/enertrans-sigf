@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+﻿import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { jsPDF } from 'jspdf'
 import * as XLSX from 'xlsx'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -518,7 +518,7 @@ export const ReportsPage = () => {
   const exportAuditsCsv = () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Auditor', 'Resultado']
     const rows = filteredAudits.map((audit) => [
-      audit.code ?? 'AU-LEGACY',
+      audit.code ?? 'INS-LEGACY',
       formatDateTime(audit.performedAt),
       unitMap.get(audit.unitId)?.domain ?? 'Unidad no disponible',
       unitMap.get(audit.unitId)?.client ?? 'Sin cliente',
@@ -526,13 +526,13 @@ export const ReportsPage = () => {
       audit.auditorName ?? '',
       audit.result,
     ])
-    downloadCsv('auditorias.csv', buildCsv(headers, rows))
+    downloadCsv('inspecciones.csv', buildCsv(headers, rows))
   }
 
   const exportAuditsPdf = () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo', 'Auditor', 'Resultado']
     const rows = filteredAudits.map((audit) => [
-      audit.code ?? 'AU-LEGACY',
+      audit.code ?? 'INS-LEGACY',
       formatDateTime(audit.performedAt),
       unitMap.get(audit.unitId)?.domain ?? 'Unidad no disponible',
       unitMap.get(audit.unitId)?.client ?? 'Sin cliente',
@@ -540,14 +540,14 @@ export const ReportsPage = () => {
       audit.auditorName ?? '',
       audit.result,
     ])
-    const doc = buildPdf('Reporte de Auditorias', rangeLabel, headers, rows)
-    doc.save('auditorias.pdf')
+    const doc = buildPdf('Reporte de Inspecciones', rangeLabel, headers, rows)
+    doc.save('inspecciones.pdf')
   }
 
   const exportAuditsXlsx = () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Auditor', 'Resultado']
     const rows = filteredAudits.map((audit) => [
-      audit.code ?? 'AU-LEGACY',
+      audit.code ?? 'INS-LEGACY',
       formatDateTime(audit.performedAt),
       unitMap.get(audit.unitId)?.domain ?? 'Unidad no disponible',
       unitMap.get(audit.unitId)?.client ?? 'Sin cliente',
@@ -555,7 +555,7 @@ export const ReportsPage = () => {
       audit.auditorName ?? '',
       audit.result,
     ])
-    downloadXlsx('auditorias.xlsx', headers, rows)
+    downloadXlsx('inspecciones.xlsx', headers, rows)
   }
 
   const exportWorkOrdersCsv = () => {
@@ -841,7 +841,7 @@ export const ReportsPage = () => {
           <p className="mt-1 text-xs text-slate-600">Desde origen (OT/NDP) hasta carga</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aprobacion auditorias</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aprobacion inspecciones</p>
           <p className="mt-2 text-2xl font-bold text-slate-900">{auditApprovalRate.toFixed(1)}%</p>
           <p className="mt-1 text-xs text-slate-600">
             {approvedAudits}/{filteredAudits.length || 0} aprobadas
@@ -1014,7 +1014,7 @@ export const ReportsPage = () => {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-900">Auditorias</h3>
+          <h3 className="text-lg font-bold text-slate-900">Inspecciones</h3>
           <p className="mt-1 text-xs text-slate-500">Registros: {filteredAudits.length}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -1100,6 +1100,8 @@ export const ReportsPage = () => {
     </section>
   )
 }
+
+
 
 
 

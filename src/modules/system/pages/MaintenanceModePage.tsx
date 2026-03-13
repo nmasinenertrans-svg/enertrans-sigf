@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { apiRequest } from '../../../services/api/apiClient'
 import { getQueueItems } from '../../../services/offline/queue'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -69,9 +69,9 @@ export const MaintenanceModePage = () => {
       })
       setFeatureFlags({ ...featureFlags, ...response })
       setFlags({ ...featureFlags, ...response })
-      setAppError('Configuración de módulos actualizada.')
+      setAppError('ConfiguraciÃ³n de mÃ³dulos actualizada.')
     } catch {
-      setAppError('No se pudo actualizar la configuración de módulos.')
+      setAppError('No se pudo actualizar la configuraciÃ³n de mÃ³dulos.')
     } finally {
       setIsSavingFlags(false)
     }
@@ -79,7 +79,7 @@ export const MaintenanceModePage = () => {
 
   const runDiagnostics = async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setAppError('Sin conexión. El diagnóstico completo requiere internet.')
+      setAppError('Sin conexiÃ³n. El diagnÃ³stico completo requiere internet.')
       return
     }
 
@@ -150,7 +150,7 @@ export const MaintenanceModePage = () => {
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-500">Mantenimiento</p>
-          <h2 className="mt-2 text-2xl font-bold text-slate-900">Estado de la aplicación</h2>
+          <h2 className="mt-2 text-2xl font-bold text-slate-900">Estado de la aplicaciÃ³n</h2>
           <p className="mt-1 text-sm text-slate-600">
             Solo los usuarios DEV pueden activar o desactivar el mantenimiento global.
           </p>
@@ -183,14 +183,14 @@ export const MaintenanceModePage = () => {
             className="min-h-[110px] rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder="Ej: La aplicación se encuentra en mantenimiento, contacte con el área de soporte."
+            placeholder="Ej: La aplicaciÃ³n se encuentra en mantenimiento, contacte con el Ã¡rea de soporte."
           />
         </label>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-800">Panel DEV - Módulos y botones</h3>
-        <p className="mt-1 text-xs text-slate-500">Oculta módulos y acciones en producción.</p>
+        <h3 className="text-sm font-semibold text-slate-800">Panel DEV - MÃ³dulos y botones</h3>
+        <p className="mt-1 text-xs text-slate-500">Oculta mÃ³dulos y acciones en producciÃ³n.</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
@@ -212,7 +212,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar modulo Auditorias
+            Mostrar modulo Inspecciones
             <input
               type="checkbox"
               checked={flags.showAuditsModule}
@@ -248,7 +248,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar botón “Cargar unidad demo”
+            Mostrar botÃ³n â€œCargar unidad demoâ€
             <input
               type="checkbox"
               checked={flags.showDemoUnitButton}
@@ -257,7 +257,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar módulo Inventario
+            Mostrar mÃ³dulo Inventario
             <input
               type="checkbox"
               checked={flags.showInventoryModule}
@@ -266,7 +266,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar módulo Reportes
+            Mostrar mÃ³dulo Reportes
             <input
               type="checkbox"
               checked={flags.showReportsModule}
@@ -275,7 +275,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar módulo Notas de pedido externo
+            Mostrar mÃ³dulo Notas de pedido externo
             <input
               type="checkbox"
               checked={flags.showExternalRequestsModule}
@@ -302,7 +302,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 md:col-span-2">
-            Modo auditoria manual (sin OT automatica, sin re-auditoria automatica, con PDF obligatorio)
+            Modo inspeccion manual (sin OT automatica, sin re-inspeccion automatica, con PDF obligatorio)
             <input
               type="checkbox"
               checked={flags.manualAuditMode}
@@ -328,13 +328,13 @@ export const MaintenanceModePage = () => {
             className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
             disabled={isSavingFlags}
           >
-            {isSavingFlags ? 'Guardando...' : 'Guardar configuración'}
+            {isSavingFlags ? 'Guardando...' : 'Guardar configuraciÃ³n'}
           </button>
         </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-800">Diagnóstico completo</h3>
+        <h3 className="text-sm font-semibold text-slate-800">DiagnÃ³stico completo</h3>
         <p className="mt-1 text-xs text-slate-500">Prueba backend, auth, base, storage y cola offline.</p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -344,7 +344,7 @@ export const MaintenanceModePage = () => {
             className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
             disabled={diagnosticRunning}
           >
-            {diagnosticRunning ? 'Ejecutando...' : 'Ejecutar diagnóstico'}
+            {diagnosticRunning ? 'Ejecutando...' : 'Ejecutar diagnÃ³stico'}
           </button>
         </div>
 
@@ -372,3 +372,5 @@ export const MaintenanceModePage = () => {
     </section>
   )
 }
+
+

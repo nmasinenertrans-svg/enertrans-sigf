@@ -316,7 +316,7 @@ export const AuditsPage = () => {
   const handleAddPhotoFiles = async (fileList: FileList) => {
     const remainingSlots = MAX_AUDIT_PHOTOS - formData.photoBase64List.length
     if (remainingSlots <= 0) {
-      setAppError(`Limite alcanzado: maximo ${MAX_AUDIT_PHOTOS} fotos por auditoria.`)
+      setAppError(`Limite alcanzado: maximo ${MAX_AUDIT_PHOTOS} fotos por inspeccion.`)
       return
     }
 
@@ -496,7 +496,7 @@ export const AuditsPage = () => {
     try {
       const validationErrors = validateAuditFormData(formData, fleetUnits)
       if (manualAuditMode && !formData.reportPdfFileBase64) {
-        validationErrors.reportPdfFileBase64 = 'Debes adjuntar el PDF de la auditoria manual.'
+        validationErrors.reportPdfFileBase64 = 'Debes adjuntar el PDF de la inspeccion manual.'
       }
 
       if (Object.keys(validationErrors).length > 0) {
@@ -545,7 +545,7 @@ export const AuditsPage = () => {
           reportPdfFileBase64: '',
         }
       } catch (error) {
-        setAppError(withNetworkHint('No se pudo subir el PDF de la auditoria manual.', error))
+        setAppError(withNetworkHint('No se pudo subir el PDF de la inspeccion manual.', error))
         return
       } finally {
         setGlobalLoading(false)
@@ -612,7 +612,7 @@ export const AuditsPage = () => {
         forceQueueFallback = true
         setAppError(
           withNetworkHint(
-            'No se pudieron subir las fotos de la auditoria. Se guardara localmente y reintentara en segundo plano.',
+            'No se pudieron subir las fotos de la inspeccion. Se guardara localmente y reintentara en segundo plano.',
             error,
           ),
         )
@@ -666,7 +666,7 @@ export const AuditsPage = () => {
         return
       } catch (error) {
         setAppError(
-          withNetworkHint('No se pudo confirmar la auditoria en servidor. Se guardara localmente hasta reintentar.', error),
+          withNetworkHint('No se pudo confirmar la inspeccion en servidor. Se guardara localmente hasta reintentar.', error),
         )
         if (onlinePhotoUrls.length > 0) {
           usePreUploadedPhotoUrlsInQueue = true
@@ -711,8 +711,8 @@ export const AuditsPage = () => {
         if (stillQueued) {
           setAppError(
             onlineNow
-              ? 'Auditoria NO confirmada en servidor. Quedo local en este dispositivo.'
-              : 'Auditoria guardada localmente. Pendiente de sincronizacion.',
+              ? 'Inspeccion NO confirmada en servidor. Quedo local en este dispositivo.'
+              : 'Inspeccion guardada localmente. Pendiente de sincronizacion.',
           )
         } else {
           await refreshAuditsFromServer()
@@ -729,7 +729,7 @@ export const AuditsPage = () => {
               : audit,
           ),
         )
-        setAppError('No se pudo sincronizar la auditoria. Quedo guardada localmente.')
+        setAppError('No se pudo sincronizar la inspeccion. Quedo guardada localmente.')
       })
     } else {
       const hasOpenWorkOrders = workOrders.some(
@@ -781,8 +781,8 @@ export const AuditsPage = () => {
         if (stillQueued) {
           setAppError(
             onlineNow
-              ? 'Auditoria NO confirmada en servidor. Quedo local en este dispositivo.'
-              : 'Auditoria guardada localmente. Pendiente de sincronizacion.',
+              ? 'Inspeccion NO confirmada en servidor. Quedo local en este dispositivo.'
+              : 'Inspeccion guardada localmente. Pendiente de sincronizacion.',
           )
         } else {
           await refreshAuditsFromServer()
@@ -799,7 +799,7 @@ export const AuditsPage = () => {
               : audit,
           ),
         )
-        setAppError('No se pudo sincronizar la auditoria. Quedo guardada localmente.')
+        setAppError('No se pudo sincronizar la inspeccion. Quedo guardada localmente.')
       })
 
       if (!manualAuditMode && pendingWorkOrder && typeof navigator !== 'undefined' && navigator.onLine) {
@@ -826,7 +826,7 @@ export const AuditsPage = () => {
     const audit = audits.find((auditRecord) => auditRecord.id === auditId)
 
     if (!audit) {
-      setAppError('No se encontro la auditoria para exportar el PDF.')
+      setAppError('No se encontro la inspeccion para exportar el PDF.')
       return
     }
 
@@ -834,7 +834,7 @@ export const AuditsPage = () => {
     try {
       await exportAuditPdf({ audit, unit })
     } catch {
-      setAppError('No se pudo generar el PDF de la auditoria.')
+      setAppError('No se pudo generar el PDF de la inspeccion.')
     }
   }
 
@@ -858,7 +858,7 @@ export const AuditsPage = () => {
   if (fleetUnits.length === 0) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900">Auditorias</h2>
+        <h2 className="text-2xl font-bold text-slate-900">Inspecciones</h2>
         <p className="mt-2 text-sm text-slate-600">Primero necesitas registrar al menos una unidad en Flota.</p>
         <Link
           to={ROUTE_PATHS.fleet.create}
@@ -874,10 +874,10 @@ export const AuditsPage = () => {
     <section className="space-y-5">
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
-        <h2 className="text-2xl font-bold text-slate-900">Auditorias</h2>
+        <h2 className="text-2xl font-bold text-slate-900">Inspecciones</h2>
         <p className="text-sm text-slate-600">
           {manualAuditMode
-            ? 'Modo manual activo: PDF obligatorio, sin OT automatica y sin re-auditorias automaticas.'
+            ? 'Modo manual activo: PDF obligatorio, sin OT automatica y sin re-inspecciones automaticas.'
             : 'Checklist dinamico, observaciones, fotos y trazabilidad por unidad.'}
         </p>
       </header>
@@ -886,7 +886,7 @@ export const AuditsPage = () => {
         <section className="rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Re-auditorias pendientes</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Re-inspecciones pendientes</p>
               <p className="mt-1 text-sm text-slate-700">Selecciona una OT cerrada para auditar solo los desvios corregidos.</p>
             </div>
             <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold text-sky-700">
@@ -902,7 +902,7 @@ export const AuditsPage = () => {
                 to={`${ROUTE_PATHS.audits}?workOrderId=${order.id}&create=1`}
                 className="flex items-center justify-between rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-sky-100"
               >
-                <span className="font-semibold">Realizar re-auditoria</span>
+                <span className="font-semibold">Realizar re-inspeccion</span>
                 <span className="text-xs text-slate-500">{order.code ?? 'OT'} • {unit?.internalCode ?? order.unitId}</span>
               </Link>
               )
@@ -917,7 +917,7 @@ export const AuditsPage = () => {
             <>
               <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h3 className="text-lg font-bold text-slate-900">
-                  {isReauditMode ? 'Re-auditoria pendiente' : 'Nueva auditoria'}
+                  {isReauditMode ? 'Re-inspeccion pendiente' : 'Nueva inspeccion'}
                 </h3>
                 {isReauditMode && pendingWorkOrder ? (
                   <div className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-slate-700">
@@ -966,7 +966,7 @@ export const AuditsPage = () => {
 
                 {!isReauditMode && !manualAuditMode ? (
                   <label className="mt-4 flex flex-col gap-2">
-                    <span className="text-sm font-semibold text-slate-700">Tipo de auditoria</span>
+                    <span className="text-sm font-semibold text-slate-700">Tipo de inspeccion</span>
                     <select
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
                       value={formData.auditMode}
@@ -980,7 +980,7 @@ export const AuditsPage = () => {
                         setErrors((previousErrors) => ({ ...previousErrors, auditMode: undefined, externalRequestId: undefined }))
                       }}
                     >
-                      <option value="INDEPENDENT">Auditoria independiente</option>
+                      <option value="INDEPENDENT">Inspeccion independiente</option>
                       <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
                     </select>
                   </label>
@@ -1077,7 +1077,7 @@ export const AuditsPage = () => {
                 {manualAuditMode ? (
                   <>
                     <label className="mt-4 flex flex-col gap-2">
-                      <span className="text-sm font-semibold text-slate-700">Resultado de la auditoria manual</span>
+                      <span className="text-sm font-semibold text-slate-700">Resultado de la inspeccion manual</span>
                       <select
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
                         value={formData.manualResult}
@@ -1094,7 +1094,7 @@ export const AuditsPage = () => {
                     </label>
 
                     <label className="mt-4 flex flex-col gap-2">
-                      <span className="text-sm font-semibold text-slate-700">PDF de auditoria manual</span>
+                      <span className="text-sm font-semibold text-slate-700">PDF de inspeccion manual</span>
                       <input
                         type="file"
                         accept="application/pdf"
@@ -1139,10 +1139,10 @@ export const AuditsPage = () => {
                   {isSubmitting
                     ? 'Enviando...'
                     : isReauditMode
-                      ? 'Cerrar re-auditoria'
+                      ? 'Cerrar re-inspeccion'
                       : manualAuditMode
-                        ? 'Guardar auditoria manual'
-                        : 'Crear auditoria'}
+                        ? 'Guardar inspeccion manual'
+                        : 'Crear inspeccion'}
                 </button>
               </section>
 
@@ -1158,7 +1158,7 @@ export const AuditsPage = () => {
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">Historial de auditorias</h3>
+                  <h3 className="text-lg font-bold text-slate-900">Historial de inspecciones</h3>
                   <p className="text-sm text-slate-600">Buscador por dominio y resultados.</p>
                 </div>
                 {canCreate ? (
@@ -1167,14 +1167,14 @@ export const AuditsPage = () => {
                     onClick={() => setIsFormOpen(true)}
                     className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
                   >
-                    Crear nueva auditoria
+                    Crear nueva inspeccion
                   </button>
                 ) : null}
               </div>
             </section>
           ) : (
             <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
-              No tenes permisos para crear auditorias.
+              No tenes permisos para crear inspecciones.
             </section>
           )}
         </div>
@@ -1263,8 +1263,8 @@ export const AuditsPage = () => {
       {canDelete ? (
         <ConfirmModal
           isOpen={Boolean(auditIdPendingDelete)}
-          title="Eliminar auditoria"
-          message="Deseas eliminar esta auditoria? Esta accion no se puede deshacer."
+          title="Eliminar inspeccion"
+          message="Deseas eliminar esta inspeccion? Esta accion no se puede deshacer."
           onCancel={() => setAuditIdPendingDelete(null)}
           onConfirm={handleConfirmDeleteAudit}
         />
@@ -1275,7 +1275,7 @@ export const AuditsPage = () => {
           <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Auditoria</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Inspeccion</p>
                 <h3 className="text-lg font-bold text-slate-900">{viewAuditSummary?.code ?? viewAudit.id}</h3>
                 <p className="text-sm text-slate-600">{viewAuditSummary?.unitLabel ?? viewAudit.unitId}</p>
                 <p className="text-sm text-slate-600">
@@ -1362,4 +1362,6 @@ export const AuditsPage = () => {
     </section>
   )
 }
+
+
 

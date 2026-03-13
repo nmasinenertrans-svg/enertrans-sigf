@@ -604,8 +604,8 @@ export const WorkOrdersPage = () => {
 
     setAppError(
       manualAuditMode
-        ? 'OT cerrada en modo manual. No se genero re-auditoria automatica.'
-        : 'OT cerrada. Se genero una re-auditoria pendiente para el auditor.',
+        ? 'OT cerrada en modo manual. No se genero re-inspeccion automatica.'
+        : 'OT cerrada. Se genero una re-inspeccion pendiente para el inspector.',
     )
   }
 
@@ -736,7 +736,7 @@ export const WorkOrdersPage = () => {
                         onClick={() => handleCloseWorkOrder(item.id)}
                         className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
                       >
-                        {manualAuditMode ? 'Cerrar OT (sin re-auditoria automatica)' : 'Cerrar OT y solicitar re-auditoria'}
+                        {manualAuditMode ? 'Cerrar OT (sin re-inspeccion automatica)' : 'Cerrar OT y solicitar re-inspeccion'}
                       </button>
                     ) : null}
                   </div>

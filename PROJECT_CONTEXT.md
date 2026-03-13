@@ -1,4 +1,4 @@
-# ENERTRANS SIGF - Contexto Vivo del Proyecto
+﻿# ENERTRANS SIGF - Contexto Vivo del Proyecto
 
 Ultima actualizacion: 2026-03-11
 Responsable de actualizacion: Codex (este chat)
@@ -198,7 +198,7 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - alerta visible en badge de header,
   - fix para no dejar `isSyncing` atascado si hay excepcion,
   - manejo defensivo para evitar promesas rechazadas no controladas en `online/visibility/interval`.
-- Correccion de texto corrupto en notificaciones (`•`/separador).
+- Correccion de texto corrupto en notificaciones (`â€¢`/separador).
 - Suite de regresion con Vitest para sync:
   - drop no recuperable (422),
   - bloqueo por max intentos,
@@ -360,7 +360,7 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - El anti-duplicado usa ventana temporal y similitud de payload; casos operativos extremadamente similares en minutos cercanos podrian considerarse duplicado.
 - Fecha: 2026-03-07
-  Cambio: Refuerzo de ciclo de vida de archivos de auditoria (prevencion de huérfanos).
+  Cambio: Refuerzo de ciclo de vida de archivos de auditoria (prevencion de huÃ©rfanos).
   Archivos:
   - `backend/src/routes/files.ts`
   - `backend/src/routes/audits.ts`
@@ -370,9 +370,9 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - `backend/package.json`
   Riesgo mitigado:
   - Evita re-subir fotos ya pre-cargadas en reintentos offline y elimina adjuntos de storage al borrar auditorias.
-  - Agrega script operativo para detectar/limpiar huérfanos de `audits/` contra DB real por schema.
+  - Agrega script operativo para detectar/limpiar huÃ©rfanos de `audits/` contra DB real por schema.
   Riesgo residual:
-  - La limpieza automatica de huérfanos por cron externo aun no esta cableada; se ejecuta manual por comando.
+  - La limpieza automatica de huÃ©rfanos por cron externo aun no esta cableada; se ejecuta manual por comando.
 - Fecha: 2026-03-09
   Cambio: Optimizacion fuerte de peso de auditorias en frontend: compresion a `1280x1280` calidad `0.65` y limite de `30` fotos por auditoria.
   Archivos:
@@ -513,6 +513,31 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - La fecha ingresada al editar un remito se persiste correctamente y se refleja en PDF/listados sin quedar atada a defaults vacios del schema de edicion.
   Riesgo residual:
   - Remitos historicos con fecha mal cargada previamente requieren edicion puntual para corregir el dato almacenado.
+- Fecha: 2026-03-13
+  Cambio: Renombre funcional del modulo de auditorias a inspecciones + ajuste de checklist y prefijos de codigo.
+  Archivos:
+  - `src/modules/audits/services/auditsService.ts`
+  - `backend/src/routes/audits.ts`
+  - `src/modules/audits/pages/AuditsPage.tsx`
+  - `src/modules/audits/services/auditPdfService.ts`
+  - `src/modules/audits/components/AuditHistoryList.tsx`
+  - `src/core/layout/Sidebar.tsx`
+  - `src/modules/fleet/pages/FleetDetailPage.tsx`
+  - `src/modules/system/pages/MaintenanceModePage.tsx`
+  - `src/modules/users/pages/UsersPage.tsx`
+  - `src/core/notifications/notifications.ts`
+  - `src/modules/reports/pages/ReportsPage.tsx`
+  - `src/modules/dashboard/pages/DashboardPage.tsx`
+  - `src/services/offline/sync.ts`
+  - `src/modules/workOrders/pages/WorkOrdersPage.tsx`
+  - `src/modules/workOrders/components/WorkOrderCard.tsx`
+  - `backend/src/routes/users.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Unifica lenguaje operativo (INSPECCIONES) y evita seguir emitiendo nuevos codigos con prefijo legacy `AU/RAU`.
+  - Checklist actualizado: en HIDROGRUA se reemplaza por `Extensibles`, en DOCUMENTACION se elimina `Ruta`, y se agrega seccion `ELASTICOS Y AMORTIGUACION`.
+  Riesgo residual:
+  - Registros historicos existentes conservan sus codigos previos `AU/RAU`; solo las nuevas inspecciones salen con `INS/RINS`.
 
 ## 9) Riesgos abiertos (a seguir)
 
@@ -532,3 +557,4 @@ Plantilla minima para cada update:
 - Archivos:
 - Riesgo mitigado:
 - Riesgo residual:
+

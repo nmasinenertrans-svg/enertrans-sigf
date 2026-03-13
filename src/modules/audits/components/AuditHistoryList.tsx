@@ -78,7 +78,7 @@ export const AuditHistoryList = ({ items, onViewAudit, onExportPdf, onRequestDel
               onClick={() => onViewAudit(item.id)}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
             >
-              Ver auditoria
+              Ver inspeccion
             </button>
             <button
               type="button"
@@ -102,3 +102,5 @@ export const AuditHistoryList = ({ items, onViewAudit, onExportPdf, onRequestDel
     </div>
   )
 }
+
+

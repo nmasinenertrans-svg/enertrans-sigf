@@ -133,7 +133,7 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
   }
 
   addWatermark(pdf, logoDataUrl)
-  drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Auditoria de Flota')
+  drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Inspeccion de Flota')
 
   const pageWidth = pdf.internal.pageSize.getWidth()
   const pageHeight = pdf.internal.pageSize.getHeight()
@@ -169,7 +169,7 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
     if (cursorY > pageHeight - 30) {
       pdf.addPage()
       addWatermark(pdf, logoDataUrl)
-      drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Auditoria de Flota')
+      drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Inspeccion de Flota')
       cursorY = 26
     }
 
@@ -186,7 +186,7 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
       if (cursorY > pageHeight - 16) {
         pdf.addPage()
         addWatermark(pdf, logoDataUrl)
-        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Auditoria de Flota')
+        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Inspeccion de Flota')
         cursorY = 26
         drawTableHeader(pdf, columns, 14, cursorY, 6)
         cursorY += 6
@@ -223,7 +223,7 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
     if (cursorY > pageHeight - 40) {
       pdf.addPage()
       addWatermark(pdf, logoDataUrl)
-      drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Auditoria de Flota')
+      drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Inspeccion de Flota')
       cursorY = 26
     }
 
@@ -242,7 +242,7 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
       if (cursorY + imageHeight > pageHeight - 15) {
         pdf.addPage()
         addWatermark(pdf, logoDataUrl)
-        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Auditoria de Flota')
+        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', 'Reporte Tecnico de Inspeccion de Flota')
         cursorY = 26
         col = 0
       }
@@ -259,5 +259,6 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
     }
   }
 
-  pdf.save(`Auditoria_${audit.id}_${unit?.internalCode ?? 'unidad'}.pdf`)
+  pdf.save(`Inspeccion_${audit.id}_${unit?.internalCode ?? 'unidad'}.pdf`)
 }
+

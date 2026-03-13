@@ -176,7 +176,7 @@ router.delete('/:id', async (req, res) => {
     if (error?.code === 'P2003') {
       return res.status(409).json({
         message:
-          'No se puede eliminar este usuario porque tiene historial asociado (auditorias/tareas).',
+          'No se puede eliminar este usuario porque tiene historial asociado (inspecciones/tareas).',
       })
     }
     return res.status(500).json({ message: 'No se pudo eliminar el usuario.' })

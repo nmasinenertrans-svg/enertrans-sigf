@@ -380,7 +380,7 @@ export const DashboardPage = () => {
             dashboardInteractive ? 'hover:-translate-y-0.5 hover:shadow-md' : 'cursor-default opacity-90',
           ].join(' ')}
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Pendiente re-auditoria</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Pendiente re-inspeccion</p>
           <p className="mt-2 text-2xl font-bold text-sky-800">{pendingReauditCount}</p>
         </button>
       </div>
