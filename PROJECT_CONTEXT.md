@@ -538,6 +538,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Checklist actualizado: en HIDROGRUA se reemplaza por `Extensibles`, en DOCUMENTACION se elimina `Ruta`, y se agrega seccion `ELASTICOS Y AMORTIGUACION`.
   Riesgo residual:
   - Registros historicos existentes conservan sus codigos previos `AU/RAU`; solo las nuevas inspecciones salen con `INS/RINS`.
+- Fecha: 2026-03-14
+  Cambio: Correccion critica en cierre de OT para permitir completar evidencia fotografica en desvios ya resueltos y evitar bloqueos silenciosos al cerrar.
+  Archivos:
+  - `src/modules/workOrders/pages/WorkOrdersPage.tsx`
+  - `src/modules/workOrders/components/WorkOrderCard.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - El mecanico puede cerrar OT cuando todos los desvios estan realmente resueltos con evidencia, incluyendo casos legacy donde el estado estaba en `RESOLVED` pero faltaba foto.
+  - Se agrega feedback explicito de cuantos desvios bloquean el cierre y ejemplos concretos.
+  Riesgo residual:
+  - OT historicas sin foto siguen requiriendo completar evidencia manual antes de cerrar; no se autocompleta evidencia retroactiva.
 
 ## 9) Riesgos abiertos (a seguir)
 

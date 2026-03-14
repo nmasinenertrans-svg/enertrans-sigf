@@ -30,6 +30,9 @@ const WORK_ORDER_DRAFT_KEY = 'enertrans.workOrderDraft'
 const WORK_ORDER_RESOLUTION_DRAFT_KEY = 'enertrans.workOrderResolutionDraft'
 const WORK_ORDER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 
+const hasResolutionEvidence = (task: WorkOrderDeviation): boolean =>
+  Boolean((task.resolutionPhotoUrl ?? '').trim() || (task.resolutionPhotoBase64 ?? '').trim())
+
 export const WorkOrdersPage = () => {
   const [searchParams] = useSearchParams()
   const { can } = usePermissions()
@@ -460,7 +463,7 @@ export const WorkOrdersPage = () => {
     setResolveTarget({ workOrderId, deviation })
     setResolutionNote(deviation.resolutionNote ?? '')
     setResolutionPhoto(null)
-    setResolutionPhotoBase64('')
+    setResolutionPhotoBase64(deviation.resolutionPhotoBase64 ?? '')
   }
 
   const handleSaveResolution = async () => {
@@ -556,12 +559,17 @@ export const WorkOrdersPage = () => {
     }
 
     const normalizedTasks = normalizeTaskList(workOrder.taskList)
-    const allResolved = normalizedTasks.every(
-      (task) => task.status === 'RESOLVED' && (task.resolutionPhotoUrl || task.resolutionPhotoBase64),
-    )
+    const blockingTasks = normalizedTasks.filter((task) => task.status !== 'RESOLVED' || !hasResolutionEvidence(task))
+    const allResolved = blockingTasks.length === 0
 
     if (!allResolved) {
-      setAppError('No podes cerrar la OT hasta resolver todos los desvios con foto.')
+      const sample = blockingTasks
+        .slice(0, 2)
+        .map((task) => `${task.section} / ${task.item}`)
+        .join(' | ')
+      setAppError(
+        `No podes cerrar la OT. Hay ${blockingTasks.length} desvio(s) pendiente(s) o sin evidencia fotografica.${sample ? ` Ej: ${sample}` : ''}`,
+      )
       return
     }
 

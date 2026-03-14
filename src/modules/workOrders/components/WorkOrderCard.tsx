@@ -51,37 +51,45 @@ export const WorkOrderCard = ({
     </div>
 
     <div className="mt-4 space-y-2">
-      {item.taskList.map((task) => (
+      {item.taskList.map((task) => {
+        const hasEvidence = Boolean((task.resolutionPhotoUrl ?? '').trim() || (task.resolutionPhotoBase64 ?? '').trim())
+        const isResolved = task.status === 'RESOLVED'
+        const canResolveTask = !isResolved || !hasEvidence
+
+        return (
         <div key={task.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="font-semibold text-slate-900">{task.section}</p>
               <p className="text-slate-600">{task.item}</p>
               {task.observation ? <p className="text-slate-500">Obs: {task.observation}</p> : null}
+              {isResolved && !hasEvidence ? (
+                <p className="text-amber-700">Falta evidencia fotografica para cerrar la OT.</p>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <span
                 className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
-                  task.status === 'RESOLVED'
+                  isResolved
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
                     : 'border-rose-300 bg-rose-50 text-rose-700'
                 }`}
               >
-                {task.status === 'RESOLVED' ? 'RESUELTO' : 'PENDIENTE'}
+                {isResolved ? 'RESUELTO' : 'PENDIENTE'}
               </span>
-              {task.status !== 'RESOLVED' ? (
+              {canResolveTask ? (
                 <button
                   type="button"
                   onClick={() => onResolveDeviation(item.id, task)}
                   className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
                 >
-                  Resolver
+                  {isResolved ? 'Completar evidencia' : 'Resolver'}
                 </button>
               ) : null}
             </div>
           </div>
         </div>
-      ))}
+      )})}
     </div>
 
     <div className="mt-4 flex gap-2">
