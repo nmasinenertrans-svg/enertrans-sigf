@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { buildSupplierDetailPath, ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { Supplier } from '../../../types/domain'
 
 type SupplierFormState = {
   name: string
   serviceType: string
+  paymentMethod: string
+  paymentTerms: string
+  address: string
+  mapsUrl: string
   contactName: string
   contactPhone: string
   contactEmail: string
@@ -19,6 +24,10 @@ type SupplierFormState = {
 const createEmptyForm = (): SupplierFormState => ({
   name: '',
   serviceType: '',
+  paymentMethod: '',
+  paymentTerms: '',
+  address: '',
+  mapsUrl: '',
   contactName: '',
   contactPhone: '',
   contactEmail: '',
@@ -51,7 +60,19 @@ export const SuppliersPage = () => {
       return suppliers
     }
     return suppliers.filter((item) =>
-      [item.name, item.serviceType, item.contactName, item.contactEmail, item.contactPhone].join(' ').toLowerCase().includes(query),
+      [
+        item.name,
+        item.serviceType,
+        item.paymentMethod,
+        item.paymentTerms,
+        item.address,
+        item.contactName,
+        item.contactEmail,
+        item.contactPhone,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(query),
     )
   }, [suppliers, search])
 
@@ -125,6 +146,10 @@ export const SuppliersPage = () => {
     setForm({
       name: selected.name,
       serviceType: selected.serviceType ?? '',
+      paymentMethod: selected.paymentMethod ?? '',
+      paymentTerms: selected.paymentTerms ?? '',
+      address: selected.address ?? '',
+      mapsUrl: selected.mapsUrl ?? '',
       contactName: selected.contactName ?? '',
       contactPhone: selected.contactPhone ?? '',
       contactEmail: selected.contactEmail ?? '',
@@ -141,7 +166,7 @@ export const SuppliersPage = () => {
     if (!selected) {
       return
     }
-    const confirmed = window.confirm(`¿Estas seguro que deseas eliminar al proveedor "${selected.name}"?`)
+    const confirmed = window.confirm(`Estas seguro que deseas eliminar al proveedor "${selected.name}"?`)
     if (!confirmed) {
       return
     }
@@ -185,6 +210,32 @@ export const SuppliersPage = () => {
               value={form.serviceType}
               onChange={(event) => setForm((prev) => ({ ...prev, serviceType: event.target.value }))}
             />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <input
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Metodo de pago (ej: transferencia)"
+                value={form.paymentMethod}
+                onChange={(event) => setForm((prev) => ({ ...prev, paymentMethod: event.target.value }))}
+              />
+              <input
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Plazo (ej: 30 dias)"
+                value={form.paymentTerms}
+                onChange={(event) => setForm((prev) => ({ ...prev, paymentTerms: event.target.value }))}
+              />
+            </div>
+            <input
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Direccion"
+              value={form.address}
+              onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
+            />
+            <input
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Link de Google Maps"
+              value={form.mapsUrl}
+              onChange={(event) => setForm((prev) => ({ ...prev, mapsUrl: event.target.value }))}
+            />
             <input
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
               placeholder="Contacto"
@@ -194,7 +245,7 @@ export const SuppliersPage = () => {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <input
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Teléfono"
+                placeholder="Telefono"
                 value={form.contactPhone}
                 onChange={(event) => setForm((prev) => ({ ...prev, contactPhone: event.target.value }))}
               />
@@ -282,10 +333,18 @@ export const SuppliersPage = () => {
                     <div className="mt-2 space-y-1 text-xs text-slate-600">
                       <p>Contacto: {supplier.contactName || '-'}</p>
                       <p>Tel: {supplier.contactPhone || '-'}</p>
+                      <p>Pago: {supplier.paymentMethod || 'Sin definir'}</p>
+                      <p>Plazo: {supplier.paymentTerms || 'Sin definir'}</p>
                       <p>Reparaciones: {metrics.repairs}</p>
                       <p>Costo acumulado: {formatMoney(metrics.totalCost)}</p>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <Link
+                        to={buildSupplierDetailPath(supplier.id)}
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700"
+                      >
+                        Ver ficha
+                      </Link>
                       <button
                         type="button"
                         onClick={() => handleEdit(supplier.id)}

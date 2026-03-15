@@ -1,6 +1,6 @@
 ﻿# ENERTRANS SIGF - Contexto Vivo del Proyecto
 
-Ultima actualizacion: 2026-03-11
+Ultima actualizacion: 2026-03-15
 Responsable de actualizacion: Codex (este chat)
 Objetivo: que cualquier dev (o nuevo chat) tenga contexto operativo completo sin depender del historial conversacional.
 
@@ -584,6 +584,23 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - Requiere correr migracion en backend (`prisma migrate deploy`) antes de usar los modulos nuevos en produccion.
   - Reparaciones historicas con proveedor libre permanecen como texto; la normalizacion total de historico puede requerir limpieza adicional.
+- Fecha: 2026-03-15
+  Cambio: Ficha avanzada de proveedores con datos comerciales/ubicacion y soporte de mapa embebido.
+  Archivos:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260315101500_add_supplier_payment_and_location_fields/migration.sql`
+  - `backend/src/routes/suppliers.ts`
+  - `src/types/domain.ts`
+  - `src/core/routing/routePaths.ts`
+  - `src/core/routing/AppRouter.tsx`
+  - `src/modules/suppliers/pages/SuppliersPage.tsx`
+  - `src/modules/suppliers/pages/SupplierDetailPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se puede registrar por proveedor metodo de pago, plazo, direccion y link de Google Maps.
+  - Cada proveedor ahora tiene ficha propia con mapa visible para operacion (sin depender de abrir otro sistema).
+  Riesgo residual:
+  - Si el link pegado de Google Maps no es publico o no permite embed, el mapa puede no renderizar y queda solo el boton para abrir el link externo.
 
 ## 9) Riesgos abiertos (a seguir)
 

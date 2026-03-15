@@ -68,7 +68,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           isOpen ? 'lg:translate-x-0' : 'lg:-translate-x-full',
         ].join(' ')}
       >
-        <div className="flex h-full flex-col px-5 py-6">
+        <div className="flex h-full min-h-0 flex-col px-5 py-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-lg font-bold tracking-wide text-amber-300">ENERTRANS</h1>
@@ -83,7 +83,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             </button>
           </div>
 
-          <nav className="mt-10 flex flex-col gap-2">
+          <nav className="mt-10 flex flex-1 min-h-0 flex-col gap-2 overflow-y-auto pr-1">
             {navItems.map((item) => (
               <NavLink
                 key={item.path}

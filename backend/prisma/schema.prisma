@@ -399,6 +399,10 @@ model Supplier {
   id            String   @id @default(uuid())
   name          String   @unique
   serviceType   String   @default("")
+  paymentMethod String   @default("")
+  paymentTerms  String   @default("")
+  address       String   @default("")
+  mapsUrl       String   @default("")
   contactName   String   @default("")
   contactPhone  String   @default("")
   contactEmail  String   @default("")

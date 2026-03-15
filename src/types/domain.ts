@@ -409,6 +409,10 @@ export interface Supplier {
   id: string
   name: string
   serviceType: string
+  paymentMethod: string
+  paymentTerms: string
+  address: string
+  mapsUrl: string
   contactName: string
   contactPhone: string
   contactEmail: string

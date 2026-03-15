@@ -8,6 +8,10 @@ const supplierSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2).max(120),
   serviceType: z.string().max(120).optional().default(''),
+  paymentMethod: z.string().max(120).optional().default(''),
+  paymentTerms: z.string().max(120).optional().default(''),
+  address: z.string().max(240).optional().default(''),
+  mapsUrl: z.string().max(500).optional().default(''),
   contactName: z.string().max(120).optional().default(''),
   contactPhone: z.string().max(60).optional().default(''),
   contactEmail: z.string().max(120).optional().default(''),
@@ -36,6 +40,30 @@ router.get('/', async (_req, res) => {
   }
 })
 
+router.get('/:id', async (req, res) => {
+  const supplierId = req.params.id
+  if (!supplierId) {
+    return res.status(400).json({ message: 'Id de proveedor requerido.' })
+  }
+  try {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      include: {
+        _count: {
+          select: { repairs: true },
+        },
+      },
+    })
+    if (!supplier) {
+      return res.status(404).json({ message: 'Proveedor no encontrado.' })
+    }
+    return res.json(supplier)
+  } catch (error) {
+    console.error('Suppliers GET by id error:', error)
+    return res.status(500).json({ message: 'No se pudo cargar la ficha del proveedor.' })
+  }
+})
+
 router.post('/', async (req, res) => {
   const parsed = supplierSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -55,6 +83,10 @@ router.post('/', async (req, res) => {
       data: {
         name,
         serviceType: normalize(parsed.data.serviceType),
+        paymentMethod: normalize(parsed.data.paymentMethod),
+        paymentTerms: normalize(parsed.data.paymentTerms),
+        address: normalize(parsed.data.address),
+        mapsUrl: normalize(parsed.data.mapsUrl),
         contactName: normalize(parsed.data.contactName),
         contactPhone: normalize(parsed.data.contactPhone),
         contactEmail: normalize(parsed.data.contactEmail),
@@ -113,6 +145,10 @@ router.patch('/:id', async (req, res) => {
       data: {
         name: nextName,
         serviceType: parsed.data.serviceType !== undefined ? normalize(parsed.data.serviceType) : undefined,
+        paymentMethod: parsed.data.paymentMethod !== undefined ? normalize(parsed.data.paymentMethod) : undefined,
+        paymentTerms: parsed.data.paymentTerms !== undefined ? normalize(parsed.data.paymentTerms) : undefined,
+        address: parsed.data.address !== undefined ? normalize(parsed.data.address) : undefined,
+        mapsUrl: parsed.data.mapsUrl !== undefined ? normalize(parsed.data.mapsUrl) : undefined,
         contactName: parsed.data.contactName !== undefined ? normalize(parsed.data.contactName) : undefined,
         contactPhone: parsed.data.contactPhone !== undefined ? normalize(parsed.data.contactPhone) : undefined,
         contactEmail: parsed.data.contactEmail !== undefined ? normalize(parsed.data.contactEmail) : undefined,

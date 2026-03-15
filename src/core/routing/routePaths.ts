@@ -19,6 +19,7 @@
   externalRequests: '/work-orders/external-requests',
   repairs: '/repairs',
   suppliers: '/suppliers',
+  supplierDetail: '/suppliers/:supplierId',
   inventory: '/inventory',
   reports: '/reports',
   notifications: '/notifications',
@@ -28,7 +29,11 @@
 } as const
 
 const unitIdPlaceholder = ':unitId'
+const supplierIdPlaceholder = ':supplierId'
 
 export const buildFleetDetailPath = (unitId: string): string => ROUTE_PATHS.fleet.detail.replace(unitIdPlaceholder, unitId)
 
 export const buildFleetEditPath = (unitId: string): string => ROUTE_PATHS.fleet.edit.replace(unitIdPlaceholder, unitId)
+
+export const buildSupplierDetailPath = (supplierId: string): string =>
+  ROUTE_PATHS.supplierDetail.replace(supplierIdPlaceholder, supplierId)
