@@ -549,6 +549,41 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Se agrega feedback explicito de cuantos desvios bloquean el cierre y ejemplos concretos.
   Riesgo residual:
   - OT historicas sin foto siguen requiriendo completar evidencia manual antes de cerrar; no se autocompleta evidencia retroactiva.
+- Fecha: 2026-03-14
+  Cambio: Incorporacion de 3 modulos operativos nuevos (Clientes, Entregas/Devoluciones, Proveedores) con persistencia backend y sincronizacion global en frontend.
+  Archivos:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260314190000_add_clients_suppliers_deliveries/migration.sql`
+  - `backend/src/routes/clients.ts`
+  - `backend/src/routes/deliveries.ts`
+  - `backend/src/routes/suppliers.ts`
+  - `backend/src/routes/fleet.ts`
+  - `backend/src/routes/repairs.ts`
+  - `backend/src/routes/settings.ts`
+  - `backend/src/index.ts`
+  - `src/types/domain.ts`
+  - `src/core/context/appState.ts`
+  - `src/core/context/AppContext.tsx`
+  - `src/core/layout/AppLayout.tsx`
+  - `src/core/layout/Sidebar.tsx`
+  - `src/core/routing/routePaths.ts`
+  - `src/core/routing/AppRouter.tsx`
+  - `src/modules/clients/pages/ClientsPage.tsx`
+  - `src/modules/deliveries/pages/DeliveriesPage.tsx`
+  - `src/modules/suppliers/pages/SuppliersPage.tsx`
+  - `src/modules/system/pages/MaintenanceModePage.tsx`
+  - `src/modules/repairs/types.ts`
+  - `src/modules/repairs/services/repairsService.ts`
+  - `src/modules/repairs/components/RepairsForm.tsx`
+  - `src/modules/repairs/pages/RepairsPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Mejora asignacion de unidades por cliente sin depender de textos manuales.
+  - Agrega estado logistico por unidad para escenarios reales (`PENDIENTE_ENTREGA`, `PENDIENTE_DEVOLUCION`) sin perder el estado tecnico.
+  - Estandariza proveedores para evitar dispersion de nombres y mejorar calidad de reportes de reparaciones/costos.
+  Riesgo residual:
+  - Requiere correr migracion en backend (`prisma migrate deploy`) antes de usar los modulos nuevos en produccion.
+  - Reparaciones historicas con proveedor libre permanecen como texto; la normalizacion total de historico puede requerir limpieza adicional.
 
 ## 9) Riesgos abiertos (a seguir)
 

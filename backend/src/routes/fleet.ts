@@ -67,6 +67,38 @@ const normalizeSemiTrailerUnitId = async (
   return existing ? semiTrailerUnitId : null
 }
 
+const normalizeClientAssignment = async (
+  clientIdInput: unknown,
+  clientNameInput: unknown,
+): Promise<{ clientId: string | null; clientName: string }> => {
+  const rawClientId = typeof clientIdInput === 'string' ? clientIdInput.trim() : ''
+  if (rawClientId) {
+    const matchedById = await prisma.clientAccount.findUnique({
+      where: { id: rawClientId },
+      select: { id: true, name: true },
+    })
+    if (matchedById) {
+      return { clientId: matchedById.id, clientName: matchedById.name }
+    }
+  }
+
+  const normalizedClientName = typeof clientNameInput === 'string' ? clientNameInput.trim() : ''
+  if (!normalizedClientName) {
+    return { clientId: null, clientName: '' }
+  }
+
+  const matchedByName = await prisma.clientAccount.findFirst({
+    where: { name: { equals: normalizedClientName, mode: 'insensitive' } },
+    select: { id: true, name: true },
+  })
+
+  if (matchedByName) {
+    return { clientId: matchedByName.id, clientName: matchedByName.name }
+  }
+
+  return { clientId: null, clientName: normalizedClientName }
+}
+
 const fleetSchema = z.object({
   id: z.string().uuid().optional(),
   qrId: z.string().min(1),
@@ -74,10 +106,17 @@ const fleetSchema = z.object({
   brand: z.string().optional().default(''),
   model: z.string().optional().default(''),
   year: z.number().int().optional().default(0),
+  clientId: z.string().nullable().optional(),
   clientName: z.string().optional().default(''),
   location: z.string().optional().default(''),
   ownerCompany: z.string().min(1),
   operationalStatus: z.enum(['OPERATIONAL', 'MAINTENANCE', 'OUT_OF_SERVICE']),
+  logisticsStatus: z
+    .enum(['AVAILABLE', 'PENDING_DELIVERY', 'DELIVERED', 'PENDING_RETURN', 'RETURNED'])
+    .optional()
+    .default('AVAILABLE'),
+  logisticsStatusNote: z.string().optional().default(''),
+  logisticsUpdatedAt: z.string().optional().default(''),
   unitType: z.enum([
     'CHASSIS',
     'CHASSIS_WITH_HYDROCRANE',
@@ -137,6 +176,7 @@ router.post('/', async (req, res) => {
       parsed.data.semiTrailerUnitId,
       parsed.data.hasSemiTrailer,
     )
+    const clientAssignment = await normalizeClientAssignment(parsed.data.clientId, parsed.data.clientName)
     const normalizedDocuments = {
       ...parsed.data.documents,
       hoistNotApplicable:
@@ -150,6 +190,10 @@ router.post('/', async (req, res) => {
     const unit = await prisma.fleetUnit.create({
       data: {
         ...parsed.data,
+        clientId: clientAssignment.clientId,
+        clientName: clientAssignment.clientName,
+        logisticsStatusNote: parsed.data.logisticsStatusNote?.trim() ?? '',
+        logisticsUpdatedAt: parsed.data.logisticsUpdatedAt ? new Date(parsed.data.logisticsUpdatedAt) : undefined,
         semiTrailerUnitId: safeSemiTrailerUnitId,
         documents: normalizedDocuments,
         operationalStatus,
@@ -184,19 +228,34 @@ router.patch('/:id', async (req, res) => {
           patchData.semiTrailerUnitId,
           patchData.hasSemiTrailer ?? false,
         )
+        const clientAssignment = await normalizeClientAssignment(patchData.clientId, patchData.clientName)
         const operationalStatus = deriveOperationalStatus(
           (patchData.operationalStatus ?? 'OPERATIONAL') as FleetOperationalStatus,
           patchData.documents ?? {},
           requiresHoist(patchData),
         )
         const created = await prisma.fleetUnit.create({
-          data: { ...patchData, semiTrailerUnitId: safeSemiTrailerUnitId, operationalStatus } as any,
+          data: {
+            ...patchData,
+            clientId: clientAssignment.clientId,
+            clientName: clientAssignment.clientName,
+            logisticsStatusNote: patchData.logisticsStatusNote?.trim() ?? '',
+            logisticsUpdatedAt: patchData.logisticsUpdatedAt ? new Date(patchData.logisticsUpdatedAt) : undefined,
+            semiTrailerUnitId: safeSemiTrailerUnitId,
+            operationalStatus,
+          } as any,
         })
         return res.status(201).json(created)
       }
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
     const currentDocuments = (current.documents as any) ?? {}
+    const hasClientPatch =
+      Object.prototype.hasOwnProperty.call(rawBody, 'clientId') ||
+      Object.prototype.hasOwnProperty.call(rawBody, 'clientName')
+    const clientAssignment = hasClientPatch
+      ? await normalizeClientAssignment(patchData.clientId, patchData.clientName)
+      : { clientId: current.clientId, clientName: current.clientName }
     const nextDocuments = {
       ...(patchData.documents ?? currentDocuments),
       hoistNotApplicable:
@@ -216,7 +275,22 @@ router.patch('/:id', async (req, res) => {
     }))
     const unit = await prisma.fleetUnit.update({
       where: { id: req.params.id },
-      data: { ...patchData, semiTrailerUnitId: safeSemiTrailerUnitId, documents: nextDocuments, operationalStatus },
+      data: {
+        ...patchData,
+        clientId: clientAssignment.clientId,
+        clientName: clientAssignment.clientName,
+        logisticsStatusNote:
+          patchData.logisticsStatusNote !== undefined ? patchData.logisticsStatusNote.trim() : current.logisticsStatusNote,
+        logisticsUpdatedAt:
+          patchData.logisticsUpdatedAt !== undefined
+            ? patchData.logisticsUpdatedAt
+              ? new Date(patchData.logisticsUpdatedAt)
+              : null
+            : current.logisticsUpdatedAt,
+        semiTrailerUnitId: safeSemiTrailerUnitId,
+        documents: nextDocuments,
+        operationalStatus,
+      },
     })
     return res.json(unit)
   } catch (error: any) {

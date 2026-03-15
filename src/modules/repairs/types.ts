@@ -6,6 +6,7 @@ export interface RepairFormData {
   performedTime: string
   unitKilometersInput: string
   currency: 'ARS' | 'USD'
+  supplierId: string
   supplierName: string
   realCostInput: string
   surchargePercentInput: string

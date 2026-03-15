@@ -15,6 +15,7 @@ const repairSchema = z.object({
   sourceType: z.enum(['WORK_ORDER', 'EXTERNAL_REQUEST']).optional().default('WORK_ORDER'),
   workOrderId: z.string().optional(),
   externalRequestId: z.string().optional(),
+  supplierId: z.string().optional(),
   performedAt: z.string().datetime().optional(),
   unitKilometers: z.number().int().min(0).optional().default(0),
   currency: z.enum(['ARS', 'USD']).optional().default('ARS'),
@@ -416,16 +417,33 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     }
 
     const supportsOperational = await supportsRepairOperationalColumns()
+    const linkedSupplier = parsed.data.supplierId
+      ? await prisma.supplier.findUnique({
+          where: { id: parsed.data.supplierId },
+          select: { id: true, name: true },
+        })
+      : null
+    if (parsed.data.supplierId && !linkedSupplier) {
+      return res.status(400).json({ message: 'Proveedor no encontrado.' })
+    }
+    const normalizedSupplierName = linkedSupplier?.name ?? parsed.data.supplierName.trim()
+
     const item = supportsOperational
       ? await prisma.repairRecord.create({
           data: {
             ...parsed.data,
+            supplierId: linkedSupplier?.id ?? null,
+            supplierName: normalizedSupplierName,
             performedAt: parsed.data.performedAt ?? new Date().toISOString(),
             unitKilometers: parsed.data.unitKilometers ?? 0,
             currency: parsed.data.currency ?? 'ARS',
           },
         })
-      : await createLegacyRepair(parsed.data)
+      : await createLegacyRepair({
+          ...parsed.data,
+          supplierId: linkedSupplier?.id,
+          supplierName: normalizedSupplierName,
+        })
 
     const [actor, workOrder, externalRequest] = await Promise.all([
       req.userId ? prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }) : Promise.resolve(null),
@@ -477,11 +495,28 @@ router.patch('/:id', async (req, res) => {
 
   const supportsOperational = await supportsRepairOperationalColumns()
   try {
+    const linkedSupplier = parsed.data.supplierId
+      ? await prisma.supplier.findUnique({
+          where: { id: parsed.data.supplierId },
+          select: { id: true, name: true },
+        })
+      : null
+    if (parsed.data.supplierId && !linkedSupplier) {
+      return res.status(400).json({ message: 'Proveedor no encontrado.' })
+    }
+
     if (supportsOperational) {
       const item = await prisma.repairRecord.update({
         where: { id: repairId },
         data: {
           ...parsed.data,
+          supplierId:
+            parsed.data.supplierId !== undefined
+              ? linkedSupplier?.id ?? null
+              : parsed.data.supplierName !== undefined
+                ? null
+                : undefined,
+          supplierName: linkedSupplier?.name ?? parsed.data.supplierName,
           unitKilometers:
             typeof parsed.data.unitKilometers === 'number'
               ? Math.max(0, Math.trunc(parsed.data.unitKilometers))
@@ -501,7 +536,7 @@ router.patch('/:id', async (req, res) => {
     const externalRequestId =
       parsed.data.externalRequestId !== undefined ? (parsed.data.externalRequestId || null) : existing.externalRequestId
     const sourceType = parsed.data.sourceType ?? existing.sourceType ?? 'WORK_ORDER'
-    const supplierName = parsed.data.supplierName ?? existing.supplierName
+    const supplierName = linkedSupplier?.name ?? parsed.data.supplierName ?? existing.supplierName
     const realCost = parsed.data.realCost ?? existing.realCost
     const invoicedToClient = parsed.data.invoicedToClient ?? existing.invoicedToClient
     const margin = parsed.data.margin ?? existing.margin

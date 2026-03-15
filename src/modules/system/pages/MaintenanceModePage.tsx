@@ -230,6 +230,24 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Clientes
+            <input
+              type="checkbox"
+              checked={flags.showClientsModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showClientsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Entregas/Devoluciones
+            <input
+              type="checkbox"
+              checked={flags.showDeliveriesModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showDeliveriesModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
             Mostrar modulo Ordenes de Trabajo
             <input
               type="checkbox"
@@ -289,6 +307,15 @@ export const MaintenanceModePage = () => {
               type="checkbox"
               checked={flags.showRepairsModule}
               onChange={(event) => setFlags((prev) => ({ ...prev, showRepairsModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo Proveedores
+            <input
+              type="checkbox"
+              checked={flags.showSuppliersModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showSuppliersModule: event.target.checked }))}
               className="h-4 w-4"
             />
           </label>

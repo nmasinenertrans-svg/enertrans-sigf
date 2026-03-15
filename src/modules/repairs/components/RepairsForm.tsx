@@ -1,4 +1,5 @@
 import type { ExternalRequest, WorkOrder } from '../../../types/domain'
+import type { Supplier } from '../../../types/domain'
 import type { RepairFormData, RepairFormErrors, RepairFormField } from '../types'
 import { calculateInvoicedFromSurcharge, calculateMargin } from '../services/repairsService'
 import type { ReactNode } from 'react'
@@ -6,6 +7,7 @@ import type { ReactNode } from 'react'
 interface RepairsFormProps {
   workOrders: WorkOrder[]
   externalRequests: ExternalRequest[]
+  suppliers: Supplier[]
   formData: RepairFormData
   errors: RepairFormErrors
   isEditing: boolean
@@ -34,6 +36,7 @@ const FormRow = ({ label, errorMessage, children }: FormRowProps) => (
 export const RepairsForm = ({
   workOrders,
   externalRequests,
+  suppliers,
   formData,
   errors,
   isEditing,
@@ -108,12 +111,39 @@ export const RepairsForm = ({
         </FormRow>
 
         <FormRow label="Proveedor" errorMessage={errors.supplierName}>
-          <input
-            className={inputClassName}
-            value={formData.supplierName}
-            onChange={(event) => onFieldChange('supplierName', event.target.value)}
-            placeholder="Nombre del proveedor"
-          />
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <select
+              className={inputClassName}
+              value={formData.supplierId}
+              onChange={(event) => {
+                const supplierId = event.target.value
+                const selected = suppliers.find((item) => item.id === supplierId)
+                onFieldChange('supplierId', supplierId)
+                if (selected) {
+                  onFieldChange('supplierName', selected.name)
+                }
+              }}
+            >
+              <option value="">Seleccionar proveedor del catalogo</option>
+              {suppliers
+                .filter((supplier) => supplier.isActive)
+                .map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+            </select>
+
+            <input
+              className={inputClassName}
+              value={formData.supplierName}
+              onChange={(event) => {
+                onFieldChange('supplierName', event.target.value)
+                onFieldChange('supplierId', '')
+              }}
+              placeholder="O escribir proveedor manual"
+            />
+          </div>
         </FormRow>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

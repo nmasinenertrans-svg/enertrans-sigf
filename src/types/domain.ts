@@ -58,6 +58,12 @@ export type FleetUnitType = (typeof fleetUnitTypes)[number]
 export const fleetMovementTypes = ['ENTRY', 'RETURN'] as const
 export type FleetMovementType = (typeof fleetMovementTypes)[number]
 
+export const fleetLogisticsStatuses = ['AVAILABLE', 'PENDING_DELIVERY', 'DELIVERED', 'PENDING_RETURN', 'RETURNED'] as const
+export type FleetLogisticsStatus = (typeof fleetLogisticsStatuses)[number]
+
+export const deliveryOperationTypes = ['DELIVERY', 'RETURN'] as const
+export type DeliveryOperationType = (typeof deliveryOperationTypes)[number]
+
 export const taskStatuses = ['UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELED'] as const
 export type TaskStatus = (typeof taskStatuses)[number]
 
@@ -100,10 +106,13 @@ export interface FeatureFlags {
   showMaintenanceModule: boolean
   showAuditsModule: boolean
   showMovementsModule: boolean
+  showClientsModule: boolean
+  showDeliveriesModule: boolean
   showWorkOrdersModule: boolean
   showTasksModule: boolean
   showExternalRequestsModule: boolean
   showRepairsModule: boolean
+  showSuppliersModule: boolean
   showReportsModule: boolean
   showInventoryModule: boolean
   showUsersModule: boolean
@@ -126,6 +135,7 @@ export interface FleetUnit {
   id: string
   qrId: string
   internalCode: string
+  clientId?: string | null
   brand: string
   model: string
   year: number
@@ -133,6 +143,9 @@ export interface FleetUnit {
   location: string
   ownerCompany: string
   operationalStatus: FleetOperationalStatus
+  logisticsStatus?: FleetLogisticsStatus
+  logisticsStatusNote?: string
+  logisticsUpdatedAt?: string
   unitType: FleetUnitType
   configurationNotes: string
   chassisNumber: string
@@ -317,6 +330,7 @@ export interface RepairRecord {
   performedAt?: string
   unitKilometers: number
   currency: 'ARS' | 'USD'
+  supplierId?: string
   supplierName: string
   createdAt?: string
   realCost: number
@@ -371,6 +385,64 @@ export interface FleetMovement {
   pdfFileUrl?: string
   parsedPayload?: Record<string, unknown>
   createdAt?: string
+}
+
+export interface ClientAccount {
+  id: string
+  name: string
+  legalName: string
+  taxId: string
+  contactName: string
+  contactPhone: string
+  contactEmail: string
+  notes: string
+  isActive: boolean
+  createdAt?: string
+  updatedAt?: string
+  _count?: {
+    units: number
+    deliveries: number
+  }
+}
+
+export interface Supplier {
+  id: string
+  name: string
+  serviceType: string
+  contactName: string
+  contactPhone: string
+  contactEmail: string
+  notes: string
+  isActive: boolean
+  createdAt?: string
+  updatedAt?: string
+  _count?: {
+    repairs: number
+  }
+}
+
+export interface DeliveryOperation {
+  id: string
+  unitId: string
+  clientId?: string | null
+  operationType: DeliveryOperationType
+  targetLogisticsStatus: FleetLogisticsStatus
+  summary: string
+  reason: string
+  requestedByUserId?: string | null
+  requestedByUserName?: string
+  effectiveAt?: string
+  createdAt?: string
+  updatedAt?: string
+  unit?: {
+    id: string
+    internalCode: string
+    ownerCompany: string
+  }
+  client?: {
+    id: string
+    name: string
+  } | null
 }
 
 export interface TaskEventRecord {

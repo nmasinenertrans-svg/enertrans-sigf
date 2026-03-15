@@ -3,6 +3,8 @@ import { getAuthToken } from '../../services/api/apiClient'
 import type {
   AppUser,
   AuditRecord,
+  ClientAccount,
+  DeliveryOperation,
   ExternalRequest,
   FleetMovement,
   FeatureFlags,
@@ -10,6 +12,7 @@ import type {
   InventoryItem,
   MaintenancePlan,
   RepairRecord,
+  Supplier,
   UserInboxNotification,
   WorkOrder,
   MaintenanceStatus,
@@ -29,6 +32,9 @@ interface PersistedAppState {
   repairs: RepairRecord[]
   externalRequests: ExternalRequest[]
   movements: FleetMovement[]
+  clients: ClientAccount[]
+  suppliers: Supplier[]
+  deliveries: DeliveryOperation[]
   inventoryItems: InventoryItem[]
   userNotifications: UserInboxNotification[]
   featureFlags: FeatureFlags
@@ -51,6 +57,9 @@ export interface AppActions {
   setRepairs: (repairs: RepairRecord[]) => void
   setExternalRequests: (requests: ExternalRequest[]) => void
   setMovements: (movements: FleetMovement[]) => void
+  setClients: (clients: ClientAccount[]) => void
+  setSuppliers: (suppliers: Supplier[]) => void
+  setDeliveries: (deliveries: DeliveryOperation[]) => void
   setInventoryItems: (items: InventoryItem[]) => void
   setUserNotifications: (notifications: UserInboxNotification[]) => void
   setFeatureFlags: (flags: FeatureFlags) => void
@@ -80,10 +89,13 @@ const defaultFeatureFlags: FeatureFlags = {
   showMaintenanceModule: true,
   showAuditsModule: true,
   showMovementsModule: true,
+  showClientsModule: true,
+  showDeliveriesModule: true,
   showWorkOrdersModule: true,
   showTasksModule: true,
   showExternalRequestsModule: true,
   showRepairsModule: true,
+  showSuppliersModule: true,
   showReportsModule: true,
   showInventoryModule: true,
   showUsersModule: true,
@@ -101,6 +113,9 @@ const defaultPersistedState: PersistedAppState = {
   repairs: [],
   externalRequests: [],
   movements: [],
+  clients: [],
+  suppliers: [],
+  deliveries: [],
   inventoryItems: [],
   userNotifications: [],
   featureFlags: defaultFeatureFlags,
@@ -152,6 +167,9 @@ export const getInitialAppState = (): AppState => {
     repairs: persistedState.repairs ?? [],
     externalRequests: persistedState.externalRequests ?? [],
     movements: persistedState.movements ?? [],
+    clients: persistedState.clients ?? [],
+    suppliers: persistedState.suppliers ?? [],
+    deliveries: persistedState.deliveries ?? [],
     inventoryItems: persistedState.inventoryItems ?? [],
     userNotifications: persistedState.userNotifications ?? [],
     featureFlags: { ...defaultFeatureFlags, ...(persistedState.featureFlags ?? {}) },
@@ -186,6 +204,9 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   repairs: state.repairs,
   externalRequests: state.externalRequests,
   movements: state.movements,
+  clients: state.clients,
+  suppliers: state.suppliers,
+  deliveries: state.deliveries,
   inventoryItems: state.inventoryItems,
   userNotifications: state.userNotifications,
   featureFlags: state.featureFlags,

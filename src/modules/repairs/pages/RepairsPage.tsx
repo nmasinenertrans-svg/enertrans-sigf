@@ -25,7 +25,7 @@ const allUnitsFilter = 'ALL'
 export const RepairsPage = () => {
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, workOrders, externalRequests, repairs },
+    state: { fleetUnits, workOrders, externalRequests, repairs, suppliers },
     actions: { setRepairs },
   } = useAppContext()
 
@@ -225,6 +225,7 @@ export const RepairsPage = () => {
             <RepairsForm
               workOrders={workOrders}
               externalRequests={externalRequests}
+              suppliers={suppliers}
               formData={formData}
               errors={errors}
               isEditing={Boolean(editingRepairId)}

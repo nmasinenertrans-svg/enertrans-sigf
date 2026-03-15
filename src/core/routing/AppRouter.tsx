@@ -12,12 +12,15 @@ import { InventoryPage } from '../../modules/inventory/pages/InventoryPage'
 import { MaintenancePage } from '../../modules/maintenance/pages/MaintenancePage'
 import { RepairsPage } from '../../modules/repairs/pages/RepairsPage'
 import { MovementsPage } from '../../modules/movements/pages/MovementsPage'
+import { ClientsPage } from '../../modules/clients/pages/ClientsPage'
+import { DeliveriesPage } from '../../modules/deliveries/pages/DeliveriesPage'
 import { TasksPage } from '../../modules/tasks/pages/TasksPage'
 import { WorkOrdersPage } from '../../modules/workOrders/pages/WorkOrdersPage'
 import { ExternalRequestsPage } from '../../modules/externalRequests/pages/ExternalRequestsPage'
 import { LoginPage } from '../../modules/auth/pages/LoginPage'
 import { UsersPage } from '../../modules/users/pages/UsersPage'
 import { ReportsPage } from '../../modules/reports/pages/ReportsPage'
+import { SuppliersPage } from '../../modules/suppliers/pages/SuppliersPage'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
@@ -145,6 +148,26 @@ export const AppRouter = () => (
           }
         />
         <Route
+          path={ROUTE_PATHS.clients}
+          element={
+            <RequireFeatureFlag flag="showClientsModule">
+              <RequirePermission module="FLEET" action="view">
+                <ClientsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.deliveries}
+          element={
+            <RequireFeatureFlag flag="showDeliveriesModule">
+              <RequirePermission module="FLEET" action="view">
+                <DeliveriesPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
+          }
+        />
+        <Route
           path={ROUTE_PATHS.workOrders}
           element={
             <RequireFeatureFlag flag="showWorkOrdersModule">
@@ -170,6 +193,16 @@ export const AppRouter = () => (
             <RequireFeatureFlag flag="showRepairsModule">
               <RequirePermission module="REPAIRS" action="view">
                 <RepairsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.suppliers}
+          element={
+            <RequireFeatureFlag flag="showSuppliersModule">
+              <RequirePermission module="REPAIRS" action="view">
+                <SuppliersPage />
               </RequirePermission>
             </RequireFeatureFlag>
           }

@@ -8,6 +8,8 @@ import { getQueueItems } from '../../services/offline/queue'
 import type {
   AppUser,
   AuditRecord,
+  ClientAccount,
+  DeliveryOperation,
   ExternalRequest,
   FeatureFlags,
   FleetMovement,
@@ -15,6 +17,7 @@ import type {
   InventoryItem,
   MaintenancePlan,
   RepairRecord,
+  Supplier,
   UserInboxNotification,
   WorkOrder,
 } from '../../types/domain'
@@ -112,6 +115,9 @@ export const AppLayout = () => {
       externalRequests,
       userNotifications,
       movements,
+      clients,
+      suppliers,
+      deliveries,
       inventoryItems,
       users,
       currentUser,
@@ -127,6 +133,9 @@ export const AppLayout = () => {
       setExternalRequests,
       setUserNotifications,
       setMovements,
+      setClients,
+      setSuppliers,
+      setDeliveries,
       setInventoryItems,
       setUsers,
       setCurrentUser,
@@ -146,6 +155,9 @@ export const AppLayout = () => {
   const repairsRef = useRef(repairs)
   const externalRequestsRef = useRef(externalRequests)
   const movementsRef = useRef(movements)
+  const clientsRef = useRef(clients)
+  const suppliersRef = useRef(suppliers)
+  const deliveriesRef = useRef(deliveries)
   const inventoryRef = useRef(inventoryItems)
   const featureFlagsRef = useRef(featureFlags)
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
@@ -187,6 +199,18 @@ export const AppLayout = () => {
   useEffect(() => {
     movementsRef.current = movements
   }, [movements])
+
+  useEffect(() => {
+    clientsRef.current = clients
+  }, [clients])
+
+  useEffect(() => {
+    suppliersRef.current = suppliers
+  }, [suppliers])
+
+  useEffect(() => {
+    deliveriesRef.current = deliveries
+  }, [deliveries])
 
   useEffect(() => {
     inventoryRef.current = inventoryItems
@@ -283,8 +307,11 @@ export const AppLayout = () => {
         const shouldSyncAudits = activeFlags.showAuditsModule
         const shouldSyncWorkOrders = activeFlags.showWorkOrdersModule
         const shouldSyncRepairs = activeFlags.showRepairsModule
+        const shouldSyncSuppliers = activeFlags.showSuppliersModule
         const shouldSyncExternalRequests = activeFlags.showExternalRequestsModule
         const shouldSyncMovements = activeFlags.showMovementsModule
+        const shouldSyncClients = activeFlags.showClientsModule
+        const shouldSyncDeliveries = activeFlags.showDeliveriesModule
         const shouldSyncInventory = activeFlags.showInventoryModule
         const [
           usersResponse,
@@ -293,8 +320,11 @@ export const AppLayout = () => {
           auditsResponse,
           workOrdersResponse,
           repairsResponse,
+          suppliersResponse,
           externalRequestsResponse,
           movementsResponse,
+          clientsResponse,
+          deliveriesResponse,
           inventoryResponse,
           userNotificationsResponse,
         ] = await Promise.all([
@@ -306,10 +336,13 @@ export const AppLayout = () => {
             ? safeRequest<WorkOrder[]>('/work-orders', { maxAttempts: 3, timeoutMs: 22000 })
             : Promise.resolve(null),
           shouldSyncRepairs ? safeRequest<RepairRecord[]>('/repairs', { silent: true }) : Promise.resolve(null),
+          shouldSyncSuppliers ? safeRequest<Supplier[]>('/suppliers', { silent: true }) : Promise.resolve(null),
           shouldSyncExternalRequests
             ? safeRequest<ExternalRequest[]>('/external-requests', { silent: true })
             : Promise.resolve(null),
           shouldSyncMovements ? safeRequest<FleetMovement[]>('/movements', { silent: true }) : Promise.resolve(null),
+          shouldSyncClients ? safeRequest<ClientAccount[]>('/clients', { silent: true }) : Promise.resolve(null),
+          shouldSyncDeliveries ? safeRequest<DeliveryOperation[]>('/deliveries', { silent: true }) : Promise.resolve(null),
           shouldSyncInventory ? safeRequest<InventoryItem[]>('/inventory', { silent: true }) : Promise.resolve(null),
           safeRequest<UserInboxNotification[]>('/notifications', { silent: true }),
         ])
@@ -388,6 +421,9 @@ export const AppLayout = () => {
             mergeByIdWithLocal(repairsResponse, repairsRef.current, getQueuedPayloads('repair.create')) ?? repairsResponse,
           )
         }
+        if (suppliersResponse) {
+          setSuppliers(mergeByIdWithLocal(suppliersResponse, suppliersRef.current) ?? suppliersResponse)
+        }
         if (externalRequestsResponse) {
           setExternalRequests(
             mergeByIdWithLocal(
@@ -405,6 +441,12 @@ export const AppLayout = () => {
               getQueuedPayloads('movement.create'),
             ) ?? movementsResponse,
           )
+        }
+        if (clientsResponse) {
+          setClients(mergeByIdWithLocal(clientsResponse, clientsRef.current) ?? clientsResponse)
+        }
+        if (deliveriesResponse) {
+          setDeliveries(mergeByIdWithLocal(deliveriesResponse, deliveriesRef.current) ?? deliveriesResponse)
         }
         if (inventoryResponse) {
           setInventoryItems(
@@ -433,8 +475,11 @@ export const AppLayout = () => {
     setAudits,
     setWorkOrders,
     setRepairs,
+    setSuppliers,
     setExternalRequests,
     setMovements,
+    setClients,
+    setDeliveries,
     setInventoryItems,
     setUserNotifications,
     setUsers,

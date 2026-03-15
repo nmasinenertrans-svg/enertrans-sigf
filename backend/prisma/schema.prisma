@@ -54,6 +54,19 @@ enum FleetMovementType {
   RETURN
 }
 
+enum FleetLogisticsStatus {
+  AVAILABLE
+  PENDING_DELIVERY
+  DELIVERED
+  PENDING_RETURN
+  RETURNED
+}
+
+enum DeliveryOperationType {
+  DELIVERY
+  RETURN
+}
+
 enum TaskStatus {
   UNASSIGNED
   ASSIGNED
@@ -103,6 +116,7 @@ model User {
   tasksAssigned       Task[]      @relation("TaskAssignedTo")
   tasksAssignedBy     Task[]      @relation("TaskAssignedBy")
   taskEvents          TaskEvent[] @relation("TaskEventActor")
+  deliveryOperationsRequested DeliveryOperation[] @relation("DeliveryRequestedBy")
 }
 
 model FleetUnit {
@@ -112,10 +126,14 @@ model FleetUnit {
   brand                    String
   model                    String
   year                     Int      @default(0)
+  clientId                 String?
   clientName               String   @default("")
   location                 String   @default("")
   ownerCompany             String
   operationalStatus        FleetOperationalStatus
+  logisticsStatus          FleetLogisticsStatus @default(AVAILABLE)
+  logisticsStatusNote      String   @default("")
+  logisticsUpdatedAt       DateTime?
   unitType                 FleetUnitType
   configurationNotes       String
   chassisNumber            String
@@ -145,6 +163,7 @@ model FleetUnit {
 
   semiTrailer              FleetUnit?  @relation("SemiTrailer", fields: [semiTrailerUnitId], references: [id])
   tractors                 FleetUnit[] @relation("SemiTrailer")
+  client                   ClientAccount? @relation(fields: [clientId], references: [id])
 
   maintenancePlans         MaintenancePlan[]
   audits                   AuditRecord[]
@@ -152,6 +171,10 @@ model FleetUnit {
   repairs                  RepairRecord[]
   externalRequests         ExternalRequest[]
   movementLinks            FleetMovementUnit[]
+  deliveryOperations       DeliveryOperation[]
+
+  @@index([clientId])
+  @@index([logisticsStatus])
 }
 
 model MaintenancePlan {
@@ -217,6 +240,7 @@ model RepairRecord {
   workOrderId      String?
   externalRequestId String? 
   sourceType       String   @default("WORK_ORDER")
+  supplierId       String?
   performedAt      DateTime @default(now())
   unitKilometers   Int      @default(0)
   currency         CurrencyCode @default(ARS)
@@ -231,6 +255,7 @@ model RepairRecord {
   updatedAt        DateTime @updatedAt
 
   unit FleetUnit @relation(fields: [unitId], references: [id])
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
 }
 
 model InventoryItem {
@@ -351,4 +376,59 @@ model AppSettings {
   featureFlags       Json     @default("{}")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model ClientAccount {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  legalName     String   @default("")
+  taxId         String   @default("")
+  contactName   String   @default("")
+  contactPhone  String   @default("")
+  contactEmail  String   @default("")
+  notes         String   @default("")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  units         FleetUnit[]
+  deliveries    DeliveryOperation[]
+}
+
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  serviceType   String   @default("")
+  contactName   String   @default("")
+  contactPhone  String   @default("")
+  contactEmail  String   @default("")
+  notes         String   @default("")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  repairs       RepairRecord[]
+}
+
+model DeliveryOperation {
+  id                   String                @id @default(uuid())
+  unitId               String
+  clientId             String?
+  operationType        DeliveryOperationType
+  targetLogisticsStatus FleetLogisticsStatus
+  summary              String                @default("")
+  reason               String                @default("")
+  requestedByUserId    String?
+  requestedByUserName  String                @default("")
+  effectiveAt          DateTime              @default(now())
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  unit                 FleetUnit             @relation(fields: [unitId], references: [id])
+  client               ClientAccount?        @relation(fields: [clientId], references: [id])
+  requestedByUser      User?                 @relation("DeliveryRequestedBy", fields: [requestedByUserId], references: [id])
+
+  @@index([unitId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([operationType, createdAt])
 }

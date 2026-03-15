@@ -92,6 +92,27 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setClients: (clients) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, clients }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
+      setSuppliers: (suppliers) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, suppliers }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
+      setDeliveries: (deliveries) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, deliveries }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setInventoryItems: (items) => {
         setState((previousState) => {
           const nextState = { ...previousState, inventoryItems: items }
