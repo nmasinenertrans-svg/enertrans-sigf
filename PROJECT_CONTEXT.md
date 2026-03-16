@@ -623,6 +623,16 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Se eliminan fallos recurrentes en `/fleet`, `/clients`, `/suppliers`, `/deliveries` cuando las migraciones quedaron partidas entre schemas.
   Riesgo residual:
   - Si la informacion quedo realmente dividida entre schemas (datos distintos en ambos), la app trabajara sobre el schema mas consistente detectado; igual conviene unificar schema de produccion en una ventana controlada.
+- Fecha: 2026-03-16
+  Cambio: Refuerzo del selector de schema para evaluar explicitamente `table_schema` por candidato y permitir override por entorno.
+  Archivos:
+  - `backend/src/db.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Evita falsos positivos de deteccion por `current_schema()` y mejora la eleccion entre `enertrans_prod/public` cuando una tiene tablas legacy y la otra tablas nuevas.
+  - Agrega `DATABASE_SCHEMA_FORCE` para fijar schema en incidentes productivos sin tocar codigo.
+  Riesgo residual:
+  - Si ambos schemas estan incompletos, se elegira el \"menos malo\" por score; requiere normalizacion definitiva de base para eliminar ambiguedad.
 
 ## 9) Riesgos abiertos (a seguir)
 

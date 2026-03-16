@@ -62,22 +62,22 @@ const gatherSchemaCandidates = (databaseUrl: string): string[] => {
 }
 
 const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeResult | null> => {
-  const probeClient = new PrismaClient({ datasourceUrl: withSchemaInUrl(databaseUrl, schema) })
+  const probeClient = new PrismaClient({ datasourceUrl: databaseUrl })
   try {
-    const tableRows = await probeClient.$queryRawUnsafe<{ table_name: string }[]>(`
+    const tableRows = await probeClient.$queryRaw<{ table_name: string }[]>`
       SELECT table_name
       FROM information_schema.tables
-      WHERE table_schema = current_schema()
+      WHERE lower(table_schema) = lower(${schema})
         AND lower(table_name) IN ('fleetunit', 'supplier', 'clientaccount', 'deliveryoperation')
-    `)
+    `
 
-    const columnRows = await probeClient.$queryRawUnsafe<{ column_name: string }[]>(`
+    const columnRows = await probeClient.$queryRaw<{ column_name: string }[]>`
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_schema = current_schema()
+      WHERE lower(table_schema) = lower(${schema})
         AND lower(table_name) = 'fleetunit'
         AND lower(column_name) = 'clientid'
-    `)
+    `
 
     const tableSet = new Set(tableRows.map((row) => normalizeSchema(row.table_name)))
     const hasFleetUnitTable = tableSet.has('fleetunit')
@@ -122,6 +122,28 @@ export let prisma = new PrismaClient({
 })
 
 export const ensureBestPrismaSchema = async (): Promise<void> => {
+  const forcedSchema = process.env.DATABASE_SCHEMA_FORCE?.trim()
+  if (forcedSchema) {
+    const forcedUrl = withSchemaInUrl(baseDatasourceUrl, forcedSchema)
+    if (forcedUrl !== activeDatasourceUrl) {
+      const forcedClient = new PrismaClient({ datasourceUrl: forcedUrl })
+      try {
+        await forcedClient.$queryRawUnsafe('SELECT 1')
+        const previous = prisma
+        prisma = forcedClient
+        activeDatasourceUrl = forcedUrl
+        activeSchema = forcedSchema
+        await previous.$disconnect().catch(() => undefined)
+      } catch {
+        await forcedClient.$disconnect().catch(() => undefined)
+      }
+    } else {
+      activeSchema = forcedSchema
+    }
+    console.log(`[DB] esquema forzado por env: ${activeSchema}`)
+    return
+  }
+
   const candidates = gatherSchemaCandidates(baseDatasourceUrl)
   if (candidates.length === 0) {
     return
@@ -138,6 +160,15 @@ export const ensureBestPrismaSchema = async (): Promise<void> => {
   if (probeResults.length === 0) {
     return
   }
+
+  console.log(
+    `[DB] probe schemas: ${probeResults
+      .map(
+        (result) =>
+          `${result.schema}(score=${result.score},fleet=${result.hasFleetUnitTable},clientId=${result.hasFleetClientIdColumn},supplier=${result.hasSupplierTable},client=${result.hasClientAccountTable},delivery=${result.hasDeliveryOperationTable})`,
+      )
+      .join(' | ')}`,
+  )
 
   const best = probeResults.sort((a, b) => b.score - a.score)[0]
   if (!best || best.score <= 0) {
