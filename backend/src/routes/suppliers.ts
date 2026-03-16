@@ -4,6 +4,11 @@ import { prisma } from '../db.js'
 
 const router = Router()
 
+const SUPPLIER_EXTENDED_COLUMNS = ['paymentMethod', 'paymentTerms', 'address', 'mapsUrl'] as const
+const SUPPLIER_COLUMNS_CACHE_MS = 5 * 60 * 1000
+
+let supplierColumnsSupportCache: { checkedAt: number; supported: boolean } | null = null
+
 const supplierSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2).max(120),
@@ -23,8 +28,54 @@ const updateSchema = supplierSchema.partial()
 
 const normalize = (value: string | undefined) => (value ?? '').trim()
 
-router.get('/', async (_req, res) => {
+const supplierLegacySelect = {
+  id: true,
+  name: true,
+  serviceType: true,
+  contactName: true,
+  contactPhone: true,
+  contactEmail: true,
+  notes: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: {
+    select: { repairs: true },
+  },
+} as const
+
+const toSupplierPublicShape = (supplier: any) => ({
+  ...supplier,
+  paymentMethod: supplier.paymentMethod ?? '',
+  paymentTerms: supplier.paymentTerms ?? '',
+  address: supplier.address ?? '',
+  mapsUrl: supplier.mapsUrl ?? '',
+})
+
+const supportsSupplierExtendedColumns = async (): Promise<boolean> => {
+  const now = Date.now()
+  if (supplierColumnsSupportCache && now - supplierColumnsSupportCache.checkedAt < SUPPLIER_COLUMNS_CACHE_MS) {
+    return supplierColumnsSupportCache.supported
+  }
+
   try {
+    const rows = await prisma.$queryRaw<{ column_name: string }[]>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND lower(table_name) = lower('Supplier')
+    `
+    const available = new Set(rows.map((row) => row.column_name))
+    const supported = SUPPLIER_EXTENDED_COLUMNS.every((columnName) => available.has(columnName))
+    supplierColumnsSupportCache = { checkedAt: now, supported }
+    return supported
+  } catch {
+    return true
+  }
+}
+
+const readSuppliers = async (supportsExtended: boolean) => {
+  if (supportsExtended) {
     const items = await prisma.supplier.findMany({
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
       include: {
@@ -33,6 +84,40 @@ router.get('/', async (_req, res) => {
         },
       },
     })
+    return items.map(toSupplierPublicShape)
+  }
+
+  const items = await prisma.supplier.findMany({
+    orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+    select: supplierLegacySelect,
+  })
+  return items.map(toSupplierPublicShape)
+}
+
+const readSupplierById = async (supplierId: string, supportsExtended: boolean) => {
+  if (supportsExtended) {
+    const item = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      include: {
+        _count: {
+          select: { repairs: true },
+        },
+      },
+    })
+    return item ? toSupplierPublicShape(item) : null
+  }
+
+  const item = await prisma.supplier.findUnique({
+    where: { id: supplierId },
+    select: supplierLegacySelect,
+  })
+  return item ? toSupplierPublicShape(item) : null
+}
+
+router.get('/', async (_req, res) => {
+  try {
+    const supportsExtended = await supportsSupplierExtendedColumns()
+    const items = await readSuppliers(supportsExtended)
     return res.json(items)
   } catch (error) {
     console.error('Suppliers GET error:', error)
@@ -46,14 +131,8 @@ router.get('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Id de proveedor requerido.' })
   }
   try {
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: supplierId },
-      include: {
-        _count: {
-          select: { repairs: true },
-        },
-      },
-    })
+    const supportsExtended = await supportsSupplierExtendedColumns()
+    const supplier = await readSupplierById(supplierId, supportsExtended)
     if (!supplier) {
       return res.status(404).json({ message: 'Proveedor no encontrado.' })
     }
@@ -74,32 +153,45 @@ router.post('/', async (req, res) => {
     const name = normalize(parsed.data.name)
     const existing = await prisma.supplier.findFirst({
       where: { name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
     })
     if (existing) {
       return res.status(409).json({ message: 'Ya existe un proveedor con ese nombre.' })
     }
 
-    const created = await prisma.supplier.create({
-      data: {
-        name,
-        serviceType: normalize(parsed.data.serviceType),
-        paymentMethod: normalize(parsed.data.paymentMethod),
-        paymentTerms: normalize(parsed.data.paymentTerms),
-        address: normalize(parsed.data.address),
-        mapsUrl: normalize(parsed.data.mapsUrl),
-        contactName: normalize(parsed.data.contactName),
-        contactPhone: normalize(parsed.data.contactPhone),
-        contactEmail: normalize(parsed.data.contactEmail),
-        notes: normalize(parsed.data.notes),
-        isActive: parsed.data.isActive,
-      },
-      include: {
-        _count: {
-          select: { repairs: true },
-        },
-      },
-    })
-    return res.status(201).json(created)
+    const supportsExtended = await supportsSupplierExtendedColumns()
+    const createData: Record<string, unknown> = {
+      name,
+      serviceType: normalize(parsed.data.serviceType),
+      contactName: normalize(parsed.data.contactName),
+      contactPhone: normalize(parsed.data.contactPhone),
+      contactEmail: normalize(parsed.data.contactEmail),
+      notes: normalize(parsed.data.notes),
+      isActive: parsed.data.isActive,
+    }
+
+    if (supportsExtended) {
+      createData.paymentMethod = normalize(parsed.data.paymentMethod)
+      createData.paymentTerms = normalize(parsed.data.paymentTerms)
+      createData.address = normalize(parsed.data.address)
+      createData.mapsUrl = normalize(parsed.data.mapsUrl)
+    }
+
+    const created = supportsExtended
+      ? await prisma.supplier.create({
+          data: createData as any,
+          include: {
+            _count: {
+              select: { repairs: true },
+            },
+          },
+        })
+      : await prisma.supplier.create({
+          data: createData as any,
+          select: supplierLegacySelect,
+        })
+
+    return res.status(201).json(toSupplierPublicShape(created))
   } catch (error) {
     console.error('Suppliers POST error:', error)
     return res.status(500).json({ message: 'No se pudo crear el proveedor.' })
@@ -118,7 +210,7 @@ router.patch('/:id', async (req, res) => {
   }
 
   try {
-    const current = await prisma.supplier.findUnique({ where: { id: supplierId } })
+    const current = await prisma.supplier.findUnique({ where: { id: supplierId }, select: { id: true, name: true } })
     if (!current) {
       return res.status(404).json({ message: 'Proveedor no encontrado.' })
     }
@@ -134,33 +226,46 @@ router.patch('/:id', async (req, res) => {
           id: { not: supplierId },
           name: { equals: nextName, mode: 'insensitive' },
         },
+        select: { id: true },
       })
       if (conflict) {
         return res.status(409).json({ message: 'Ya existe un proveedor con ese nombre.' })
       }
     }
 
-    const updated = await prisma.supplier.update({
-      where: { id: supplierId },
-      data: {
-        name: nextName,
-        serviceType: parsed.data.serviceType !== undefined ? normalize(parsed.data.serviceType) : undefined,
-        paymentMethod: parsed.data.paymentMethod !== undefined ? normalize(parsed.data.paymentMethod) : undefined,
-        paymentTerms: parsed.data.paymentTerms !== undefined ? normalize(parsed.data.paymentTerms) : undefined,
-        address: parsed.data.address !== undefined ? normalize(parsed.data.address) : undefined,
-        mapsUrl: parsed.data.mapsUrl !== undefined ? normalize(parsed.data.mapsUrl) : undefined,
-        contactName: parsed.data.contactName !== undefined ? normalize(parsed.data.contactName) : undefined,
-        contactPhone: parsed.data.contactPhone !== undefined ? normalize(parsed.data.contactPhone) : undefined,
-        contactEmail: parsed.data.contactEmail !== undefined ? normalize(parsed.data.contactEmail) : undefined,
-        notes: parsed.data.notes !== undefined ? normalize(parsed.data.notes) : undefined,
-        isActive: parsed.data.isActive,
-      },
-      include: {
-        _count: {
-          select: { repairs: true },
-        },
-      },
-    })
+    const supportsExtended = await supportsSupplierExtendedColumns()
+    const updateData: Record<string, unknown> = {
+      name: nextName,
+      serviceType: parsed.data.serviceType !== undefined ? normalize(parsed.data.serviceType) : undefined,
+      contactName: parsed.data.contactName !== undefined ? normalize(parsed.data.contactName) : undefined,
+      contactPhone: parsed.data.contactPhone !== undefined ? normalize(parsed.data.contactPhone) : undefined,
+      contactEmail: parsed.data.contactEmail !== undefined ? normalize(parsed.data.contactEmail) : undefined,
+      notes: parsed.data.notes !== undefined ? normalize(parsed.data.notes) : undefined,
+      isActive: parsed.data.isActive,
+    }
+
+    if (supportsExtended) {
+      updateData.paymentMethod = parsed.data.paymentMethod !== undefined ? normalize(parsed.data.paymentMethod) : undefined
+      updateData.paymentTerms = parsed.data.paymentTerms !== undefined ? normalize(parsed.data.paymentTerms) : undefined
+      updateData.address = parsed.data.address !== undefined ? normalize(parsed.data.address) : undefined
+      updateData.mapsUrl = parsed.data.mapsUrl !== undefined ? normalize(parsed.data.mapsUrl) : undefined
+    }
+
+    const updated = supportsExtended
+      ? await prisma.supplier.update({
+          where: { id: supplierId },
+          data: updateData as any,
+          include: {
+            _count: {
+              select: { repairs: true },
+            },
+          },
+        })
+      : await prisma.supplier.update({
+          where: { id: supplierId },
+          data: updateData as any,
+          select: supplierLegacySelect,
+        })
 
     if (nextName !== current.name) {
       await prisma.repairRecord.updateMany({
@@ -169,7 +274,7 @@ router.patch('/:id', async (req, res) => {
       })
     }
 
-    return res.json(updated)
+    return res.json(toSupplierPublicShape(updated))
   } catch (error) {
     console.error('Suppliers PATCH error:', error)
     return res.status(500).json({ message: 'No se pudo actualizar el proveedor.' })
@@ -183,14 +288,21 @@ router.delete('/:id', async (req, res) => {
   }
 
   try {
-    const current = await prisma.supplier.findUnique({
-      where: { id: supplierId },
-      include: {
-        _count: {
-          select: { repairs: true },
-        },
-      },
-    })
+    const supportsExtended = await supportsSupplierExtendedColumns()
+    const current = supportsExtended
+      ? await prisma.supplier.findUnique({
+          where: { id: supplierId },
+          include: {
+            _count: {
+              select: { repairs: true },
+            },
+          },
+        })
+      : await prisma.supplier.findUnique({
+          where: { id: supplierId },
+          select: supplierLegacySelect,
+        })
+
     if (!current) {
       return res.status(404).json({ message: 'Proveedor no encontrado.' })
     }

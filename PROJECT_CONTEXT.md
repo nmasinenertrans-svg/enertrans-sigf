@@ -1,6 +1,6 @@
 ﻿# ENERTRANS SIGF - Contexto Vivo del Proyecto
 
-Ultima actualizacion: 2026-03-15
+Ultima actualizacion: 2026-03-16
 Responsable de actualizacion: Codex (este chat)
 Objetivo: que cualquier dev (o nuevo chat) tenga contexto operativo completo sin depender del historial conversacional.
 
@@ -601,6 +601,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Cada proveedor ahora tiene ficha propia con mapa visible para operacion (sin depender de abrir otro sistema).
   Riesgo residual:
   - Si el link pegado de Google Maps no es publico o no permite embed, el mapa puede no renderizar y queda solo el boton para abrir el link externo.
+- Fecha: 2026-03-16
+  Cambio: Hardening de proveedores y despliegue backend para evitar 500 por desalineacion de migraciones.
+  Archivos:
+  - `backend/src/routes/suppliers.ts`
+  - `backend/package.json`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - `/suppliers` deja de depender estrictamente de columnas nuevas: si faltan `paymentMethod/paymentTerms/address/mapsUrl`, opera en modo compatibilidad sin romper.
+  - `npm start` en backend ahora ejecuta `prisma migrate deploy` antes de levantar servidor, reduciendo riesgo de deploy sin migraciones aplicadas.
+  Riesgo residual:
+  - Si la DB productiva apunta a schema incorrecto (por ejemplo no `enertrans_prod`), puede seguir habiendo inconsistencias de datos aunque no rompa la ruta de proveedores.
 
 ## 9) Riesgos abiertos (a seguir)
 
