@@ -657,6 +657,16 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Incluso si Render arranca solo con `node dist/src/index.js` y sin ejecutar `migrate deploy`, backend crea/ajusta estructura minima necesaria para evitar 500 en `/fleet`, `/clients`, `/suppliers`, `/deliveries`.
   Riesgo residual:
   - La auto-reparacion prioriza continuidad operativa y compatibilidad; no reemplaza una normalizacion completa de migraciones en una ventana de mantenimiento.
+- Fecha: 2026-03-16
+  Cambio: Ajuste final de failover DB para evitar cambio a schema incompatible por diferencia de mayusculas/minusculas en nombres de tablas.
+  Archivos:
+  - `backend/src/db.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - El probe ahora valida nombres exactos de Prisma (`FleetUnit`, `Supplier`, `ClientAccount`, `DeliveryOperation`, `clientId`), evitando elegir schemas con tablas legacy en lowercase que Prisma no puede consultar.
+  - Ante `P2021/P2022`, se intenta primero auto-reparar el schema activo y reintentar antes de cambiar de schema.
+  Riesgo residual:
+  - Si el usuario DB no tiene permisos DDL (CREATE/ALTER), la auto-reparacion no podra completar estructura faltante y se debera correr migracion con credenciales owner.
 
 ## 9) Riesgos abiertos (a seguir)
 

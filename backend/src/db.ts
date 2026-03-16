@@ -64,22 +64,22 @@ const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeRe
       SELECT table_name
       FROM information_schema.tables
       WHERE lower(table_schema) = lower(${schema})
-        AND lower(table_name) IN ('fleetunit', 'supplier', 'clientaccount', 'deliveryoperation')
+        AND table_name IN ('FleetUnit', 'Supplier', 'ClientAccount', 'DeliveryOperation')
     `
 
     const columnRows = await probeClient.$queryRaw<{ column_name: string }[]>`
       SELECT column_name
       FROM information_schema.columns
       WHERE lower(table_schema) = lower(${schema})
-        AND lower(table_name) = 'fleetunit'
-        AND lower(column_name) = 'clientid'
+        AND table_name = 'FleetUnit'
+        AND column_name = 'clientId'
     `
 
-    const tableSet = new Set(tableRows.map((row) => normalizeSchema(row.table_name)))
-    const hasFleetUnitTable = tableSet.has('fleetunit')
-    const hasSupplierTable = tableSet.has('supplier')
-    const hasClientAccountTable = tableSet.has('clientaccount')
-    const hasDeliveryOperationTable = tableSet.has('deliveryoperation')
+    const tableSet = new Set(tableRows.map((row) => row.table_name))
+    const hasFleetUnitTable = tableSet.has('FleetUnit')
+    const hasSupplierTable = tableSet.has('Supplier')
+    const hasClientAccountTable = tableSet.has('ClientAccount')
+    const hasDeliveryOperationTable = tableSet.has('DeliveryOperation')
     const hasFleetClientIdColumn = columnRows.length > 0
 
     const score =
@@ -317,6 +317,16 @@ export const runWithSchemaFailover = async <T>(operation: () => Promise<T>): Pro
   } catch (error) {
     if (!isSchemaMismatchError(error)) {
       throw error
+    }
+
+    // Primero intenta reparar el schema activo y reintentar sin cambiar de schema.
+    await ensureRuntimeSchemaCompatibility()
+    try {
+      return await operation()
+    } catch (retryError) {
+      if (!isSchemaMismatchError(retryError)) {
+        throw retryError
+      }
     }
 
     if (!schemaRecoveryPromise) {
