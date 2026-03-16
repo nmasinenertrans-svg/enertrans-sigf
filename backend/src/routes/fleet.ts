@@ -1,6 +1,6 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
-import { prisma, runWithSchemaFailover } from '../db.js'
+import { getActiveDbSchema, prisma, runWithSchemaFailover } from '../db.js'
 
 const router = Router()
 
@@ -67,12 +67,13 @@ const normalizeLegacyUnit = (unit: any) => ({
 })
 
 const hasFleetColumn = async (columnName: string): Promise<boolean> => {
+  const activeSchema = getActiveDbSchema()
   try {
     const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
       SELECT EXISTS (
         SELECT 1
         FROM information_schema.columns
-        WHERE table_schema = current_schema()
+        WHERE lower(table_schema) = lower(${activeSchema})
           AND table_name = 'FleetUnit'
           AND column_name = ${columnName}
       ) AS exists
@@ -84,28 +85,16 @@ const hasFleetColumn = async (columnName: string): Promise<boolean> => {
 }
 
 const readLegacyFleetUnits = async (): Promise<any[]> => {
-  try {
-    return await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "FleetUnit"`)
-  } catch {
-    return prisma.$queryRawUnsafe<any[]>(`SELECT * FROM fleetunit`)
-  }
+  const activeSchema = getActiveDbSchema().replace(/"/g, '')
+  return prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "${activeSchema}"."FleetUnit"`)
 }
 
 const readLegacyFleetUnitById = async (id: string): Promise<any | null> => {
-  try {
-    const rows = await prisma.$queryRaw<any[]>`
-      SELECT *
-      FROM "FleetUnit"
-      WHERE "id" = ${id}
-      LIMIT 1
-    `
-    return rows[0] ?? null
-  } catch {
-    const rows = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT * FROM fleetunit WHERE id = '${String(id).replace(/'/g, "''")}' LIMIT 1`,
-    )
-    return rows[0] ?? null
-  }
+  const activeSchema = getActiveDbSchema().replace(/"/g, '')
+  const rows = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT * FROM "${activeSchema}"."FleetUnit" WHERE "id" = '${String(id).replace(/'/g, "''")}' LIMIT 1`,
+  )
+  return rows[0] ?? null
 }
 
 type FleetOperationalStatus = 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'
