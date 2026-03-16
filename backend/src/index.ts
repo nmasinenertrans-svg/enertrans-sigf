@@ -2,7 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import * as Sentry from '@sentry/node'
-import { prisma } from './db.js'
+import { ensureBestPrismaSchema, getActiveDbSchema, prisma } from './db.js'
 import authRoutes from './routes/auth.js'
 import usersRoutes from './routes/users.js'
 import fleetRoutes from './routes/fleet.js'
@@ -91,7 +91,11 @@ const ensureDevUser = async () => {
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4000
 
-ensureDevUser()
+ensureBestPrismaSchema()
+  .then(() => {
+    console.log(`[DB] runtime schema seleccionado: ${getActiveDbSchema()}`)
+  })
+  .then(() => ensureDevUser())
   .then(() => {
     app.listen(port, () => {
       console.log(`Backend listo en http://localhost:${port}`)

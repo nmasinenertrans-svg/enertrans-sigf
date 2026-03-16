@@ -612,6 +612,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - `npm start` en backend ahora ejecuta `prisma migrate deploy` antes de levantar servidor, reduciendo riesgo de deploy sin migraciones aplicadas.
   Riesgo residual:
   - Si la DB productiva apunta a schema incorrecto (por ejemplo no `enertrans_prod`), puede seguir habiendo inconsistencias de datos aunque no rompa la ruta de proveedores.
+- Fecha: 2026-03-16
+  Cambio: Seleccion automatica de schema DB en runtime (`enertrans_prod` vs `public`) para evitar errores `P2021/P2022` por tablas/columnas faltantes.
+  Archivos:
+  - `backend/src/db.ts`
+  - `backend/src/index.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Backend deja de quedar atado ciegamente al schema del `DATABASE_URL`; al iniciar, elige el schema con mejor compatibilidad real para `FleetUnit`, `Supplier`, `ClientAccount` y `DeliveryOperation`.
+  - Se eliminan fallos recurrentes en `/fleet`, `/clients`, `/suppliers`, `/deliveries` cuando las migraciones quedaron partidas entre schemas.
+  Riesgo residual:
+  - Si la informacion quedo realmente dividida entre schemas (datos distintos en ambos), la app trabajara sobre el schema mas consistente detectado; igual conviene unificar schema de produccion en una ventana controlada.
 
 ## 9) Riesgos abiertos (a seguir)
 
