@@ -689,6 +689,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - En proveedores agrega fallback persistente en `AppSettings.featureFlags.suppliersFallback` para altas/ediciones mientras la tabla `Supplier` no exista.
   Riesgo residual:
   - El fallback de proveedores no reemplaza la tabla definitiva; cuando se normalice DB se recomienda migrar `suppliersFallback` a `Supplier`.
+- Fecha: 2026-03-16
+  Cambio: Lectura de flota en modo compatibilidad hard cuando falta `FleetUnit.clientId`.
+  Archivos:
+  - `backend/src/routes/fleet.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - `GET /fleet` y `GET /fleet/:id` ya no dependen de Prisma si la columna `clientId` no existe; consultan con SQL legacy y normalizan salida para frontend.
+  Riesgo residual:
+  - Mientras siga faltando `clientId`, operaciones de escritura de flota que usen ese campo pueden mantener limitaciones hasta normalizar schema.
 
 ## 9) Riesgos abiertos (a seguir)
 

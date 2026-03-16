@@ -66,6 +66,48 @@ const normalizeLegacyUnit = (unit: any) => ({
   logisticsUpdatedAt: unit.logisticsUpdatedAt ?? null,
 })
 
+const hasFleetColumn = async (columnName: string): Promise<boolean> => {
+  try {
+    const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'FleetUnit'
+          AND column_name = ${columnName}
+      ) AS exists
+    `
+    return Boolean(rows[0]?.exists)
+  } catch {
+    return false
+  }
+}
+
+const readLegacyFleetUnits = async (): Promise<any[]> => {
+  try {
+    return await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "FleetUnit"`)
+  } catch {
+    return prisma.$queryRawUnsafe<any[]>(`SELECT * FROM fleetunit`)
+  }
+}
+
+const readLegacyFleetUnitById = async (id: string): Promise<any | null> => {
+  try {
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT *
+      FROM "FleetUnit"
+      WHERE "id" = ${id}
+      LIMIT 1
+    `
+    return rows[0] ?? null
+  } catch {
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM fleetunit WHERE id = '${String(id).replace(/'/g, "''")}' LIMIT 1`,
+    )
+    return rows[0] ?? null
+  }
+}
+
 type FleetOperationalStatus = 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'
 
 const deriveOperationalStatus = (
@@ -175,6 +217,12 @@ const fleetSchema = z.object({
 
 router.get('/', async (_req, res) => {
   try {
+    const hasClientIdColumn = await hasFleetColumn('clientId')
+    if (!hasClientIdColumn) {
+      const legacyUnits = await readLegacyFleetUnits()
+      return res.json(legacyUnits.map(normalizeLegacyUnit))
+    }
+
     const units = await runWithSchemaFailover(() =>
       prisma.fleetUnit.findMany({ orderBy: { createdAt: 'desc' } }),
     )
@@ -182,11 +230,7 @@ router.get('/', async (_req, res) => {
   } catch (error) {
     if (isSchemaMismatchError(error)) {
       try {
-        const legacyUnits = await prisma.$queryRaw<any[]>`
-          SELECT *
-          FROM "FleetUnit"
-          ORDER BY "createdAt" DESC
-        `
+        const legacyUnits = await readLegacyFleetUnits()
         return res.json(legacyUnits.map(normalizeLegacyUnit))
       } catch {
         // continue with default handling
@@ -199,6 +243,15 @@ router.get('/', async (_req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
+    const hasClientIdColumn = await hasFleetColumn('clientId')
+    if (!hasClientIdColumn) {
+      const legacyUnit = await readLegacyFleetUnitById(req.params.id)
+      if (!legacyUnit) {
+        return res.status(404).json({ message: 'Unidad no encontrada.' })
+      }
+      return res.json(normalizeLegacyUnit(legacyUnit))
+    }
+
     const unit = await runWithSchemaFailover(() =>
       prisma.fleetUnit.findUnique({ where: { id: req.params.id } }),
     )
@@ -209,13 +262,7 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     if (isSchemaMismatchError(error)) {
       try {
-        const rows = await prisma.$queryRaw<any[]>`
-          SELECT *
-          FROM "FleetUnit"
-          WHERE "id" = ${req.params.id}
-          LIMIT 1
-        `
-        const legacyUnit = rows[0]
+        const legacyUnit = await readLegacyFleetUnitById(req.params.id)
         if (!legacyUnit) {
           return res.status(404).json({ message: 'Unidad no encontrada.' })
         }
