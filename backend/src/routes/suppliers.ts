@@ -27,6 +27,26 @@ const supplierSchema = z.object({
 const updateSchema = supplierSchema.partial()
 
 const normalize = (value: string | undefined) => (value ?? '').trim()
+const SUPPLIERS_FALLBACK_KEY = 'suppliersFallback'
+
+const isSchemaMismatchError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+  const maybeError = error as { code?: string; message?: string }
+  if (maybeError.code === 'P2021' || maybeError.code === 'P2022') {
+    return true
+  }
+  const message = String(maybeError.message ?? '').toLowerCase()
+  return message.includes('does not exist in the current database')
+}
+
+const createSupplierId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `supplier-${Date.now()}-${Math.round(Math.random() * 100000)}`
+}
 
 const supplierLegacySelect = {
   id: true,
@@ -50,7 +70,60 @@ const toSupplierPublicShape = (supplier: any) => ({
   paymentTerms: supplier.paymentTerms ?? '',
   address: supplier.address ?? '',
   mapsUrl: supplier.mapsUrl ?? '',
+  _count: supplier._count ?? { repairs: 0 },
 })
+
+const readFallbackSuppliers = async () => {
+  const settings = await prisma.appSettings.findUnique({
+    where: { id: 'app' },
+    select: { featureFlags: true },
+  })
+  const raw = (settings?.featureFlags ?? {}) as Record<string, unknown>
+  const list = Array.isArray(raw[SUPPLIERS_FALLBACK_KEY]) ? (raw[SUPPLIERS_FALLBACK_KEY] as any[]) : []
+  return list.map((item) =>
+    toSupplierPublicShape({
+      id: String(item.id ?? ''),
+      name: String(item.name ?? ''),
+      serviceType: String(item.serviceType ?? ''),
+      paymentMethod: String(item.paymentMethod ?? ''),
+      paymentTerms: String(item.paymentTerms ?? ''),
+      address: String(item.address ?? ''),
+      mapsUrl: String(item.mapsUrl ?? ''),
+      contactName: String(item.contactName ?? ''),
+      contactPhone: String(item.contactPhone ?? ''),
+      contactEmail: String(item.contactEmail ?? ''),
+      notes: String(item.notes ?? ''),
+      isActive: Boolean(item.isActive ?? true),
+      createdAt: item.createdAt ?? new Date().toISOString(),
+      updatedAt: item.updatedAt ?? new Date().toISOString(),
+      _count: { repairs: 0 },
+    }),
+  )
+}
+
+const writeFallbackSuppliers = async (suppliers: any[]) => {
+  const current = await prisma.appSettings.findUnique({
+    where: { id: 'app' },
+    select: { featureFlags: true },
+  })
+  const flags = (current?.featureFlags ?? {}) as Record<string, unknown>
+  const nextFlags = { ...flags, [SUPPLIERS_FALLBACK_KEY]: suppliers }
+  if (!current) {
+    await prisma.appSettings.create({
+      data: {
+        id: 'app',
+        maintenanceEnabled: false,
+        maintenanceMessage: '',
+        featureFlags: nextFlags as any,
+      },
+    })
+    return
+  }
+  await prisma.appSettings.update({
+    where: { id: 'app' },
+    data: { featureFlags: nextFlags as any },
+  })
+}
 
 const supportsSupplierExtendedColumns = async (): Promise<boolean> => {
   const now = Date.now()
@@ -127,6 +200,14 @@ router.get('/', async (_req, res) => {
     })
     return res.json(items)
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      try {
+        const fallback = await readFallbackSuppliers()
+        return res.json(fallback)
+      } catch (fallbackError) {
+        console.error('Suppliers fallback GET error:', fallbackError)
+      }
+    }
     console.error('Suppliers GET error:', error)
     return res.status(500).json({ message: 'No se pudieron cargar los proveedores.' })
   }
@@ -147,6 +228,18 @@ router.get('/:id', async (req, res) => {
     }
     return res.json(supplier)
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      try {
+        const fallback = await readFallbackSuppliers()
+        const supplier = fallback.find((item) => item.id === supplierId)
+        if (!supplier) {
+          return res.status(404).json({ message: 'Proveedor no encontrado.' })
+        }
+        return res.json(supplier)
+      } catch (fallbackError) {
+        console.error('Suppliers fallback GET by id error:', fallbackError)
+      }
+    }
     console.error('Suppliers GET by id error:', error)
     return res.status(500).json({ message: 'No se pudo cargar la ficha del proveedor.' })
   }
@@ -207,6 +300,38 @@ router.post('/', async (req, res) => {
     }
     return res.status(201).json(toSupplierPublicShape(created))
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      try {
+        const fallback = await readFallbackSuppliers()
+        const name = normalize(parsed.data.name)
+        const exists = fallback.some((item) => normalize(item.name).toLowerCase() === name.toLowerCase())
+        if (exists) {
+          return res.status(409).json({ message: 'Ya existe un proveedor con ese nombre.' })
+        }
+        const now = new Date().toISOString()
+        const created = toSupplierPublicShape({
+          id: createSupplierId(),
+          name,
+          serviceType: normalize(parsed.data.serviceType),
+          paymentMethod: normalize(parsed.data.paymentMethod),
+          paymentTerms: normalize(parsed.data.paymentTerms),
+          address: normalize(parsed.data.address),
+          mapsUrl: normalize(parsed.data.mapsUrl),
+          contactName: normalize(parsed.data.contactName),
+          contactPhone: normalize(parsed.data.contactPhone),
+          contactEmail: normalize(parsed.data.contactEmail),
+          notes: normalize(parsed.data.notes),
+          isActive: parsed.data.isActive,
+          createdAt: now,
+          updatedAt: now,
+          _count: { repairs: 0 },
+        })
+        await writeFallbackSuppliers([created, ...fallback])
+        return res.status(201).json(created)
+      } catch (fallbackError) {
+        console.error('Suppliers fallback POST error:', fallbackError)
+      }
+    }
     console.error('Suppliers POST error:', error)
     return res.status(500).json({ message: 'No se pudo crear el proveedor.' })
   }
@@ -290,6 +415,48 @@ router.patch('/:id', async (req, res) => {
 
     return res.json(toSupplierPublicShape(updated))
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      try {
+        const fallback = await readFallbackSuppliers()
+        const current = fallback.find((item) => item.id === supplierId)
+        if (!current) {
+          return res.status(404).json({ message: 'Proveedor no encontrado.' })
+        }
+        const nextName =
+          parsed.data.name !== undefined && normalize(parsed.data.name)
+            ? normalize(parsed.data.name)
+            : current.name
+        const conflict = fallback.find(
+          (item) => item.id !== supplierId && normalize(item.name).toLowerCase() === nextName.toLowerCase(),
+        )
+        if (conflict) {
+          return res.status(409).json({ message: 'Ya existe un proveedor con ese nombre.' })
+        }
+        const updated = toSupplierPublicShape({
+          ...current,
+          ...parsed.data,
+          name: nextName,
+          serviceType: parsed.data.serviceType !== undefined ? normalize(parsed.data.serviceType) : current.serviceType,
+          paymentMethod:
+            parsed.data.paymentMethod !== undefined ? normalize(parsed.data.paymentMethod) : current.paymentMethod,
+          paymentTerms:
+            parsed.data.paymentTerms !== undefined ? normalize(parsed.data.paymentTerms) : current.paymentTerms,
+          address: parsed.data.address !== undefined ? normalize(parsed.data.address) : current.address,
+          mapsUrl: parsed.data.mapsUrl !== undefined ? normalize(parsed.data.mapsUrl) : current.mapsUrl,
+          contactName: parsed.data.contactName !== undefined ? normalize(parsed.data.contactName) : current.contactName,
+          contactPhone:
+            parsed.data.contactPhone !== undefined ? normalize(parsed.data.contactPhone) : current.contactPhone,
+          contactEmail:
+            parsed.data.contactEmail !== undefined ? normalize(parsed.data.contactEmail) : current.contactEmail,
+          notes: parsed.data.notes !== undefined ? normalize(parsed.data.notes) : current.notes,
+          updatedAt: new Date().toISOString(),
+        })
+        await writeFallbackSuppliers(fallback.map((item) => (item.id === supplierId ? updated : item)))
+        return res.json(updated)
+      } catch (fallbackError) {
+        console.error('Suppliers fallback PATCH error:', fallbackError)
+      }
+    }
     console.error('Suppliers PATCH error:', error)
     return res.status(500).json({ message: 'No se pudo actualizar el proveedor.' })
   }
@@ -327,6 +494,19 @@ router.delete('/:id', async (req, res) => {
     await prisma.supplier.delete({ where: { id: supplierId } })
     return res.status(204).send()
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      try {
+        const fallback = await readFallbackSuppliers()
+        const current = fallback.find((item) => item.id === supplierId)
+        if (!current) {
+          return res.status(404).json({ message: 'Proveedor no encontrado.' })
+        }
+        await writeFallbackSuppliers(fallback.filter((item) => item.id !== supplierId))
+        return res.status(204).send()
+      } catch (fallbackError) {
+        console.error('Suppliers fallback DELETE error:', fallbackError)
+      }
+    }
     console.error('Suppliers DELETE error:', error)
     return res.status(500).json({ message: 'No se pudo eliminar el proveedor.' })
   }

@@ -45,6 +45,27 @@ const hasInvalidDocuments = (documents: any, needsHoist: boolean): boolean => {
   )
 }
 
+const isSchemaMismatchError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+  const maybeError = error as { code?: string; message?: string }
+  if (maybeError.code === 'P2021' || maybeError.code === 'P2022') {
+    return true
+  }
+  const message = String(maybeError.message ?? '').toLowerCase()
+  return message.includes('does not exist in the current database')
+}
+
+const normalizeLegacyUnit = (unit: any) => ({
+  ...unit,
+  clientId: unit.clientId ?? null,
+  clientName: unit.clientName ?? '',
+  logisticsStatus: unit.logisticsStatus ?? 'AVAILABLE',
+  logisticsStatusNote: unit.logisticsStatusNote ?? '',
+  logisticsUpdatedAt: unit.logisticsUpdatedAt ?? null,
+})
+
 type FleetOperationalStatus = 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'
 
 const deriveOperationalStatus = (
@@ -159,6 +180,18 @@ router.get('/', async (_req, res) => {
     )
     return res.json(units)
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      try {
+        const legacyUnits = await prisma.$queryRaw<any[]>`
+          SELECT *
+          FROM "FleetUnit"
+          ORDER BY "createdAt" DESC
+        `
+        return res.json(legacyUnits.map(normalizeLegacyUnit))
+      } catch {
+        // continue with default handling
+      }
+    }
     console.error('Fleet GET error:', error)
     return res.status(500).json({ message: 'No se pudieron cargar las unidades.' })
   }
@@ -174,6 +207,23 @@ router.get('/:id', async (req, res) => {
     }
     return res.json(unit)
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      try {
+        const rows = await prisma.$queryRaw<any[]>`
+          SELECT *
+          FROM "FleetUnit"
+          WHERE "id" = ${req.params.id}
+          LIMIT 1
+        `
+        const legacyUnit = rows[0]
+        if (!legacyUnit) {
+          return res.status(404).json({ message: 'Unidad no encontrada.' })
+        }
+        return res.json(normalizeLegacyUnit(legacyUnit))
+      } catch {
+        // continue with default handling
+      }
+    }
     console.error('Fleet GET by id error:', error)
     return res.status(500).json({ message: 'No se pudo cargar la unidad.' })
   }

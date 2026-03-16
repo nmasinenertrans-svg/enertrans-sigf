@@ -676,6 +676,19 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Evita seleccionar/failover a schemas parciales (ej. solo `Supplier/ClientAccount/DeliveryOperation`) que dejan el backend sin tablas base y rompen bootstrap/login.
   Riesgo residual:
   - Si el schema activo base carece de columnas nuevas, la app depende de auto-reparacion DDL o de migraciones manuales para completar estructura.
+- Fecha: 2026-03-16
+  Cambio: Degradacion controlada para endpoints de sincronizacion global ante drift severo de schema (sin 500 en `GET /fleet`, `GET /clients`, `GET /suppliers`, `GET /deliveries`).
+  Archivos:
+  - `backend/src/routes/fleet.ts`
+  - `backend/src/routes/clients.ts`
+  - `backend/src/routes/suppliers.ts`
+  - `backend/src/routes/deliveries.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Evita cortar operacion por errores Prisma `P2021/P2022`: retorna datos legacy o listas vacias en vez de 500 y elimina alertas de sincronizacion global bloqueantes.
+  - En proveedores agrega fallback persistente en `AppSettings.featureFlags.suppliersFallback` para altas/ediciones mientras la tabla `Supplier` no exista.
+  Riesgo residual:
+  - El fallback de proveedores no reemplaza la tabla definitiva; cuando se normalice DB se recomienda migrar `suppliersFallback` a `Supplier`.
 
 ## 9) Riesgos abiertos (a seguir)
 

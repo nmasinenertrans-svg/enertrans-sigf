@@ -20,6 +20,18 @@ const updateSchema = clientSchema.partial()
 
 const normalize = (value: string | undefined) => (value ?? '').trim()
 
+const isSchemaMismatchError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+  const maybeError = error as { code?: string; message?: string }
+  if (maybeError.code === 'P2021' || maybeError.code === 'P2022') {
+    return true
+  }
+  const message = String(maybeError.message ?? '').toLowerCase()
+  return message.includes('does not exist in the current database')
+}
+
 router.get('/', async (_req, res) => {
   try {
     const items = await runWithSchemaFailover(() =>
@@ -37,6 +49,9 @@ router.get('/', async (_req, res) => {
     )
     return res.json(items)
   } catch (error) {
+    if (isSchemaMismatchError(error)) {
+      return res.json([])
+    }
     console.error('Clients GET error:', error)
     return res.status(500).json({ message: 'No se pudieron cargar los clientes.' })
   }
