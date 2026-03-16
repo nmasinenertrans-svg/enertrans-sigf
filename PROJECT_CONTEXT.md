@@ -647,6 +647,16 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Reduce errores 500 de sincronizacion global al abrir app cuando hay drift entre `enertrans_prod` y `public`.
   Riesgo residual:
   - Si ninguno de los schemas tiene estructura suficiente, el failover no puede recuperar y la request mantiene error; requiere correccion estructural de DB.
+- Fecha: 2026-03-16
+  Cambio: Auto-reparacion de schema en bootstrap backend para tablas/columnas criticas de modulos nuevos (Clientes, Proveedores, Entregas/Devoluciones y columnas logisticas en FleetUnit).
+  Archivos:
+  - `backend/src/db.ts`
+  - `backend/src/index.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Incluso si Render arranca solo con `node dist/src/index.js` y sin ejecutar `migrate deploy`, backend crea/ajusta estructura minima necesaria para evitar 500 en `/fleet`, `/clients`, `/suppliers`, `/deliveries`.
+  Riesgo residual:
+  - La auto-reparacion prioriza continuidad operativa y compatibilidad; no reemplaza una normalizacion completa de migraciones en una ventana de mantenimiento.
 
 ## 9) Riesgos abiertos (a seguir)
 

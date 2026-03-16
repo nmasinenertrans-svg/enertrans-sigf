@@ -117,6 +117,102 @@ export let prisma = new PrismaClient({
   datasourceUrl: activeDatasourceUrl,
 })
 
+const safeExecuteCompatSql = async (sql: string): Promise<void> => {
+  try {
+    await prisma.$executeRawUnsafe(sql)
+  } catch (error) {
+    console.warn('[DB] compat SQL warning:', error)
+  }
+}
+
+export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
+  // Fleet: agrega columnas operativas nuevas si la tabla existe en schema activo.
+  await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "clientId" TEXT;`)
+  await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "clientName" TEXT NOT NULL DEFAULT '';`)
+  await safeExecuteCompatSql(
+    `ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsStatus" TEXT NOT NULL DEFAULT 'AVAILABLE';`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsStatusNote" TEXT NOT NULL DEFAULT '';`,
+  )
+  await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
+
+  // Clientes: crea tabla si falta.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "ClientAccount" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "name" TEXT NOT NULL,
+      "legalName" TEXT NOT NULL DEFAULT '',
+      "taxId" TEXT NOT NULL DEFAULT '',
+      "contactName" TEXT NOT NULL DEFAULT '',
+      "contactPhone" TEXT NOT NULL DEFAULT '',
+      "contactEmail" TEXT NOT NULL DEFAULT '',
+      "notes" TEXT NOT NULL DEFAULT '',
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "ClientAccount_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "ClientAccount_name_key" ON "ClientAccount"("name");`)
+
+  // Proveedores: crea tabla si falta.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "Supplier" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "name" TEXT NOT NULL,
+      "serviceType" TEXT NOT NULL DEFAULT '',
+      "paymentMethod" TEXT NOT NULL DEFAULT '',
+      "paymentTerms" TEXT NOT NULL DEFAULT '',
+      "address" TEXT NOT NULL DEFAULT '',
+      "mapsUrl" TEXT NOT NULL DEFAULT '',
+      "contactName" TEXT NOT NULL DEFAULT '',
+      "contactPhone" TEXT NOT NULL DEFAULT '',
+      "contactEmail" TEXT NOT NULL DEFAULT '',
+      "notes" TEXT NOT NULL DEFAULT '',
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Supplier_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "Supplier_name_key" ON "Supplier"("name");`)
+
+  // Si Supplier existe legacy, asegura columnas nuevas.
+  await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT NOT NULL DEFAULT '';`)
+  await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "paymentTerms" TEXT NOT NULL DEFAULT '';`)
+  await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "address" TEXT NOT NULL DEFAULT '';`)
+  await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "mapsUrl" TEXT NOT NULL DEFAULT '';`)
+
+  // Entregas/devoluciones: crea tabla si falta (tipos en TEXT para compatibilidad).
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "DeliveryOperation" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "unitId" TEXT NOT NULL,
+      "clientId" TEXT,
+      "operationType" TEXT NOT NULL,
+      "targetLogisticsStatus" TEXT NOT NULL,
+      "summary" TEXT NOT NULL DEFAULT '',
+      "reason" TEXT NOT NULL DEFAULT '',
+      "requestedByUserId" TEXT,
+      "requestedByUserName" TEXT NOT NULL DEFAULT '',
+      "effectiveAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "DeliveryOperation_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "DeliveryOperation_unitId_createdAt_idx" ON "DeliveryOperation"("unitId","createdAt");`,
+  )
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "DeliveryOperation_clientId_createdAt_idx" ON "DeliveryOperation"("clientId","createdAt");`,
+  )
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "DeliveryOperation_operationType_createdAt_idx" ON "DeliveryOperation"("operationType","createdAt");`,
+  )
+}
+
 const activateSchema = async (schema: string): Promise<boolean> => {
   const nextUrl = withSchemaInUrl(baseDatasourceUrl, schema)
   if (nextUrl === activeDatasourceUrl) {
@@ -209,6 +305,7 @@ const recoverSchemaFromRuntimeError = async (): Promise<boolean> => {
 
   const switched = await activateSchema(bestAlternative.schema)
   if (switched) {
+    await ensureRuntimeSchemaCompatibility()
     console.log(`[DB] schema failover aplicado a: ${bestAlternative.schema}`)
   }
   return switched
