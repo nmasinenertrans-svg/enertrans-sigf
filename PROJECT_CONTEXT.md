@@ -667,6 +667,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Ante `P2021/P2022`, se intenta primero auto-reparar el schema activo y reintentar antes de cambiar de schema.
   Riesgo residual:
   - Si el usuario DB no tiene permisos DDL (CREATE/ALTER), la auto-reparacion no podra completar estructura faltante y se debera correr migracion con credenciales owner.
+- Fecha: 2026-03-16
+  Cambio: Endurecimiento del selector/failover DB con criterio de \"core schema\" obligatorio (`User`, `FleetUnit`, `RepairRecord`).
+  Archivos:
+  - `backend/src/db.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Evita seleccionar/failover a schemas parciales (ej. solo `Supplier/ClientAccount/DeliveryOperation`) que dejan el backend sin tablas base y rompen bootstrap/login.
+  Riesgo residual:
+  - Si el schema activo base carece de columnas nuevas, la app depende de auto-reparacion DDL o de migraciones manuales para completar estructura.
 
 ## 9) Riesgos abiertos (a seguir)
 

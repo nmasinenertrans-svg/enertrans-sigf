@@ -3,6 +3,9 @@ import { PrismaClient } from '@prisma/client'
 type ProbeResult = {
   schema: string
   score: number
+  isCoreReady: boolean
+  hasUserTable: boolean
+  hasRepairRecordTable: boolean
   hasFleetUnitTable: boolean
   hasSupplierTable: boolean
   hasClientAccountTable: boolean
@@ -64,7 +67,7 @@ const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeRe
       SELECT table_name
       FROM information_schema.tables
       WHERE lower(table_schema) = lower(${schema})
-        AND table_name IN ('FleetUnit', 'Supplier', 'ClientAccount', 'DeliveryOperation')
+        AND table_name IN ('User', 'FleetUnit', 'RepairRecord', 'Supplier', 'ClientAccount', 'DeliveryOperation')
     `
 
     const columnRows = await probeClient.$queryRaw<{ column_name: string }[]>`
@@ -76,15 +79,21 @@ const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeRe
     `
 
     const tableSet = new Set(tableRows.map((row) => row.table_name))
+    const hasUserTable = tableSet.has('User')
+    const hasRepairRecordTable = tableSet.has('RepairRecord')
     const hasFleetUnitTable = tableSet.has('FleetUnit')
     const hasSupplierTable = tableSet.has('Supplier')
     const hasClientAccountTable = tableSet.has('ClientAccount')
     const hasDeliveryOperationTable = tableSet.has('DeliveryOperation')
     const hasFleetClientIdColumn = columnRows.length > 0
 
+    const isCoreReady = hasUserTable && hasFleetUnitTable && hasRepairRecordTable
+
     const score =
-      (hasFleetUnitTable ? 30 : 0) +
-      (hasFleetClientIdColumn ? 30 : 0) +
+      (hasUserTable ? 40 : 0) +
+      (hasFleetUnitTable ? 40 : 0) +
+      (hasRepairRecordTable ? 20 : 0) +
+      (hasFleetClientIdColumn ? 20 : 0) +
       (hasSupplierTable ? 20 : 0) +
       (hasClientAccountTable ? 10 : 0) +
       (hasDeliveryOperationTable ? 10 : 0)
@@ -92,6 +101,9 @@ const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeRe
     return {
       schema,
       score,
+      isCoreReady,
+      hasUserTable,
+      hasRepairRecordTable,
       hasFleetUnitTable,
       hasSupplierTable,
       hasClientAccountTable,
@@ -125,17 +137,36 @@ const safeExecuteCompatSql = async (sql: string): Promise<void> => {
   }
 }
 
+const tableExistsInActiveSchema = async (tableName: string): Promise<boolean> => {
+  try {
+    const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = ${tableName}
+      ) AS exists
+    `
+    return Boolean(rows[0]?.exists)
+  } catch {
+    return false
+  }
+}
+
 export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   // Fleet: agrega columnas operativas nuevas si la tabla existe en schema activo.
-  await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "clientId" TEXT;`)
-  await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "clientName" TEXT NOT NULL DEFAULT '';`)
-  await safeExecuteCompatSql(
-    `ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsStatus" TEXT NOT NULL DEFAULT 'AVAILABLE';`,
-  )
-  await safeExecuteCompatSql(
-    `ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsStatusNote" TEXT NOT NULL DEFAULT '';`,
-  )
-  await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
+  const hasFleetUnitTable = await tableExistsInActiveSchema('FleetUnit')
+  if (hasFleetUnitTable) {
+    await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "clientId" TEXT;`)
+    await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "clientName" TEXT NOT NULL DEFAULT '';`)
+    await safeExecuteCompatSql(
+      `ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsStatus" TEXT NOT NULL DEFAULT 'AVAILABLE';`,
+    )
+    await safeExecuteCompatSql(
+      `ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsStatusNote" TEXT NOT NULL DEFAULT '';`,
+    )
+    await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
+  }
 
   // Clientes: crea tabla si falta.
   await safeExecuteCompatSql(`
@@ -257,7 +288,7 @@ const probeCandidates = async (): Promise<ProbeResult[]> => {
       `[DB] probe schemas: ${probeResults
         .map(
           (result) =>
-            `${result.schema}(score=${result.score},fleet=${result.hasFleetUnitTable},clientId=${result.hasFleetClientIdColumn},supplier=${result.hasSupplierTable},client=${result.hasClientAccountTable},delivery=${result.hasDeliveryOperationTable})`,
+            `${result.schema}(score=${result.score},core=${result.isCoreReady},user=${result.hasUserTable},fleet=${result.hasFleetUnitTable},repair=${result.hasRepairRecordTable},clientId=${result.hasFleetClientIdColumn},supplier=${result.hasSupplierTable},client=${result.hasClientAccountTable},delivery=${result.hasDeliveryOperationTable})`,
         )
         .join(' | ')}`,
     )
@@ -270,6 +301,11 @@ const pickBestSchema = (results: ProbeResult[], excludeCurrent: boolean): ProbeR
   const filtered = excludeCurrent
     ? results.filter((result) => normalizeSchema(result.schema) !== normalizeSchema(activeSchema))
     : results
+
+  const coreReady = filtered.filter((result) => result.isCoreReady)
+  if (coreReady.length > 0) {
+    return coreReady.sort((a, b) => b.score - a.score)[0] ?? null
+  }
 
   if (filtered.length === 0) {
     return null
@@ -299,7 +335,7 @@ const recoverSchemaFromRuntimeError = async (): Promise<boolean> => {
   }
 
   const bestAlternative = pickBestSchema(results, true)
-  if (!bestAlternative || bestAlternative.score <= 0) {
+  if (!bestAlternative || bestAlternative.score <= 0 || !bestAlternative.isCoreReady) {
     return false
   }
 
