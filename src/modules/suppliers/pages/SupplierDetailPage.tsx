@@ -8,6 +8,43 @@ import type { Supplier } from '../../../types/domain'
 
 const normalize = (value: string) => value.trim().toLowerCase()
 
+const isUrlLike = (value: string): boolean => /^https?:\/\//i.test(value.trim())
+
+const normalizeMapQuery = (value: string): string => decodeURIComponent(value).replace(/\+/g, ' ').trim()
+
+const extractMapQueryFromUrl = (rawUrl: string): string | null => {
+  try {
+    const parsed = new URL(rawUrl)
+    const host = parsed.hostname.toLowerCase()
+    if (!host.includes('google.')) {
+      return null
+    }
+
+    const queryFromParams =
+      parsed.searchParams.get('q') ||
+      parsed.searchParams.get('query') ||
+      parsed.searchParams.get('destination')
+
+    if (queryFromParams?.trim()) {
+      return normalizeMapQuery(queryFromParams)
+    }
+
+    const atMatch = parsed.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)
+    if (atMatch?.[1] && atMatch[2]) {
+      return `${atMatch[1]},${atMatch[2]}`
+    }
+
+    const placeMatch = parsed.pathname.match(/\/place\/([^/]+)/)
+    if (placeMatch?.[1]) {
+      return normalizeMapQuery(placeMatch[1])
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
 const buildMapEmbedUrl = (mapsUrl: string, address: string): string => {
   const rawLink = mapsUrl.trim()
   const rawAddress = address.trim()
@@ -16,12 +53,19 @@ const buildMapEmbedUrl = (mapsUrl: string, address: string): string => {
     return rawLink
   }
 
-  if (rawLink) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(rawLink)}&output=embed`
+  if (rawLink && isUrlLike(rawLink)) {
+    const queryFromUrl = extractMapQueryFromUrl(rawLink)
+    if (queryFromUrl) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(queryFromUrl)}&output=embed`
+    }
   }
 
   if (rawAddress) {
     return `https://www.google.com/maps?q=${encodeURIComponent(rawAddress)}&output=embed`
+  }
+
+  if (rawLink) {
+    return `https://www.google.com/maps?q=${encodeURIComponent(rawLink)}&output=embed`
   }
 
   return ''
