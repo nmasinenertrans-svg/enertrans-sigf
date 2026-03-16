@@ -1,13 +1,13 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { prisma } from '../db.js'
+import { getActiveDbSchema, prisma, runWithSchemaFailover } from '../db.js'
 
 const router = Router()
 
 const SUPPLIER_EXTENDED_COLUMNS = ['paymentMethod', 'paymentTerms', 'address', 'mapsUrl'] as const
 const SUPPLIER_COLUMNS_CACHE_MS = 5 * 60 * 1000
 
-let supplierColumnsSupportCache: { checkedAt: number; supported: boolean } | null = null
+let supplierColumnsSupportCache: { checkedAt: number; supported: boolean; schema: string } | null = null
 
 const supplierSchema = z.object({
   id: z.string().optional(),
@@ -54,7 +54,12 @@ const toSupplierPublicShape = (supplier: any) => ({
 
 const supportsSupplierExtendedColumns = async (): Promise<boolean> => {
   const now = Date.now()
-  if (supplierColumnsSupportCache && now - supplierColumnsSupportCache.checkedAt < SUPPLIER_COLUMNS_CACHE_MS) {
+  const activeSchema = getActiveDbSchema()
+  if (
+    supplierColumnsSupportCache &&
+    supplierColumnsSupportCache.schema === activeSchema &&
+    now - supplierColumnsSupportCache.checkedAt < SUPPLIER_COLUMNS_CACHE_MS
+  ) {
     return supplierColumnsSupportCache.supported
   }
 
@@ -67,7 +72,7 @@ const supportsSupplierExtendedColumns = async (): Promise<boolean> => {
     `
     const available = new Set(rows.map((row) => row.column_name))
     const supported = SUPPLIER_EXTENDED_COLUMNS.every((columnName) => available.has(columnName))
-    supplierColumnsSupportCache = { checkedAt: now, supported }
+    supplierColumnsSupportCache = { checkedAt: now, supported, schema: activeSchema }
     return supported
   } catch {
     return true
@@ -116,8 +121,10 @@ const readSupplierById = async (supplierId: string, supportsExtended: boolean) =
 
 router.get('/', async (_req, res) => {
   try {
-    const supportsExtended = await supportsSupplierExtendedColumns()
-    const items = await readSuppliers(supportsExtended)
+    const items = await runWithSchemaFailover(async () => {
+      const supportsExtended = await supportsSupplierExtendedColumns()
+      return readSuppliers(supportsExtended)
+    })
     return res.json(items)
   } catch (error) {
     console.error('Suppliers GET error:', error)
@@ -131,8 +138,10 @@ router.get('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Id de proveedor requerido.' })
   }
   try {
-    const supportsExtended = await supportsSupplierExtendedColumns()
-    const supplier = await readSupplierById(supplierId, supportsExtended)
+    const supplier = await runWithSchemaFailover(async () => {
+      const supportsExtended = await supportsSupplierExtendedColumns()
+      return readSupplierById(supplierId, supportsExtended)
+    })
     if (!supplier) {
       return res.status(404).json({ message: 'Proveedor no encontrado.' })
     }
@@ -150,47 +159,52 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const name = normalize(parsed.data.name)
-    const existing = await prisma.supplier.findFirst({
-      where: { name: { equals: name, mode: 'insensitive' } },
-      select: { id: true },
+    const created = await runWithSchemaFailover(async () => {
+      const name = normalize(parsed.data.name)
+      const existing = await prisma.supplier.findFirst({
+        where: { name: { equals: name, mode: 'insensitive' } },
+        select: { id: true },
+      })
+      if (existing) {
+        return 'DUPLICATE' as const
+      }
+
+      const supportsExtended = await supportsSupplierExtendedColumns()
+      const createData: Record<string, unknown> = {
+        name,
+        serviceType: normalize(parsed.data.serviceType),
+        contactName: normalize(parsed.data.contactName),
+        contactPhone: normalize(parsed.data.contactPhone),
+        contactEmail: normalize(parsed.data.contactEmail),
+        notes: normalize(parsed.data.notes),
+        isActive: parsed.data.isActive,
+      }
+
+      if (supportsExtended) {
+        createData.paymentMethod = normalize(parsed.data.paymentMethod)
+        createData.paymentTerms = normalize(parsed.data.paymentTerms)
+        createData.address = normalize(parsed.data.address)
+        createData.mapsUrl = normalize(parsed.data.mapsUrl)
+      }
+
+      return supportsExtended
+        ? prisma.supplier.create({
+            data: createData as any,
+            include: {
+              _count: {
+                select: { repairs: true },
+              },
+            },
+          })
+        : prisma.supplier.create({
+            data: createData as any,
+            select: supplierLegacySelect,
+          })
     })
-    if (existing) {
+
+    if (created === 'DUPLICATE') {
       return res.status(409).json({ message: 'Ya existe un proveedor con ese nombre.' })
     }
-
-    const supportsExtended = await supportsSupplierExtendedColumns()
-    const createData: Record<string, unknown> = {
-      name,
-      serviceType: normalize(parsed.data.serviceType),
-      contactName: normalize(parsed.data.contactName),
-      contactPhone: normalize(parsed.data.contactPhone),
-      contactEmail: normalize(parsed.data.contactEmail),
-      notes: normalize(parsed.data.notes),
-      isActive: parsed.data.isActive,
-    }
-
-    if (supportsExtended) {
-      createData.paymentMethod = normalize(parsed.data.paymentMethod)
-      createData.paymentTerms = normalize(parsed.data.paymentTerms)
-      createData.address = normalize(parsed.data.address)
-      createData.mapsUrl = normalize(parsed.data.mapsUrl)
-    }
-
-    const created = supportsExtended
-      ? await prisma.supplier.create({
-          data: createData as any,
-          include: {
-            _count: {
-              select: { repairs: true },
-            },
-          },
-        })
-      : await prisma.supplier.create({
-          data: createData as any,
-          select: supplierLegacySelect,
-        })
-
     return res.status(201).json(toSupplierPublicShape(created))
   } catch (error) {
     console.error('Suppliers POST error:', error)

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { prisma } from '../db.js'
+import { prisma, runWithSchemaFailover } from '../db.js'
 
 const router = Router()
 
@@ -22,17 +22,19 @@ const normalize = (value: string | undefined) => (value ?? '').trim()
 
 router.get('/', async (_req, res) => {
   try {
-    const items = await prisma.clientAccount.findMany({
-      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
-      include: {
-        _count: {
-          select: {
-            units: true,
-            deliveries: true,
+    const items = await runWithSchemaFailover(() =>
+      prisma.clientAccount.findMany({
+        orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+        include: {
+          _count: {
+            select: {
+              units: true,
+              deliveries: true,
+            },
           },
         },
-      },
-    })
+      }),
+    )
     return res.json(items)
   } catch (error) {
     console.error('Clients GET error:', error)

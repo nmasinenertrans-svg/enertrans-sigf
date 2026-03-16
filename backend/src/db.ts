@@ -41,11 +41,7 @@ const gatherSchemaCandidates = (databaseUrl: string): string[] => {
     .map((item) => item.trim())
     .filter(Boolean)
 
-  const combined = [
-    ...(fromUrl ? [fromUrl] : []),
-    ...fromEnv,
-    ...DEFAULT_SCHEMA_CANDIDATES,
-  ]
+  const combined = [...(fromUrl ? [fromUrl] : []), ...fromEnv, ...DEFAULT_SCHEMA_CANDIDATES]
 
   const unique: string[] = []
   const seen = new Set<string>()
@@ -121,65 +117,11 @@ export let prisma = new PrismaClient({
   datasourceUrl: activeDatasourceUrl,
 })
 
-export const ensureBestPrismaSchema = async (): Promise<void> => {
-  const forcedSchema = process.env.DATABASE_SCHEMA_FORCE?.trim()
-  if (forcedSchema) {
-    const forcedUrl = withSchemaInUrl(baseDatasourceUrl, forcedSchema)
-    if (forcedUrl !== activeDatasourceUrl) {
-      const forcedClient = new PrismaClient({ datasourceUrl: forcedUrl })
-      try {
-        await forcedClient.$queryRawUnsafe('SELECT 1')
-        const previous = prisma
-        prisma = forcedClient
-        activeDatasourceUrl = forcedUrl
-        activeSchema = forcedSchema
-        await previous.$disconnect().catch(() => undefined)
-      } catch {
-        await forcedClient.$disconnect().catch(() => undefined)
-      }
-    } else {
-      activeSchema = forcedSchema
-    }
-    console.log(`[DB] esquema forzado por env: ${activeSchema}`)
-    return
-  }
-
-  const candidates = gatherSchemaCandidates(baseDatasourceUrl)
-  if (candidates.length === 0) {
-    return
-  }
-
-  const probeResults: ProbeResult[] = []
-  for (const schema of candidates) {
-    const result = await probeSchema(baseDatasourceUrl, schema)
-    if (result) {
-      probeResults.push(result)
-    }
-  }
-
-  if (probeResults.length === 0) {
-    return
-  }
-
-  console.log(
-    `[DB] probe schemas: ${probeResults
-      .map(
-        (result) =>
-          `${result.schema}(score=${result.score},fleet=${result.hasFleetUnitTable},clientId=${result.hasFleetClientIdColumn},supplier=${result.hasSupplierTable},client=${result.hasClientAccountTable},delivery=${result.hasDeliveryOperationTable})`,
-      )
-      .join(' | ')}`,
-  )
-
-  const best = probeResults.sort((a, b) => b.score - a.score)[0]
-  if (!best || best.score <= 0) {
-    return
-  }
-
-  const nextUrl = withSchemaInUrl(baseDatasourceUrl, best.schema)
+const activateSchema = async (schema: string): Promise<boolean> => {
+  const nextUrl = withSchemaInUrl(baseDatasourceUrl, schema)
   if (nextUrl === activeDatasourceUrl) {
-    activeSchema = best.schema
-    console.log(`[DB] esquema activo: ${activeSchema} (score ${best.score})`)
-    return
+    activeSchema = schema
+    return true
   }
 
   const nextClient = new PrismaClient({ datasourceUrl: nextUrl })
@@ -190,16 +132,134 @@ export const ensureBestPrismaSchema = async (): Promise<void> => {
     const previous = prisma
     prisma = nextClient
     activeDatasourceUrl = nextUrl
-    activeSchema = best.schema
+    activeSchema = schema
 
     await previous.$disconnect().catch(() => undefined)
-
-    console.log(
-      `[DB] esquema activo: ${activeSchema} (score ${best.score}, supplier=${best.hasSupplierTable}, client=${best.hasClientAccountTable}, delivery=${best.hasDeliveryOperationTable}, fleet.clientId=${best.hasFleetClientIdColumn})`,
-    )
+    return true
   } catch {
     await nextClient.$disconnect().catch(() => undefined)
+    return false
   }
+}
+
+const probeCandidates = async (): Promise<ProbeResult[]> => {
+  const candidates = gatherSchemaCandidates(baseDatasourceUrl)
+  if (candidates.length === 0) {
+    return []
+  }
+
+  const probeResults: ProbeResult[] = []
+  for (const schema of candidates) {
+    const result = await probeSchema(baseDatasourceUrl, schema)
+    if (result) {
+      probeResults.push(result)
+    }
+  }
+
+  if (probeResults.length > 0) {
+    console.log(
+      `[DB] probe schemas: ${probeResults
+        .map(
+          (result) =>
+            `${result.schema}(score=${result.score},fleet=${result.hasFleetUnitTable},clientId=${result.hasFleetClientIdColumn},supplier=${result.hasSupplierTable},client=${result.hasClientAccountTable},delivery=${result.hasDeliveryOperationTable})`,
+        )
+        .join(' | ')}`,
+    )
+  }
+
+  return probeResults
+}
+
+const pickBestSchema = (results: ProbeResult[], excludeCurrent: boolean): ProbeResult | null => {
+  const filtered = excludeCurrent
+    ? results.filter((result) => normalizeSchema(result.schema) !== normalizeSchema(activeSchema))
+    : results
+
+  if (filtered.length === 0) {
+    return null
+  }
+
+  return filtered.sort((a, b) => b.score - a.score)[0] ?? null
+}
+
+const isSchemaMismatchError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+  const maybeError = error as { code?: string; message?: string }
+  if (maybeError.code === 'P2021' || maybeError.code === 'P2022') {
+    return true
+  }
+  const message = String(maybeError.message ?? '').toLowerCase()
+  return message.includes('does not exist in the current database') || message.includes('table') && message.includes('does not exist')
+}
+
+let schemaRecoveryPromise: Promise<boolean> | null = null
+
+const recoverSchemaFromRuntimeError = async (): Promise<boolean> => {
+  const results = await probeCandidates()
+  if (results.length === 0) {
+    return false
+  }
+
+  const bestAlternative = pickBestSchema(results, true)
+  if (!bestAlternative || bestAlternative.score <= 0) {
+    return false
+  }
+
+  const switched = await activateSchema(bestAlternative.schema)
+  if (switched) {
+    console.log(`[DB] schema failover aplicado a: ${bestAlternative.schema}`)
+  }
+  return switched
+}
+
+export const runWithSchemaFailover = async <T>(operation: () => Promise<T>): Promise<T> => {
+  try {
+    return await operation()
+  } catch (error) {
+    if (!isSchemaMismatchError(error)) {
+      throw error
+    }
+
+    if (!schemaRecoveryPromise) {
+      schemaRecoveryPromise = recoverSchemaFromRuntimeError().finally(() => {
+        schemaRecoveryPromise = null
+      })
+    }
+
+    const switched = await schemaRecoveryPromise
+    if (!switched) {
+      throw error
+    }
+
+    return operation()
+  }
+}
+
+export const ensureBestPrismaSchema = async (): Promise<void> => {
+  const forcedSchema = process.env.DATABASE_SCHEMA_FORCE?.trim()
+  if (forcedSchema) {
+    await activateSchema(forcedSchema)
+    console.log(`[DB] esquema forzado por env: ${activeSchema}`)
+    return
+  }
+
+  const probeResults = await probeCandidates()
+  if (probeResults.length === 0) {
+    return
+  }
+
+  const best = pickBestSchema(probeResults, false)
+  if (!best || best.score <= 0) {
+    return
+  }
+
+  await activateSchema(best.schema)
+
+  console.log(
+    `[DB] esquema activo: ${activeSchema} (score ${best.score}, supplier=${best.hasSupplierTable}, client=${best.hasClientAccountTable}, delivery=${best.hasDeliveryOperationTable}, fleet.clientId=${best.hasFleetClientIdColumn})`,
+  )
 }
 
 export const getActiveDbSchema = (): string => activeSchema

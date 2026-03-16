@@ -1,6 +1,6 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
-import { prisma } from '../db.js'
+import { prisma, runWithSchemaFailover } from '../db.js'
 
 const router = Router()
 
@@ -153,16 +153,30 @@ const fleetSchema = z.object({
 })
 
 router.get('/', async (_req, res) => {
-  const units = await prisma.fleetUnit.findMany({ orderBy: { createdAt: 'desc' } })
-  return res.json(units)
+  try {
+    const units = await runWithSchemaFailover(() =>
+      prisma.fleetUnit.findMany({ orderBy: { createdAt: 'desc' } }),
+    )
+    return res.json(units)
+  } catch (error) {
+    console.error('Fleet GET error:', error)
+    return res.status(500).json({ message: 'No se pudieron cargar las unidades.' })
+  }
 })
 
 router.get('/:id', async (req, res) => {
-  const unit = await prisma.fleetUnit.findUnique({ where: { id: req.params.id } })
-  if (!unit) {
-    return res.status(404).json({ message: 'Unidad no encontrada.' })
+  try {
+    const unit = await runWithSchemaFailover(() =>
+      prisma.fleetUnit.findUnique({ where: { id: req.params.id } }),
+    )
+    if (!unit) {
+      return res.status(404).json({ message: 'Unidad no encontrada.' })
+    }
+    return res.json(unit)
+  } catch (error) {
+    console.error('Fleet GET by id error:', error)
+    return res.status(500).json({ message: 'No se pudo cargar la unidad.' })
   }
-  return res.json(unit)
 })
 
 router.post('/', async (req, res) => {

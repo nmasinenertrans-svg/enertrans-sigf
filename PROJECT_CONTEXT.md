@@ -633,6 +633,20 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Agrega `DATABASE_SCHEMA_FORCE` para fijar schema en incidentes productivos sin tocar codigo.
   Riesgo residual:
   - Si ambos schemas estan incompletos, se elegira el \"menos malo\" por score; requiere normalizacion definitiva de base para eliminar ambiguedad.
+- Fecha: 2026-03-16
+  Cambio: Failover automatico de schema en runtime ante errores Prisma `P2021/P2022` y cobertura en endpoints criticos (`/fleet`, `/clients`, `/suppliers`, `/deliveries`).
+  Archivos:
+  - `backend/src/db.ts`
+  - `backend/src/routes/fleet.ts`
+  - `backend/src/routes/clients.ts`
+  - `backend/src/routes/suppliers.ts`
+  - `backend/src/routes/deliveries.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Si una request cae por tabla/columna faltante en schema activo, backend intenta cambiar al schema alternativo y reintenta la operacion en caliente sin tumbar flujo.
+  - Reduce errores 500 de sincronizacion global al abrir app cuando hay drift entre `enertrans_prod` y `public`.
+  Riesgo residual:
+  - Si ninguno de los schemas tiene estructura suficiente, el failover no puede recuperar y la request mantiene error; requiere correccion estructural de DB.
 
 ## 9) Riesgos abiertos (a seguir)
 

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { prisma } from '../db.js'
+import { prisma, runWithSchemaFailover } from '../db.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
@@ -44,13 +44,15 @@ const ensureTargetMatchesOperation = (
 
 router.get('/', async (_req, res) => {
   try {
-    const items = await prisma.deliveryOperation.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        unit: { select: { id: true, internalCode: true, ownerCompany: true } },
-        client: { select: { id: true, name: true } },
-      },
-    })
+    const items = await runWithSchemaFailover(() =>
+      prisma.deliveryOperation.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: {
+          unit: { select: { id: true, internalCode: true, ownerCompany: true } },
+          client: { select: { id: true, name: true } },
+        },
+      }),
+    )
     return res.json(items)
   } catch (error) {
     console.error('Deliveries GET error:', error)
