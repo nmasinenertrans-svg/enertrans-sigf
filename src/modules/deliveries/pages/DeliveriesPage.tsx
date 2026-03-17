@@ -5,6 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { DeliveryOperation, FleetLogisticsStatus, FleetUnit } from '../../../types/domain'
+import { exportDeliveryOperationPdf } from '../services/deliveryPdfService'
 
 type DeliveryFormState = {
   unitId: string
@@ -51,6 +52,23 @@ const formatDateTime = (value?: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-AR')
 }
 
+const normalizeDomain = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '')
+const finalStatuses = new Set<FleetLogisticsStatus>(['DELIVERED', 'RETURNED'])
+
+const toDataUrl = async (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error('No se pudo leer el archivo.'))
+    }
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo.'))
+    reader.readAsDataURL(file)
+  })
+
 export const DeliveriesPage = () => {
   const { can } = usePermissions()
   const {
@@ -61,12 +79,33 @@ export const DeliveriesPage = () => {
   const canCreate = can('FLEET', 'create') || can('FLEET', 'edit')
   const [form, setForm] = useState<DeliveryFormState>(createEmptyForm)
   const [search, setSearch] = useState('')
+  const [unitQuery, setUnitQuery] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadingRemitoId, setUploadingRemitoId] = useState<string | null>(null)
 
-  const selectedUnit = useMemo(
-    () => fleetUnits.find((unit) => unit.id === form.unitId) ?? null,
-    [fleetUnits, form.unitId],
+  const orderedUnits = useMemo(
+    () => [...fleetUnits].sort((left, right) => left.internalCode.localeCompare(right.internalCode, 'es-AR')),
+    [fleetUnits],
   )
+
+  const filteredUnits = useMemo(() => {
+    const query = normalizeDomain(unitQuery)
+    if (!query) {
+      return orderedUnits
+    }
+    return orderedUnits.filter((unit) => normalizeDomain(unit.internalCode).includes(query))
+  }, [orderedUnits, unitQuery])
+
+  const selectedUnit = useMemo(() => {
+    if (form.unitId) {
+      return fleetUnits.find((unit) => unit.id === form.unitId) ?? null
+    }
+    const query = normalizeDomain(unitQuery)
+    if (!query) {
+      return null
+    }
+    return fleetUnits.find((unit) => normalizeDomain(unit.internalCode) === query) ?? null
+  }, [fleetUnits, form.unitId, unitQuery])
 
   const filteredHistory = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -76,7 +115,16 @@ export const DeliveriesPage = () => {
     return deliveries.filter((item) => {
       const unitLabel = item.unit?.internalCode ?? fleetUnits.find((unit) => unit.id === item.unitId)?.internalCode ?? ''
       const clientLabel = item.client?.name ?? clients.find((client) => client.id === item.clientId)?.name ?? ''
-      const text = [unitLabel, clientLabel, item.summary, item.reason, item.operationType].join(' ').toLowerCase()
+      const text = [
+        unitLabel,
+        clientLabel,
+        item.summary,
+        item.reason,
+        item.operationType,
+        item.remitoFileName ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
       return text.includes(query)
     })
   }, [deliveries, fleetUnits, clients, search])
@@ -95,19 +143,54 @@ export const DeliveriesPage = () => {
       ...prev,
       operationType,
       targetLogisticsStatus: operationType === 'DELIVERY' ? 'PENDING_DELIVERY' : 'PENDING_RETURN',
+      clientId: operationType === 'DELIVERY' ? prev.clientId : '',
     }))
+  }
+
+  const handleUnitQueryChange = (value: string) => {
+    setUnitQuery(value)
+    const normalized = normalizeDomain(value)
+    if (!normalized) {
+      setForm((prev) => ({ ...prev, unitId: '' }))
+      return
+    }
+    const exactMatch = orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === normalized)
+    if (exactMatch) {
+      setForm((prev) => ({ ...prev, unitId: exactMatch.id }))
+    }
+  }
+
+  const resolveUnitIdForSubmit = (): string => {
+    if (form.unitId) {
+      return form.unitId
+    }
+    const normalized = normalizeDomain(unitQuery)
+    if (!normalized) {
+      return ''
+    }
+    const exactMatch = orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === normalized)
+    return exactMatch?.id ?? ''
   }
 
   const handleSubmit = async () => {
     if (!canCreate) {
       return
     }
-    if (!form.unitId) {
-      setAppError('Debes seleccionar una unidad.')
+
+    const resolvedUnitId = resolveUnitIdForSubmit()
+    if (!resolvedUnitId) {
+      setAppError('Debes seleccionar una unidad por dominio.')
       return
     }
-    if (form.operationType === 'DELIVERY' && !form.clientId && !selectedUnit?.clientId) {
-      setAppError('Debes seleccionar un cliente para registrar una entrega.')
+
+    const unitForSubmit = fleetUnits.find((unit) => unit.id === resolvedUnitId) ?? null
+    if (!unitForSubmit) {
+      setAppError('La unidad seleccionada no existe en la flota actual.')
+      return
+    }
+
+    if (form.operationType === 'DELIVERY' && form.targetLogisticsStatus === 'DELIVERED' && !form.clientId && !unitForSubmit.clientId) {
+      setAppError('Para marcar como entregado debes indicar cliente destino o mantener uno ya asignado.')
       return
     }
 
@@ -117,19 +200,82 @@ export const DeliveriesPage = () => {
         method: 'POST',
         body: {
           ...form,
-          clientId: form.clientId || null,
+          unitId: resolvedUnitId,
+          clientId: form.operationType === 'DELIVERY' ? form.clientId || null : null,
           effectiveAt: form.effectiveAt ? new Date(form.effectiveAt).toISOString() : undefined,
         },
       })
+
       setDeliveries([created, ...deliveries])
       const refreshedFleet = await apiRequest<FleetUnit[]>('/fleet')
       setFleetUnits(refreshedFleet)
       setForm(createEmptyForm())
+      setUnitQuery('')
       setAppError('Operacion de entrega/devolucion registrada correctamente.')
-    } catch {
-      setAppError('No se pudo registrar la operacion de entrega/devolucion.')
+    } catch (error) {
+      setAppError((error as Error)?.message || 'No se pudo registrar la operacion de entrega/devolucion.')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleGeneratePdf = async (item: DeliveryOperation) => {
+    const unit = fleetUnits.find((fleetUnit) => fleetUnit.id === item.unitId) ?? null
+    const client = clients.find((candidate) => candidate.id === item.clientId) ?? null
+    try {
+      await exportDeliveryOperationPdf({
+        operation: item,
+        unit,
+        client,
+      })
+    } catch {
+      setAppError('No se pudo generar el informe PDF de la operacion.')
+    }
+  }
+
+  const handleAttachRemito = async (item: DeliveryOperation, file?: File | null) => {
+    if (!file) {
+      return
+    }
+
+    if (!finalStatuses.has(item.targetLogisticsStatus)) {
+      setAppError('Solo se puede adjuntar remito en operaciones Entregado o Devuelto.')
+      return
+    }
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    if (!isPdf) {
+      setAppError('El remito debe ser un archivo PDF.')
+      return
+    }
+
+    setUploadingRemitoId(item.id)
+    try {
+      const dataUrl = await toDataUrl(file)
+      const upload = await apiRequest<{ url: string }>('/files/upload', {
+        method: 'POST',
+        body: {
+          fileName: file.name,
+          contentType: 'application/pdf',
+          dataUrl,
+          folder: 'deliveries',
+        },
+      })
+
+      const updated = await apiRequest<DeliveryOperation>(`/deliveries/${item.id}/remito`, {
+        method: 'PATCH',
+        body: {
+          remitoFileName: file.name,
+          remitoFileUrl: upload.url,
+        },
+      })
+
+      setDeliveries(deliveries.map((entry) => (entry.id === item.id ? updated : entry)))
+      setAppError('Remito adjuntado correctamente.')
+    } catch {
+      setAppError('No se pudo adjuntar el remito de la operacion.')
+    } finally {
+      setUploadingRemitoId(null)
     }
   }
 
@@ -139,7 +285,7 @@ export const DeliveriesPage = () => {
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
         <p className="text-sm text-slate-600">
-          Gestion de estados logisticos por unidad para operar con escenarios reales de entrega y devolucion.
+          Flujo Enertrans: disponible &gt; pendiente de entrega &gt; entregado &gt; pendiente de devolucion &gt; devuelto.
         </p>
       </header>
 
@@ -153,18 +299,34 @@ export const DeliveriesPage = () => {
               void handleSubmit()
             }}
           >
-            <select
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              value={form.unitId}
-              onChange={(event) => setForm((prev) => ({ ...prev, unitId: event.target.value }))}
-            >
-              <option value="">Seleccionar unidad</option>
-              {fleetUnits.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.internalCode} - {unit.ownerCompany}
-                </option>
-              ))}
-            </select>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Unidad por dominio</label>
+              <input
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                placeholder="Escribir dominio (ej: AG216KV)"
+                value={unitQuery}
+                onChange={(event) => handleUnitQueryChange(event.target.value)}
+              />
+              <select
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                value={form.unitId}
+                onChange={(event) => {
+                  const selected = orderedUnits.find((unit) => unit.id === event.target.value) ?? null
+                  setForm((prev) => ({ ...prev, unitId: event.target.value }))
+                  if (selected) {
+                    setUnitQuery(selected.internalCode)
+                  }
+                }}
+              >
+                <option value="">Seleccionar unidad</option>
+                {filteredUnits.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.internalCode} - {unit.ownerCompany}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">Tip: escribi la patente y selecciona la coincidencia exacta.</p>
+            </div>
 
             <select
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
@@ -192,20 +354,32 @@ export const DeliveriesPage = () => {
               ))}
             </select>
 
-            <select
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              value={form.clientId}
-              onChange={(event) => setForm((prev) => ({ ...prev, clientId: event.target.value }))}
-            >
-              <option value="">Sin cambio de cliente</option>
-              {clients
-                .filter((client) => client.isActive)
-                .map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-            </select>
+            {form.operationType === 'DELIVERY' ? (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Cliente destino</label>
+                <select
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                  value={form.clientId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, clientId: event.target.value }))}
+                >
+                  <option value="">Mantener cliente actual de la unidad</option>
+                  {clients
+                    .filter((client) => client.isActive)
+                    .map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  Si elegis "Mantener", se conserva el cliente que ya tenga la unidad en el sistema.
+                </p>
+              </div>
+            ) : (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                En devolucion no se cambia cliente manualmente: al marcar "Devuelto" la unidad queda sin cliente.
+              </p>
+            )}
 
             <input
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
@@ -257,8 +431,7 @@ export const DeliveriesPage = () => {
                   <span className="font-semibold">Cliente:</span> {selectedUnit.clientName || 'Sin asignar'}
                 </p>
                 <p>
-                  <span className="font-semibold">Ultima actualizacion:</span>{' '}
-                  {formatDateTime(selectedUnit.logisticsUpdatedAt)}
+                  <span className="font-semibold">Ultima actualizacion:</span> {formatDateTime(selectedUnit.logisticsUpdatedAt)}
                 </p>
               </div>
               {selectedUnit.logisticsStatusNote ? (
@@ -268,7 +441,7 @@ export const DeliveriesPage = () => {
               ) : null}
             </div>
           ) : (
-            <p className="mt-3 text-sm text-slate-600">Selecciona una unidad para ver su estado logístico actual.</p>
+            <p className="mt-3 text-sm text-slate-600">Selecciona una unidad por dominio para ver su estado logistico actual.</p>
           )}
         </section>
       </div>
@@ -292,42 +465,87 @@ export const DeliveriesPage = () => {
               No hay operaciones registradas.
             </div>
           ) : (
-            filteredHistory.map((item) => (
-              <article key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">
-                      {item.unit?.internalCode || fleetUnits.find((unit) => unit.id === item.unitId)?.internalCode || 'Unidad'}
-                    </p>
-                    <p className="text-xs text-slate-600">{item.client?.name || 'Sin cliente'}</p>
+            filteredHistory.map((item) => {
+              const canAttachRemito = finalStatuses.has(item.targetLogisticsStatus)
+              return (
+                <article key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">
+                        {item.unit?.internalCode || fleetUnits.find((unit) => unit.id === item.unitId)?.internalCode || 'Unidad'}
+                      </p>
+                      <p className="text-xs text-slate-600">{item.client?.name || 'Sin cliente'}</p>
+                    </div>
+                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                      {item.operationType === 'DELIVERY' ? 'ENTREGA' : 'DEVOLUCION'}
+                    </span>
                   </div>
-                  <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
-                    {item.operationType === 'DELIVERY' ? 'ENTREGA' : 'DEVOLUCION'}
-                  </span>
-                </div>
-                <div className="mt-2 space-y-1 text-xs text-slate-600">
-                  <p>
-                    <span className="font-semibold">Estado objetivo:</span> {logisticsLabelMap[item.targetLogisticsStatus]}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Fecha:</span> {formatDateTime(item.effectiveAt || item.createdAt)}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Usuario:</span> {item.requestedByUserName || 'No registrado'}
-                  </p>
-                  {item.summary ? (
+                  <div className="mt-2 space-y-1 text-xs text-slate-600">
                     <p>
-                      <span className="font-semibold">Resumen:</span> {item.summary}
+                      <span className="font-semibold">Estado objetivo:</span> {logisticsLabelMap[item.targetLogisticsStatus]}
                     </p>
-                  ) : null}
-                  {item.reason ? (
                     <p>
-                      <span className="font-semibold">Motivo:</span> {item.reason}
+                      <span className="font-semibold">Fecha:</span> {formatDateTime(item.effectiveAt || item.createdAt)}
                     </p>
-                  ) : null}
-                </div>
-              </article>
-            ))
+                    <p>
+                      <span className="font-semibold">Usuario:</span> {item.requestedByUserName || 'No registrado'}
+                    </p>
+                    {item.summary ? (
+                      <p>
+                        <span className="font-semibold">Resumen:</span> {item.summary}
+                      </p>
+                    ) : null}
+                    {item.reason ? (
+                      <p>
+                        <span className="font-semibold">Motivo:</span> {item.reason}
+                      </p>
+                    ) : null}
+                    <p>
+                      <span className="font-semibold">Remito adjunto:</span>{' '}
+                      {item.remitoFileUrl ? (
+                        <a
+                          href={item.remitoFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-sky-700 underline"
+                        >
+                          {item.remitoFileName || 'Ver PDF'}
+                        </a>
+                      ) : (
+                        'Sin adjunto'
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleGeneratePdf(item)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Generar informe PDF
+                    </button>
+
+                    {canAttachRemito ? (
+                      <label className="inline-flex cursor-pointer items-center rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100">
+                        {uploadingRemitoId === item.id ? 'Adjuntando...' : item.remitoFileUrl ? 'Reemplazar remito' : 'Adjuntar remito'}
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          disabled={uploadingRemitoId === item.id}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0]
+                            void handleAttachRemito(item, file)
+                            event.target.value = ''
+                          }}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                </article>
+              )
+            })
           )}
         </div>
       </section>

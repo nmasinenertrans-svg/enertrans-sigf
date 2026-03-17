@@ -225,6 +225,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       "targetLogisticsStatus" TEXT NOT NULL,
       "summary" TEXT NOT NULL DEFAULT '',
       "reason" TEXT NOT NULL DEFAULT '',
+      "remitoFileName" TEXT NOT NULL DEFAULT '',
+      "remitoFileUrl" TEXT NOT NULL DEFAULT '',
+      "remitoAttachedAt" TIMESTAMP(3),
+      "remitoAttachedByUserName" TEXT NOT NULL DEFAULT '',
       "requestedByUserId" TEXT,
       "requestedByUserName" TEXT NOT NULL DEFAULT '',
       "effectiveAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -241,6 +245,18 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   )
   await safeExecuteCompatSql(
     `CREATE INDEX IF NOT EXISTS "DeliveryOperation_operationType_createdAt_idx" ON "DeliveryOperation"("operationType","createdAt");`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoFileName" TEXT NOT NULL DEFAULT '';`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoFileUrl" TEXT NOT NULL DEFAULT '';`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoAttachedAt" TIMESTAMP(3);`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoAttachedByUserName" TEXT NOT NULL DEFAULT '';`,
   )
 }
 

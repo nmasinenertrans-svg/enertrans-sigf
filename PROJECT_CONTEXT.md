@@ -698,6 +698,26 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - `GET /fleet` y `GET /fleet/:id` ya no dependen de Prisma si la columna `clientId` no existe; consultan con SQL legacy y normalizan salida para frontend.
   Riesgo residual:
   - Mientras siga faltando `clientId`, operaciones de escritura de flota que usen ese campo pueden mantener limitaciones hasta normalizar schema.
+- Fecha: 2026-03-17
+  Cambio: Endurecimiento del modulo Entregas/Devoluciones con flujo operativo Enertrans, selector por dominio, adjunto de remito post-operacion y PDF operativo por evento.
+  Archivos:
+  - `src/modules/deliveries/pages/DeliveriesPage.tsx`
+  - `src/modules/deliveries/services/deliveryPdfService.ts`
+  - `src/types/domain.ts`
+  - `backend/src/routes/deliveries.ts`
+  - `backend/src/db.ts`
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260317120000_add_delivery_remito_attachment/migration.sql`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - El operador selecciona unidad escribiendo dominio y evita errores por listas largas.
+  - Se elimina ambiguedad de `Sin cambio de cliente` y se explicita el comportamiento de cliente en entrega/devolucion.
+  - Se bloquean transiciones logisticas inconsistentes y se valida flujo real: disponible > pendiente de entrega > entregado > pendiente de devolucion > devuelto.
+  - Se permite adjuntar/reemplazar remito en operaciones finales (entregado/devuelto) y queda trazabilidad de quien lo adjunto.
+  - Se agrega generacion de informe PDF por operacion con template Enertrans para envio al cliente.
+  Riesgo residual:
+  - El PDF operativo es descargable localmente; no se persiste automaticamente como archivo historico en backend salvo que el usuario lo adjunte manualmente.
+  - El control de flujo depende de estados logisticos cargados correctamente en cada unidad; datos legacy inconsistentes pueden requerir normalizacion puntual.
 
 ## 9) Riesgos abiertos (a seguir)
 

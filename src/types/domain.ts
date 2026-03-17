@@ -433,6 +433,10 @@ export interface DeliveryOperation {
   targetLogisticsStatus: FleetLogisticsStatus
   summary: string
   reason: string
+  remitoFileName?: string
+  remitoFileUrl?: string
+  remitoAttachedAt?: string
+  remitoAttachedByUserName?: string
   requestedByUserId?: string | null
   requestedByUserName?: string
   effectiveAt?: string

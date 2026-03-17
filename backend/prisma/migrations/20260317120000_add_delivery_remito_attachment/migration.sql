@@ -1,0 +1,4 @@
+ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoFileName" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoFileUrl" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoAttachedAt" TIMESTAMP(3);
+ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoAttachedByUserName" TEXT NOT NULL DEFAULT '';

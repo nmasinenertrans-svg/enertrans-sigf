@@ -422,6 +422,10 @@ model DeliveryOperation {
   targetLogisticsStatus FleetLogisticsStatus
   summary              String                @default("")
   reason               String                @default("")
+  remitoFileName       String                @default("")
+  remitoFileUrl        String                @default("")
+  remitoAttachedAt     DateTime?
+  remitoAttachedByUserName String            @default("")
   requestedByUserId    String?
   requestedByUserName  String                @default("")
   effectiveAt          DateTime              @default(now())
