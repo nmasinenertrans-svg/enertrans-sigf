@@ -718,6 +718,20 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - El PDF operativo es descargable localmente; no se persiste automaticamente como archivo historico en backend salvo que el usuario lo adjunte manualmente.
   - El control de flujo depende de estados logisticos cargados correctamente en cada unidad; datos legacy inconsistentes pueden requerir normalizacion puntual.
+- Fecha: 2026-03-17
+  Cambio: Hotfix NDP externo para evitar reaparicion de notas eliminadas y mejora UX de seleccion de unidad por dominio.
+  Archivos:
+  - `src/modules/externalRequests/pages/ExternalRequestsPage.tsx`
+  - `src/services/offline/sync.ts`
+  - `src/core/layout/AppLayout.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Eliminar una nota externa ahora elimina en backend cuando hay conexion y, si estaba pendiente en cola local, cancela esa cola para que no se recree luego.
+  - En modo offline, la eliminacion se encola (`externalRequest.delete`) para aplicarse al volver la red.
+  - La sincronizacion global deja de reinyectar \"fantasmas\" de NDP desde cache local y prioriza remoto + pendientes reales en cola.
+  - Formulario NDP ahora permite buscar unidad escribiendo dominio/patente y limpiar realmente el input de archivo.
+  Riesgo residual:
+  - Si una nota ya fue eliminada manualmente en backend y existe una cola delete vieja, puede devolverse 404 en sync (se descarta por politica no reintetable).
 
 ## 9) Riesgos abiertos (a seguir)
 

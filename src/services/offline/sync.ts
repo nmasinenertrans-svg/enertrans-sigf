@@ -201,6 +201,16 @@ const syncItem = async (item: OfflineQueueItem) => {
       })
       return
     }
+    case 'externalRequest.delete': {
+      const payload = item.payload as { id?: string }
+      if (!payload?.id) {
+        return
+      }
+      await apiRequest(`/external-requests/${payload.id}`, {
+        method: 'DELETE',
+      })
+      return
+    }
     default:
       return
   }

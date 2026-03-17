@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
+import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
 import { BackLink } from '../../../components/shared/BackLink'
 import { exportExternalRequestPdf } from '../services/externalRequestPdfService'
 import {
@@ -31,8 +32,25 @@ export const ExternalRequestsPage = () => {
   )
   const [errors, setErrors] = useState<ExternalRequestFormErrors>({})
   const [providerFile, setProviderFile] = useState<File | null>(null)
+  const [providerFileInputKey, setProviderFileInputKey] = useState(0)
   const [unitFilter, setUnitFilter] = useState<string>('ALL')
   const [searchTerm, setSearchTerm] = useState('')
+  const [unitSearch, setUnitSearch] = useState(fleetUnits[0]?.internalCode ?? '')
+
+  const orderedUnits = useMemo(
+    () => [...fleetUnits].sort((left, right) => left.internalCode.localeCompare(right.internalCode, 'es-AR')),
+    [fleetUnits],
+  )
+
+  const normalizeDomain = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '')
+
+  const filteredUnitOptions = useMemo(() => {
+    const query = normalizeDomain(unitSearch)
+    if (!query) {
+      return orderedUnits
+    }
+    return orderedUnits.filter((unit) => normalizeDomain(unit.internalCode).includes(query))
+  }, [orderedUnits, unitSearch])
 
   const requestsView = useMemo(
     () => buildExternalRequestView(externalRequests ?? [], fleetUnits ?? []),
@@ -53,6 +71,20 @@ export const ExternalRequestsPage = () => {
     })
   }, [requestsView, unitFilter, searchTerm])
 
+  useEffect(() => {
+    if (orderedUnits.length === 0) {
+      return
+    }
+    if (formData.unitId) {
+      return
+    }
+    const defaultUnit = orderedUnits[0]
+    setFormData((previous) => ({ ...previous, unitId: defaultUnit.id }))
+    if (!unitSearch.trim()) {
+      setUnitSearch(defaultUnit.internalCode)
+    }
+  }, [orderedUnits, formData.unitId, unitSearch])
+
   if (!featureFlags.showExternalRequestsModule) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -70,17 +102,56 @@ export const ExternalRequestsPage = () => {
     setErrors((previous) => ({ ...previous, [field]: undefined }))
   }
 
+  const handleUnitSearchChange = (value: string) => {
+    setUnitSearch(value)
+    const query = normalizeDomain(value)
+    if (!query) {
+      setFormData((previous) => ({ ...previous, unitId: '' }))
+      return
+    }
+    const exactMatch = orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === query)
+    if (exactMatch) {
+      setFormData((previous) => ({ ...previous, unitId: exactMatch.id }))
+      setErrors((previous) => ({ ...previous, unitId: undefined }))
+    }
+  }
+
+  const handleUnitSelectChange = (unitId: string) => {
+    handleFieldChange('unitId', unitId)
+    const selectedUnit = orderedUnits.find((unit) => unit.id === unitId)
+    if (selectedUnit) {
+      setUnitSearch(selectedUnit.internalCode)
+    }
+  }
+
   const resetForm = () => {
-    setFormData(createEmptyExternalRequestFormData(fleetUnits[0]?.id ?? ''))
+    const defaultUnitId = orderedUnits[0]?.id ?? ''
+    const defaultUnitCode = orderedUnits[0]?.internalCode ?? ''
+    setFormData(createEmptyExternalRequestFormData(defaultUnitId))
     setErrors({})
     setProviderFile(null)
+    setProviderFileInputKey((previous) => previous + 1)
+    setUnitSearch(defaultUnitCode)
+  }
+
+  const resolveUnitIdFromSearch = () => {
+    if (formData.unitId) {
+      return formData.unitId
+    }
+    const query = normalizeDomain(unitSearch)
+    if (!query) {
+      return ''
+    }
+    return orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === query)?.id ?? ''
   }
 
   const handleSubmit = async () => {
     if (!canCreate) {
       return
     }
-    const validationErrors = validateExternalRequestFormData(formData, fleetUnits)
+    const resolvedUnitId = resolveUnitIdFromSearch()
+    const draftForValidation = { ...formData, unitId: resolvedUnitId }
+    const validationErrors = validateExternalRequestFormData(draftForValidation, fleetUnits)
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
       return
@@ -94,10 +165,10 @@ export const ExternalRequestsPage = () => {
         reader.readAsDataURL(file)
       })
 
-    const unitCode = fleetUnits.find((unit) => unit.id === formData.unitId)?.internalCode ?? ''
-    let providerFileBase64 = formData.providerFileBase64
-    let providerFileUrl = formData.providerFileUrl
-    let providerFileName = formData.providerFileName
+    const unitCode = fleetUnits.find((unit) => unit.id === resolvedUnitId)?.internalCode ?? ''
+    let providerFileBase64 = ''
+    let providerFileUrl = ''
+    let providerFileName = ''
 
     if (providerFile) {
       providerFileName = providerFile.name
@@ -125,6 +196,7 @@ export const ExternalRequestsPage = () => {
     const request = toExternalRequest(
       {
         ...formData,
+        unitId: resolvedUnitId,
         providerFileName,
         providerFileBase64,
         providerFileUrl,
@@ -154,11 +226,52 @@ export const ExternalRequestsPage = () => {
     }
   }
 
-  const handleDelete = (requestId: string) => {
+  const handleDelete = async (requestId: string) => {
     if (!canDelete) {
       return
     }
+
+    const confirmed = window.confirm('¿Eliminar esta nota de pedido externo?')
+    if (!confirmed) {
+      return
+    }
+
+    const previous = [...externalRequests]
     setExternalRequests(externalRequests.filter((item) => item.id !== requestId))
+
+    try {
+      const queueItems = await getQueueItems()
+      const queuedCreate = queueItems.find((item) => {
+        if (item.type !== 'externalRequest.create') {
+          return false
+        }
+        const payload = item.payload as { id?: string }
+        return payload?.id === requestId
+      })
+
+      if (queuedCreate) {
+        await removeQueueItem(queuedCreate.id)
+        setAppError('Nota eliminada de la cola local.')
+        return
+      }
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await enqueueAndSync({
+          id: `externalRequest.delete.${requestId}`,
+          type: 'externalRequest.delete',
+          payload: { id: requestId },
+          createdAt: new Date().toISOString(),
+        })
+        setAppError('Nota eliminada localmente. Se sincronizara al recuperar conexion.')
+        return
+      }
+
+      await apiRequest<void>(`/external-requests/${requestId}`, { method: 'DELETE' })
+      setAppError('Nota eliminada correctamente.')
+    } catch {
+      setExternalRequests(previous)
+      setAppError('No se pudo eliminar la nota de pedido.')
+    }
   }
 
   if (fleetUnits.length === 0) {
@@ -193,17 +306,27 @@ export const ExternalRequestsPage = () => {
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
                 Unidad
+                <input
+                  value={unitSearch}
+                  onChange={(event) => handleUnitSearchChange(event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  placeholder="Escribir dominio (ej: AG216KV)"
+                />
                 <select
                   value={formData.unitId}
-                  onChange={(event) => handleFieldChange('unitId', event.target.value)}
+                  onChange={(event) => handleUnitSelectChange(event.target.value)}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
                 >
-                  {fleetUnits.map((unit) => (
+                  <option value="">Seleccionar unidad</option>
+                  {filteredUnitOptions.map((unit) => (
                     <option key={unit.id} value={unit.id}>
                       {unit.internalCode} - {unit.ownerCompany}
                     </option>
                   ))}
                 </select>
+                <span className="text-xs font-normal text-slate-500">
+                  Busca por dominio para no recorrer toda la flota manualmente.
+                </span>
                 {errors.unitId ? <span className="text-xs font-semibold text-rose-700">{errors.unitId}</span> : null}
               </label>
 
@@ -251,6 +374,7 @@ export const ExternalRequestsPage = () => {
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
                 Archivo del proveedor (opcional)
                 <input
+                  key={providerFileInputKey}
                   type="file"
                   className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-200 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-300"
                   onChange={(event) => setProviderFile(event.target.files?.[0] ?? null)}
@@ -375,7 +499,7 @@ export const ExternalRequestsPage = () => {
                       {canDelete ? (
                         <button
                           type="button"
-                          onClick={() => handleDelete(request.id)}
+                          onClick={() => void handleDelete(request.id)}
                           className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
                         >
                           Eliminar

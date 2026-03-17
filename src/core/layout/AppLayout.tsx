@@ -425,13 +425,10 @@ export const AppLayout = () => {
           setSuppliers(mergeByIdWithLocal(suppliersResponse, suppliersRef.current) ?? suppliersResponse)
         }
         if (externalRequestsResponse) {
-          setExternalRequests(
-            mergeByIdWithLocal(
-              externalRequestsResponse,
-              externalRequestsRef.current,
-              getQueuedPayloads('externalRequest.create'),
-            ) ?? externalRequestsResponse,
-          )
+          const queuedExternalRequests = getQueuedPayloads<ExternalRequest>('externalRequest.create')
+          const remoteIds = new Set(externalRequestsResponse.map((request) => request.id))
+          const pendingQueuedRequests = queuedExternalRequests.filter((request) => request?.id && !remoteIds.has(request.id))
+          setExternalRequests([...externalRequestsResponse, ...pendingQueuedRequests])
         }
         if (movementsResponse) {
           setMovements(
