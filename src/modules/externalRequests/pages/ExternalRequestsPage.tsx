@@ -290,9 +290,6 @@ export const ExternalRequestsPage = () => {
                       : 'Sin coincidencia exacta. Escribe la patente completa (ej: AG216KV).'}
                   </span>
                 ) : null}
-                <span className="text-xs font-normal text-slate-500">
-                  Campo libre: no se muestra desplegable. Se valida por coincidencia exacta al guardar.
-                </span>
                 {errors.unitId ? <span className="text-xs font-semibold text-rose-700">{errors.unitId}</span> : null}
               </label>
 
