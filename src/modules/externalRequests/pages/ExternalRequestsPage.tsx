@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -27,15 +27,13 @@ export const ExternalRequestsPage = () => {
   const canCreate = can('WORK_ORDERS', 'create')
   const canDelete = can('WORK_ORDERS', 'delete')
 
-  const [formData, setFormData] = useState<ExternalRequestFormData>(() =>
-    createEmptyExternalRequestFormData(fleetUnits[0]?.id ?? ''),
-  )
+  const [formData, setFormData] = useState<ExternalRequestFormData>(() => createEmptyExternalRequestFormData(''))
   const [errors, setErrors] = useState<ExternalRequestFormErrors>({})
   const [providerFile, setProviderFile] = useState<File | null>(null)
   const [providerFileInputKey, setProviderFileInputKey] = useState(0)
   const [unitFilter, setUnitFilter] = useState<string>('ALL')
   const [searchTerm, setSearchTerm] = useState('')
-  const [unitSearch, setUnitSearch] = useState(fleetUnits[0]?.internalCode ?? '')
+  const [unitSearch, setUnitSearch] = useState('')
 
   const orderedUnits = useMemo(
     () => [...fleetUnits].sort((left, right) => left.internalCode.localeCompare(right.internalCode, 'es-AR')),
@@ -44,12 +42,12 @@ export const ExternalRequestsPage = () => {
 
   const normalizeDomain = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '')
 
-  const filteredUnitOptions = useMemo(() => {
+  const matchedUnit = useMemo(() => {
     const query = normalizeDomain(unitSearch)
     if (!query) {
-      return orderedUnits
+      return null
     }
-    return orderedUnits.filter((unit) => normalizeDomain(unit.internalCode).includes(query))
+    return orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === query) ?? null
   }, [orderedUnits, unitSearch])
 
   const requestsView = useMemo(
@@ -70,20 +68,6 @@ export const ExternalRequestsPage = () => {
       return haystack.includes(normalized)
     })
   }, [requestsView, unitFilter, searchTerm])
-
-  useEffect(() => {
-    if (orderedUnits.length === 0) {
-      return
-    }
-    if (formData.unitId) {
-      return
-    }
-    const defaultUnit = orderedUnits[0]
-    setFormData((previous) => ({ ...previous, unitId: defaultUnit.id }))
-    if (!unitSearch.trim()) {
-      setUnitSearch(defaultUnit.internalCode)
-    }
-  }, [orderedUnits, formData.unitId, unitSearch])
 
   if (!featureFlags.showExternalRequestsModule) {
     return (
@@ -109,35 +93,22 @@ export const ExternalRequestsPage = () => {
       setFormData((previous) => ({ ...previous, unitId: '' }))
       return
     }
-    const exactMatch = orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === query)
+    const exactMatch = orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === query) ?? null
+    setFormData((previous) => ({ ...previous, unitId: exactMatch?.id ?? '' }))
     if (exactMatch) {
-      setFormData((previous) => ({ ...previous, unitId: exactMatch.id }))
       setErrors((previous) => ({ ...previous, unitId: undefined }))
     }
   }
 
-  const handleUnitSelectChange = (unitId: string) => {
-    handleFieldChange('unitId', unitId)
-    const selectedUnit = orderedUnits.find((unit) => unit.id === unitId)
-    if (selectedUnit) {
-      setUnitSearch(selectedUnit.internalCode)
-    }
-  }
-
   const resetForm = () => {
-    const defaultUnitId = orderedUnits[0]?.id ?? ''
-    const defaultUnitCode = orderedUnits[0]?.internalCode ?? ''
-    setFormData(createEmptyExternalRequestFormData(defaultUnitId))
+    setFormData(createEmptyExternalRequestFormData(''))
     setErrors({})
     setProviderFile(null)
     setProviderFileInputKey((previous) => previous + 1)
-    setUnitSearch(defaultUnitCode)
+    setUnitSearch('')
   }
 
   const resolveUnitIdFromSearch = () => {
-    if (formData.unitId) {
-      return formData.unitId
-    }
     const query = normalizeDomain(unitSearch)
     if (!query) {
       return ''
@@ -312,20 +283,15 @@ export const ExternalRequestsPage = () => {
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
                   placeholder="Escribir dominio (ej: AG216KV)"
                 />
-                <select
-                  value={formData.unitId}
-                  onChange={(event) => handleUnitSelectChange(event.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                >
-                  <option value="">Seleccionar unidad</option>
-                  {filteredUnitOptions.map((unit) => (
-                    <option key={unit.id} value={unit.id}>
-                      {unit.internalCode} - {unit.ownerCompany}
-                    </option>
-                  ))}
-                </select>
+                {unitSearch.trim() ? (
+                  <span className="text-xs font-normal text-slate-500">
+                    {matchedUnit
+                      ? `Unidad encontrada: ${matchedUnit.internalCode} - ${matchedUnit.ownerCompany}`
+                      : 'Sin coincidencia exacta. Escribe la patente completa (ej: AG216KV).'}
+                  </span>
+                ) : null}
                 <span className="text-xs font-normal text-slate-500">
-                  Busca por dominio para no recorrer toda la flota manualmente.
+                  Campo libre: no se muestra desplegable. Se valida por coincidencia exacta al guardar.
                 </span>
                 {errors.unitId ? <span className="text-xs font-semibold text-rose-700">{errors.unitId}</span> : null}
               </label>

@@ -732,6 +732,15 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Formulario NDP ahora permite buscar unidad escribiendo dominio/patente y limpiar realmente el input de archivo.
   Riesgo residual:
   - Si una nota ya fue eliminada manualmente en backend y existe una cola delete vieja, puede devolverse 404 en sync (se descarta por politica no reintetable).
+- Fecha: 2026-03-17
+  Cambio: Ajuste UX NDP para usar solo campo libre de dominio (sin desplegable de patentes) y validacion por coincidencia exacta.
+  Archivos:
+  - `src/modules/externalRequests/pages/ExternalRequestsPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se elimina ruido visual y scroll innecesario en flotas grandes; operador escribe patente directa.
+  Riesgo residual:
+  - Si escriben dominio incompleto o con error de formato, la nota no se crea hasta ingresar coincidencia exacta.
 
 ## 9) Riesgos abiertos (a seguir)
 
