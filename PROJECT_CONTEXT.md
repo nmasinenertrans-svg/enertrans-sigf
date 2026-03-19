@@ -751,6 +751,18 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Se elimina ruido visual y scroll innecesario en flotas grandes; operador escribe patente directa.
   Riesgo residual:
   - Si escriben dominio incompleto o con error de formato, la nota no se crea hasta ingresar coincidencia exacta.
+- Fecha: 2026-03-19
+  Cambio: Hotfix critico de compatibilidad DB para NDP y reparaciones en runtime (schema drift en Render).
+  Archivos:
+  - `backend/src/db.ts`
+  - `backend/src/routes/externalRequests.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - `ensureRuntimeSchemaCompatibility` deja de ejecutar SQL contra tablas/columnas inexistentes (`RepairRecord`, `providerFileUrl`) y elimina cascada de warnings `P2010`.
+  - `GET /external-requests` ahora recupera datos en modo legacy por schema/columnas disponibles (sin asumir `companyName`, `currency`, `providerFileUrl`) evitando 500 y perdida de visibilidad de NDP historicas.
+  - Si un schema parcial falla, se ignora solo ese schema y no se cae toda la recuperacion.
+  Riesgo residual:
+  - Si existe un schema extremadamente viejo sin columnas minimas (`id`, `code`, `unitId`, `createdAt`) se omite por seguridad y no entra al listado.
 
 ## 9) Riesgos abiertos (a seguir)
 

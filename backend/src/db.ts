@@ -153,6 +153,23 @@ const tableExistsInActiveSchema = async (tableName: string): Promise<boolean> =>
   }
 }
 
+const columnExistsInActiveSchema = async (tableName: string, columnName: string): Promise<boolean> => {
+  try {
+    const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = ${tableName}
+          AND column_name = ${columnName}
+      ) AS exists
+    `
+    return Boolean(rows[0]?.exists)
+  } catch {
+    return false
+  }
+}
+
 export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   // Fleet: agrega columnas operativas nuevas si la tabla existe en schema activo.
   const hasFleetUnitTable = await tableExistsInActiveSchema('FleetUnit')
@@ -259,60 +276,108 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoAttachedByUserName" TEXT NOT NULL DEFAULT '';`,
   )
 
-  // NDP/Reparaciones: columnas para repuestos comprados vinculados a reparacion.
-  await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "currency" TEXT NOT NULL DEFAULT 'ARS';`)
-  await safeExecuteCompatSql(
-    `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "partsItems" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
-  )
-  await safeExecuteCompatSql(
-    `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "partsTotal" DOUBLE PRECISION NOT NULL DEFAULT 0;`,
-  )
-  await safeExecuteCompatSql(
-    `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "eligibilityStatus" TEXT NOT NULL DEFAULT 'PENDING_ATTACHMENT';`,
-  )
-  await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "linkedRepairId" TEXT;`)
-  await safeExecuteCompatSql(
-    `CREATE INDEX IF NOT EXISTS "ExternalRequest_linkedRepairId_idx" ON "ExternalRequest"("linkedRepairId");`,
-  )
-  await safeExecuteCompatSql(
-    `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "linkedExternalRequestIds" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
-  )
-  await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "laborCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
-  await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "partsCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
-  await safeExecuteCompatSql(`
-    UPDATE "ExternalRequest"
-    SET "eligibilityStatus" = CASE
-      WHEN COALESCE("providerFileUrl", '') <> '' THEN 'READY_FOR_REPAIR'
-      ELSE 'PENDING_ATTACHMENT'
-    END
-    WHERE "eligibilityStatus" NOT IN ('PENDING_ATTACHMENT', 'READY_FOR_REPAIR');
-  `)
-  await safeExecuteCompatSql(`
-    UPDATE "RepairRecord"
-    SET "linkedExternalRequestIds" = jsonb_build_array("externalRequestId")
-    WHERE COALESCE("externalRequestId", '') <> ''
-      AND COALESCE(jsonb_array_length("linkedExternalRequestIds"), 0) = 0;
-  `)
-  await safeExecuteCompatSql(`
-    UPDATE "RepairRecord"
-    SET "laborCost" = COALESCE("realCost", 0)
-    WHERE COALESCE("laborCost", 0) = 0
-      AND COALESCE("partsCost", 0) = 0;
-  `)
-  await safeExecuteCompatSql(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'ExternalRequest_linkedRepairId_fkey'
-      ) THEN
-        ALTER TABLE "ExternalRequest"
-          ADD CONSTRAINT "ExternalRequest_linkedRepairId_fkey"
-          FOREIGN KEY ("linkedRepairId") REFERENCES "RepairRecord"("id")
-          ON DELETE SET NULL ON UPDATE CASCADE;
-      END IF;
-    END
-    $$;
-  `)
+  // NDP/Reparaciones: solo aplica cambios si tablas existen en schema activo.
+  const hasExternalRequestTable = await tableExistsInActiveSchema('ExternalRequest')
+  const hasRepairRecordTable = await tableExistsInActiveSchema('RepairRecord')
+
+  if (hasExternalRequestTable) {
+    await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "companyName" TEXT NOT NULL DEFAULT '';`)
+    await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "providerFileName" TEXT NOT NULL DEFAULT '';`)
+    await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "providerFileUrl" TEXT NOT NULL DEFAULT '';`)
+    await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "currency" TEXT NOT NULL DEFAULT 'ARS';`)
+    await safeExecuteCompatSql(
+      `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "partsItems" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+    )
+    await safeExecuteCompatSql(
+      `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "partsTotal" DOUBLE PRECISION NOT NULL DEFAULT 0;`,
+    )
+    await safeExecuteCompatSql(
+      `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "eligibilityStatus" TEXT NOT NULL DEFAULT 'PENDING_ATTACHMENT';`,
+    )
+    await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "linkedRepairId" TEXT;`)
+    await safeExecuteCompatSql(
+      `CREATE INDEX IF NOT EXISTS "ExternalRequest_linkedRepairId_idx" ON "ExternalRequest"("linkedRepairId");`,
+    )
+  }
+
+  if (hasRepairRecordTable) {
+    await safeExecuteCompatSql(
+      `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "linkedExternalRequestIds" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+    )
+    await safeExecuteCompatSql(
+      `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "externalRequestId" TEXT;`,
+    )
+    await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "laborCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
+    await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "partsCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
+  }
+
+  if (hasExternalRequestTable) {
+    const hasEligibilityStatus = await columnExistsInActiveSchema('ExternalRequest', 'eligibilityStatus')
+    const hasProviderFileUrl = await columnExistsInActiveSchema('ExternalRequest', 'providerFileUrl')
+
+    if (hasEligibilityStatus && hasProviderFileUrl) {
+      await safeExecuteCompatSql(`
+        UPDATE "ExternalRequest"
+        SET "eligibilityStatus" = CASE
+          WHEN COALESCE("providerFileUrl", '') <> '' THEN 'READY_FOR_REPAIR'
+          ELSE 'PENDING_ATTACHMENT'
+        END
+        WHERE "eligibilityStatus" NOT IN ('PENDING_ATTACHMENT', 'READY_FOR_REPAIR');
+      `)
+    } else if (hasEligibilityStatus) {
+      await safeExecuteCompatSql(`
+        UPDATE "ExternalRequest"
+        SET "eligibilityStatus" = 'PENDING_ATTACHMENT'
+        WHERE "eligibilityStatus" NOT IN ('PENDING_ATTACHMENT', 'READY_FOR_REPAIR');
+      `)
+    }
+  }
+
+  if (hasRepairRecordTable) {
+    const hasExternalRequestId = await columnExistsInActiveSchema('RepairRecord', 'externalRequestId')
+    const hasLinkedExternalRequestIds = await columnExistsInActiveSchema('RepairRecord', 'linkedExternalRequestIds')
+    const hasLaborCost = await columnExistsInActiveSchema('RepairRecord', 'laborCost')
+    const hasPartsCost = await columnExistsInActiveSchema('RepairRecord', 'partsCost')
+    const hasRealCost = await columnExistsInActiveSchema('RepairRecord', 'realCost')
+
+    if (hasExternalRequestId && hasLinkedExternalRequestIds) {
+      await safeExecuteCompatSql(`
+        UPDATE "RepairRecord"
+        SET "linkedExternalRequestIds" = jsonb_build_array("externalRequestId")
+        WHERE COALESCE("externalRequestId", '') <> ''
+          AND COALESCE(jsonb_array_length("linkedExternalRequestIds"), 0) = 0;
+      `)
+    }
+
+    if (hasLaborCost && hasPartsCost && hasRealCost) {
+      await safeExecuteCompatSql(`
+        UPDATE "RepairRecord"
+        SET "laborCost" = COALESCE("realCost", 0)
+        WHERE COALESCE("laborCost", 0) = 0
+          AND COALESCE("partsCost", 0) = 0;
+      `)
+    }
+  }
+
+  if (hasExternalRequestTable && hasRepairRecordTable) {
+    const hasLinkedRepairId = await columnExistsInActiveSchema('ExternalRequest', 'linkedRepairId')
+    if (hasLinkedRepairId) {
+      await safeExecuteCompatSql(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'ExternalRequest_linkedRepairId_fkey'
+          ) THEN
+            ALTER TABLE "ExternalRequest"
+              ADD CONSTRAINT "ExternalRequest_linkedRepairId_fkey"
+              FOREIGN KEY ("linkedRepairId") REFERENCES "RepairRecord"("id")
+              ON DELETE SET NULL ON UPDATE CASCADE;
+          END IF;
+        END
+        $$;
+      `)
+    }
+  }
 }
 
 const activateSchema = async (schema: string): Promise<boolean> => {

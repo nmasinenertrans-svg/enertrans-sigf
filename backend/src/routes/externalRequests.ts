@@ -48,8 +48,8 @@ type RecoveryExternalRequestRow = {
   id: string
   code: string
   unitId: string
-  companyName: string
-  description: string
+  companyName: string | null
+  description: string | null
   tasks: unknown
   currency: string | null
   partsItems: unknown
@@ -120,15 +120,52 @@ const asIsoString = (value: Date | string | null | undefined): string | undefine
   return parsed.toISOString()
 }
 
+const toStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? '').trim()).filter(Boolean)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return []
+    }
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item ?? '').trim()).filter(Boolean)
+      }
+    } catch {
+      // El valor ya viene como string simple legacy.
+    }
+    return [trimmed]
+  }
+  return []
+}
+
+const parseJsonUnknown = (value: unknown): unknown => {
+  if (typeof value !== 'string') {
+    return value
+  }
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return value
+  }
+}
+
 const mapRecoveryExternalRequestToPublicShape = (row: RecoveryExternalRequestRow) => ({
   id: row.id,
   code: row.code,
   unitId: row.unitId,
-  companyName: row.companyName,
-  description: row.description,
-  tasks: Array.isArray(row.tasks) ? row.tasks.map((task) => String(task ?? '').trim()).filter(Boolean) : [],
+  companyName: String(row.companyName ?? '').trim(),
+  description: String(row.description ?? '').trim(),
+  tasks: toStringArray(parseJsonUnknown(row.tasks)),
   currency: normalizeCurrency(row.currency),
-  partsItems: normalizePartItems(row.partsItems),
+  partsItems: normalizePartItems(parseJsonUnknown(row.partsItems)),
   partsTotal: Number.isFinite(row.partsTotal ?? NaN) ? Number(row.partsTotal) : 0,
   eligibilityStatus:
     row.eligibilityStatus === 'READY_FOR_REPAIR' ? ('READY_FOR_REPAIR' as const) : ('PENDING_ATTACHMENT' as const),
@@ -184,49 +221,87 @@ const listExternalRequestsFromRecoverySchemas = async () => {
       continue
     }
 
-    const columnRows = await prisma.$queryRaw<{ column_name: string }[]>`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = ${schema}
-        AND table_name = 'ExternalRequest'
-    `
-    const columns = new Set(columnRows.map((row) => row.column_name))
-    const currencySelect = columns.has('currency') ? `"currency"::text` : `'ARS'::text AS "currency"`
-    const partsItemsSelect = columns.has('partsItems') ? `"partsItems"` : `'[]'::jsonb AS "partsItems"`
-    const partsTotalSelect = columns.has('partsTotal') ? `"partsTotal"` : `0 AS "partsTotal"`
-    const eligibilitySelect = columns.has('eligibilityStatus')
-      ? `"eligibilityStatus"`
-      : `CASE WHEN COALESCE("providerFileUrl", '') <> '' THEN 'READY_FOR_REPAIR' ELSE 'PENDING_ATTACHMENT' END AS "eligibilityStatus"`
-    const linkedRepairSelect = columns.has('linkedRepairId') ? `"linkedRepairId"` : `NULL::text AS "linkedRepairId"`
-    const providerFileNameSelect = columns.has('providerFileName')
-      ? `"providerFileName"`
-      : `''::text AS "providerFileName"`
-    const providerFileUrlSelect = columns.has('providerFileUrl') ? `"providerFileUrl"` : `''::text AS "providerFileUrl"`
-    const updatedAtSelect = columns.has('updatedAt') ? `"updatedAt"` : `"createdAt" AS "updatedAt"`
+    try {
+      const columnRows = await prisma.$queryRaw<{ column_name: string }[]>`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = ${schema}
+          AND table_name = 'ExternalRequest'
+      `
+      const columns = new Set(columnRows.map((row) => row.column_name))
 
-    const query = `
-      SELECT
-        "id",
-        "code",
-        "unitId",
-        "companyName",
-        "description",
-        "tasks",
-        ${currencySelect},
-        ${partsItemsSelect},
-        ${partsTotalSelect},
-        ${eligibilitySelect},
-        ${linkedRepairSelect},
-        ${providerFileNameSelect},
-        ${providerFileUrlSelect},
-        "createdAt",
-        ${updatedAtSelect}
-      FROM "${schema}"."ExternalRequest"
-      ORDER BY "createdAt" DESC
-    `
+      const requiredColumns = ['id', 'code', 'unitId']
+      if (requiredColumns.some((column) => !columns.has(column))) {
+        continue
+      }
 
-    const rows = await prisma.$queryRawUnsafe<RecoveryExternalRequestRow[]>(query)
-    allRows.push(...rows)
+      const quoteColumn = (column: string): string => `"${column.replace(/"/g, '""')}"`
+      const findColumn = (candidates: string[]): string | null => candidates.find((column) => columns.has(column)) ?? null
+      const asTextSelect = (column: string, alias: string): string => `${quoteColumn(column)}::text AS "${alias}"`
+      const textSelectOrDefault = (candidates: string[], alias: string, fallback = "''::text"): string => {
+        const column = findColumn(candidates)
+        return column ? asTextSelect(column, alias) : `${fallback} AS "${alias}"`
+      }
+
+      const createdAtColumn = findColumn(['createdAt']) ?? null
+      if (!createdAtColumn) {
+        continue
+      }
+      const updatedAtColumn = findColumn(['updatedAt'])
+      const tasksColumn = findColumn(['tasks'])
+      const providerFileUrlColumn = findColumn(['providerFileUrl'])
+
+      const companyNameSelect = textSelectOrDefault(
+        ['companyName', 'company', 'supplierName', 'providerName'],
+        'companyName',
+      )
+      const descriptionSelect = textSelectOrDefault(['description', 'details', 'summary'], 'description')
+      const tasksSelect = tasksColumn ? `${quoteColumn(tasksColumn)} AS "tasks"` : `'[]'::jsonb AS "tasks"`
+      const currencySelect = textSelectOrDefault(['currency'], 'currency', `'ARS'::text`)
+      const partsItemsSelect = findColumn(['partsItems'])
+        ? `${quoteColumn('partsItems')} AS "partsItems"`
+        : `'[]'::jsonb AS "partsItems"`
+      const partsTotalSelect = findColumn(['partsTotal']) ? `${quoteColumn('partsTotal')} AS "partsTotal"` : `0 AS "partsTotal"`
+      const eligibilitySelect = findColumn(['eligibilityStatus'])
+        ? asTextSelect('eligibilityStatus', 'eligibilityStatus')
+        : providerFileUrlColumn
+          ? `CASE WHEN COALESCE(${quoteColumn(providerFileUrlColumn)}::text, '') <> '' THEN 'READY_FOR_REPAIR' ELSE 'PENDING_ATTACHMENT' END AS "eligibilityStatus"`
+          : `'PENDING_ATTACHMENT'::text AS "eligibilityStatus"`
+      const linkedRepairSelect = textSelectOrDefault(['linkedRepairId'], 'linkedRepairId', 'NULL::text')
+      const providerFileNameSelect = textSelectOrDefault(['providerFileName'], 'providerFileName')
+      const providerFileUrlSelect = textSelectOrDefault(['providerFileUrl'], 'providerFileUrl')
+      const createdAtSelect = `${quoteColumn(createdAtColumn)} AS "createdAt"`
+      const updatedAtSelect = updatedAtColumn
+        ? `${quoteColumn(updatedAtColumn)} AS "updatedAt"`
+        : `${quoteColumn(createdAtColumn)} AS "updatedAt"`
+
+      const query = `
+        SELECT
+          ${quoteColumn('id')} AS "id",
+          ${quoteColumn('code')} AS "code",
+          ${quoteColumn('unitId')} AS "unitId",
+          ${companyNameSelect},
+          ${descriptionSelect},
+          ${tasksSelect},
+          ${currencySelect},
+          ${partsItemsSelect},
+          ${partsTotalSelect},
+          ${eligibilitySelect},
+          ${linkedRepairSelect},
+          ${providerFileNameSelect},
+          ${providerFileUrlSelect},
+          ${createdAtSelect},
+          ${updatedAtSelect}
+        FROM "${schema}"."ExternalRequest"
+        ORDER BY ${quoteColumn(createdAtColumn)} DESC
+      `
+
+      const rows = await prisma.$queryRawUnsafe<RecoveryExternalRequestRow[]>(query)
+      allRows.push(...rows)
+    } catch (error) {
+      console.error(`[ExternalRequest recovery] schema ${schema} ignored due to query mismatch:`, error)
+      continue
+    }
   }
 
   return allRows.map(mapRecoveryExternalRequestToPublicShape)
