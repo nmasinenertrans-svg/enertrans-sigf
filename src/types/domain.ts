@@ -326,12 +326,15 @@ export interface RepairRecord {
   unitId: string
   workOrderId: string
   externalRequestId?: string
+  linkedExternalRequestIds?: string[]
   sourceType?: 'WORK_ORDER' | 'EXTERNAL_REQUEST'
   performedAt?: string
   unitKilometers: number
   currency: 'ARS' | 'USD'
   supplierId?: string
   supplierName: string
+  laborCost?: number
+  partsCost?: number
   createdAt?: string
   realCost: number
   invoicedToClient: number
@@ -357,10 +360,22 @@ export interface ExternalRequest {
   companyName: string
   description: string
   tasks: string[]
+  currency?: 'ARS' | 'USD'
+  partsItems?: ExternalRequestPartItem[]
+  partsTotal?: number
+  eligibilityStatus?: 'PENDING_ATTACHMENT' | 'READY_FOR_REPAIR'
+  linkedRepairId?: string | null
   createdAt?: string
   providerFileName?: string
   providerFileBase64?: string
   providerFileUrl?: string
+}
+
+export interface ExternalRequestPartItem {
+  description: string
+  quantity: number
+  unitPrice: number
+  lineTotal: number
 }
 
 export interface FleetMovement {

@@ -42,17 +42,21 @@ const createId = (): string => {
   return `repair-${Date.now()}-${Math.round(Math.random() * 10000)}`
 }
 
+const parseNumber = (value: string): number => {
+  const normalized = value.replace(/\./g, '').replace(',', '.')
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const normalizeMoney = (value: number): number => Number((Number.isFinite(value) ? value : 0).toFixed(2))
+
+const uniqueIds = (raw: string[]): string[] => Array.from(new Set(raw.map((id) => id.trim()).filter(Boolean)))
+
 export const calculateMargin = (realCost: number, invoicedToClient: number): number => {
   const normalizedRealCost = Number.isFinite(realCost) ? realCost : 0
   const normalizedInvoiced = Number.isFinite(invoicedToClient) ? invoicedToClient : 0
 
   return Number((normalizedInvoiced - normalizedRealCost).toFixed(2))
-}
-
-const parseNumber = (value: string): number => {
-  const normalized = value.replace(/\./g, '').replace(',', '.')
-  const parsed = Number(normalized)
-  return Number.isFinite(parsed) ? parsed : 0
 }
 
 export const calculateInvoicedFromSurcharge = (realCost: number, surchargePercent: number): number => {
@@ -61,16 +65,45 @@ export const calculateInvoicedFromSurcharge = (realCost: number, surchargePercen
   return Number((normalized * (1 + percent / 100)).toFixed(2))
 }
 
+const calculatePartsCostFromRequests = (externalRequests: ExternalRequest[], linkedIds: string[]): number => {
+  const byId = new Map(externalRequests.map((request) => [request.id, request]))
+  const total = linkedIds.reduce((sum, id) => {
+    const request = byId.get(id)
+    const partsTotal = Number(request?.partsTotal ?? 0)
+    return sum + (Number.isFinite(partsTotal) ? partsTotal : 0)
+  }, 0)
+  return normalizeMoney(total)
+}
+
+const resolveLinkedExternalRequestIds = (repair: RepairRecord): string[] => {
+  if (Array.isArray(repair.linkedExternalRequestIds) && repair.linkedExternalRequestIds.length > 0) {
+    return uniqueIds(repair.linkedExternalRequestIds)
+  }
+  if (repair.externalRequestId) {
+    return [repair.externalRequestId]
+  }
+  return []
+}
+
+export const isExternalRequestEligibleForRepair = (request: ExternalRequest, currentRepairId?: string | null): boolean => {
+  const status = request.eligibilityStatus === 'READY_FOR_REPAIR'
+  const hasAttachment = Boolean((request.providerFileUrl ?? '').trim())
+  const linkedRepairId = request.linkedRepairId ?? null
+  const isLinkedToCurrent = Boolean(currentRepairId && linkedRepairId === currentRepairId)
+  const isUnlinked = !linkedRepairId
+  return status && hasAttachment && (isUnlinked || isLinkedToCurrent)
+}
+
 export const createEmptyRepairFormData = (workOrderId: string): RepairFormData => ({
   sourceType: 'WORK_ORDER',
   workOrderId,
-  externalRequestId: '',
+  linkedExternalRequestIds: [],
   ...getDefaultPerformedDateTime(),
   unitKilometersInput: '',
   currency: 'ARS',
   supplierId: '',
   supplierName: '',
-  realCostInput: '',
+  laborCostInput: '',
   surchargePercentInput: '',
   invoiceFileName: '',
   invoiceFileBase64: '',
@@ -81,12 +114,12 @@ export const toRepairFormData = (repair: RepairRecord): RepairFormData => ({
   ...toDateAndTimeInput(repair.performedAt ?? repair.createdAt),
   sourceType: repair.sourceType ?? 'WORK_ORDER',
   workOrderId: repair.workOrderId ?? '',
-  externalRequestId: repair.externalRequestId ?? '',
+  linkedExternalRequestIds: resolveLinkedExternalRequestIds(repair),
   unitKilometersInput: Number.isFinite(repair.unitKilometers) ? String(repair.unitKilometers) : '',
   currency: repair.currency === 'USD' ? 'USD' : 'ARS',
   supplierId: repair.supplierId ?? '',
   supplierName: repair.supplierName,
-  realCostInput: Number.isFinite(repair.realCost) ? String(repair.realCost) : '',
+  laborCostInput: String(Number.isFinite(repair.laborCost) ? repair.laborCost : repair.realCost),
   surchargePercentInput: '',
   invoiceFileName: repair.invoiceFileName ?? '',
   invoiceFileBase64: repair.invoiceFileBase64 ?? '',
@@ -97,6 +130,7 @@ export const validateRepairFormData = (
   formData: RepairFormData,
   workOrders: WorkOrder[],
   externalRequests: ExternalRequest[],
+  currentRepairId?: string | null,
 ): RepairFormErrors => {
   const validationErrors: RepairFormErrors = {}
 
@@ -107,10 +141,20 @@ export const validateRepairFormData = (
       validationErrors.workOrderId = 'La OT seleccionada no existe.'
     }
   } else {
-    if (!formData.externalRequestId) {
-      validationErrors.externalRequestId = 'Debes seleccionar una nota externa.'
-    } else if (!externalRequests.some((request) => request.id === formData.externalRequestId)) {
-      validationErrors.externalRequestId = 'La nota seleccionada no existe.'
+    if (!Array.isArray(formData.linkedExternalRequestIds) || formData.linkedExternalRequestIds.length === 0) {
+      validationErrors.linkedExternalRequestIds = 'Debes seleccionar al menos una NDP elegible.'
+    } else {
+      const selected = externalRequests.filter((request) => formData.linkedExternalRequestIds.includes(request.id))
+      if (selected.length !== formData.linkedExternalRequestIds.length) {
+        validationErrors.linkedExternalRequestIds = 'Una o mas NDP seleccionadas no existen.'
+      } else {
+        const currencies = new Set(selected.map((request) => (request.currency === 'USD' ? 'USD' : 'ARS')))
+        if (currencies.size > 1) {
+          validationErrors.linkedExternalRequestIds = 'Las NDP deben compartir la misma moneda.'
+        } else if (!selected.every((request) => isExternalRequestEligibleForRepair(request, currentRepairId ?? undefined))) {
+          validationErrors.linkedExternalRequestIds = 'Hay NDP sin adjunto o no elegibles para reparacion.'
+        }
+      }
     }
   }
 
@@ -141,9 +185,9 @@ export const validateRepairFormData = (
     validationErrors.currency = 'Debes seleccionar una moneda valida.'
   }
 
-  const realCost = parseNumber(formData.realCostInput)
-  if (realCost < 0) {
-    validationErrors.realCostInput = 'El costo real no puede ser negativo.'
+  const laborCost = parseNumber(formData.laborCostInput)
+  if (laborCost < 0) {
+    validationErrors.laborCostInput = 'La mano de obra no puede ser negativa.'
   }
 
   const surcharge = parseNumber(formData.surchargePercentInput)
@@ -154,32 +198,52 @@ export const validateRepairFormData = (
   return validationErrors
 }
 
+const resolveRepairCosts = (formData: RepairFormData, externalRequests: ExternalRequest[]) => {
+  const linkedIds = uniqueIds(formData.linkedExternalRequestIds)
+  const partsCost = calculatePartsCostFromRequests(externalRequests, linkedIds)
+  const laborCost = normalizeMoney(parseNumber(formData.laborCostInput))
+  const realCost = normalizeMoney(laborCost + partsCost)
+  const surchargePercent = parseNumber(formData.surchargePercentInput)
+  const invoicedToClient = calculateInvoicedFromSurcharge(realCost, surchargePercent)
+  const margin = calculateMargin(realCost, invoicedToClient)
+
+  return {
+    linkedIds,
+    partsCost,
+    laborCost,
+    realCost,
+    invoicedToClient,
+    margin,
+  }
+}
+
 export const toRepairRecord = (
   formData: RepairFormData,
   workOrders: WorkOrder[],
   externalRequests: ExternalRequest[],
 ): RepairRecord => {
   const linkedWorkOrder = workOrders.find((workOrder) => workOrder.id === formData.workOrderId)
-  const linkedExternalRequest = externalRequests.find((request) => request.id === formData.externalRequestId)
-  const realCost = parseNumber(formData.realCostInput)
-  const surchargePercent = parseNumber(formData.surchargePercentInput)
-  const invoicedToClient = calculateInvoicedFromSurcharge(realCost, surchargePercent)
+  const costs = resolveRepairCosts(formData, externalRequests)
+  const primaryExternalRequest = externalRequests.find((request) => request.id === costs.linkedIds[0])
 
   return {
     id: createId(),
-    unitId: formData.sourceType === 'EXTERNAL_REQUEST' ? linkedExternalRequest?.unitId ?? '' : linkedWorkOrder?.unitId ?? '',
+    unitId: costs.linkedIds.length > 0 ? primaryExternalRequest?.unitId ?? '' : linkedWorkOrder?.unitId ?? '',
     workOrderId: formData.sourceType === 'WORK_ORDER' ? formData.workOrderId : '',
-    externalRequestId: formData.externalRequestId || undefined,
-    sourceType: formData.sourceType,
+    externalRequestId: costs.linkedIds[0] || undefined,
+    linkedExternalRequestIds: costs.linkedIds,
+    sourceType: costs.linkedIds.length > 0 ? 'EXTERNAL_REQUEST' : formData.sourceType,
     performedAt: toPerformedAtIso(formData.performedDate, formData.performedTime),
     unitKilometers: Math.max(0, Math.trunc(parseNumber(formData.unitKilometersInput))),
     currency: formData.currency === 'USD' ? 'USD' : 'ARS',
     supplierId: formData.supplierId || undefined,
     supplierName: formData.supplierName.trim(),
+    laborCost: costs.laborCost,
+    partsCost: costs.partsCost,
     createdAt: new Date().toISOString(),
-    realCost: Number(realCost.toFixed(2)),
-    invoicedToClient: Number(invoicedToClient.toFixed(2)),
-    margin: calculateMargin(realCost, invoicedToClient),
+    realCost: costs.realCost,
+    invoicedToClient: Number(costs.invoicedToClient.toFixed(2)),
+    margin: costs.margin,
     invoiceFileName: formData.invoiceFileName || undefined,
     invoiceFileBase64: formData.invoiceFileBase64 || undefined,
     invoiceFileUrl: formData.invoiceFileUrl || undefined,
@@ -193,29 +257,28 @@ export const mergeRepairFromForm = (
   externalRequests: ExternalRequest[],
 ): RepairRecord => {
   const linkedWorkOrder = workOrders.find((workOrder) => workOrder.id === formData.workOrderId)
-  const linkedExternalRequest = externalRequests.find((request) => request.id === formData.externalRequestId)
-  const realCost = parseNumber(formData.realCostInput)
-  const surchargePercent = parseNumber(formData.surchargePercentInput)
-  const invoicedToClient = calculateInvoicedFromSurcharge(realCost, surchargePercent)
+  const costs = resolveRepairCosts(formData, externalRequests)
+  const primaryExternalRequest = externalRequests.find((request) => request.id === costs.linkedIds[0])
 
   return {
     ...repair,
     unitId:
-      formData.sourceType === 'EXTERNAL_REQUEST'
-        ? linkedExternalRequest?.unitId ?? repair.unitId
-        : linkedWorkOrder?.unitId ?? repair.unitId,
-    workOrderId: formData.sourceType === 'WORK_ORDER' ? formData.workOrderId : '',
-    externalRequestId: formData.externalRequestId || undefined,
-    sourceType: formData.sourceType,
+      costs.linkedIds.length > 0 ? primaryExternalRequest?.unitId ?? repair.unitId : linkedWorkOrder?.unitId ?? repair.unitId,
+    workOrderId: costs.linkedIds.length > 0 ? '' : formData.workOrderId,
+    externalRequestId: costs.linkedIds[0] || undefined,
+    linkedExternalRequestIds: costs.linkedIds,
+    sourceType: costs.linkedIds.length > 0 ? 'EXTERNAL_REQUEST' : formData.sourceType,
     performedAt: toPerformedAtIso(formData.performedDate, formData.performedTime),
     unitKilometers: Math.max(0, Math.trunc(parseNumber(formData.unitKilometersInput))),
     currency: formData.currency === 'USD' ? 'USD' : 'ARS',
     supplierId: formData.supplierId || undefined,
     supplierName: formData.supplierName.trim(),
+    laborCost: costs.laborCost,
+    partsCost: costs.partsCost,
     createdAt: repair.createdAt ?? new Date().toISOString(),
-    realCost: Number(realCost.toFixed(2)),
-    invoicedToClient: Number(invoicedToClient.toFixed(2)),
-    margin: calculateMargin(realCost, invoicedToClient),
+    realCost: costs.realCost,
+    invoicedToClient: Number(costs.invoicedToClient.toFixed(2)),
+    margin: costs.margin,
     invoiceFileName: formData.invoiceFileName || undefined,
     invoiceFileBase64: formData.invoiceFileBase64 || undefined,
     invoiceFileUrl: formData.invoiceFileUrl || undefined,
@@ -230,29 +293,40 @@ export const buildRepairView = (
 ): RepairViewItem[] =>
   repairs.map((repair) => {
     const linkedWorkOrder = workOrders.find((workOrder) => workOrder.id === repair.workOrderId)
-    const linkedExternalRequest = externalRequests.find((request) => request.id === repair.externalRequestId)
+    const linkedIds = resolveLinkedExternalRequestIds(repair)
+    const linkedExternalRequests = linkedIds
+      .map((id) => externalRequests.find((request) => request.id === id))
+      .filter(Boolean) as ExternalRequest[]
     const linkedUnit = fleetUnits.find((unit) => unit.id === repair.unitId)
+    const linkedExternalRequestLabels = linkedExternalRequests.map((request) => request.code ?? request.id.slice(0, 8))
+    const laborCost = Number.isFinite(repair.laborCost) ? Number(repair.laborCost) : repair.realCost
+    const partsCost = Number.isFinite(repair.partsCost) ? Number(repair.partsCost) : 0
 
     return {
       id: repair.id,
       unitId: repair.unitId,
       unitLabel: linkedUnit ? `${linkedUnit.internalCode} - ${linkedUnit.ownerCompany}` : 'Unidad no disponible',
-      sourceType: repair.sourceType ?? 'WORK_ORDER',
+      sourceType: repair.sourceType ?? (linkedIds.length > 0 ? 'EXTERNAL_REQUEST' : 'WORK_ORDER'),
       workOrderId: repair.workOrderId,
       workOrderLabel: linkedWorkOrder
         ? `${linkedWorkOrder.code ?? linkedWorkOrder.id.slice(0, 8)} - ${linkedWorkOrder.status}`
         : 'OT no disponible',
-      externalRequestId: repair.externalRequestId ?? '',
-      externalRequestLabel: linkedExternalRequest
-        ? `${linkedExternalRequest.code ?? linkedExternalRequest.id.slice(0, 8)}`
-        : 'Nota externa no disponible',
+      externalRequestId: linkedIds[0] ?? '',
+      linkedExternalRequestIds: linkedIds,
+      linkedExternalRequestLabels,
+      externalRequestLabel:
+        linkedExternalRequestLabels.length > 0
+          ? linkedExternalRequestLabels.join(', ')
+          : 'Nota externa no disponible',
       performedAt: repair.performedAt ?? repair.createdAt ?? new Date().toISOString(),
       unitKilometers: Number.isFinite(repair.unitKilometers) ? repair.unitKilometers : 0,
       currency: repair.currency === 'USD' ? 'USD' : 'ARS',
       supplierName: repair.supplierName,
-      realCost: repair.realCost,
-      invoicedToClient: repair.invoicedToClient,
-      margin: repair.margin,
+      laborCost: normalizeMoney(laborCost),
+      partsCost: normalizeMoney(partsCost),
+      realCost: normalizeMoney(repair.realCost),
+      invoicedToClient: normalizeMoney(repair.invoicedToClient),
+      margin: normalizeMoney(repair.margin),
       invoiceFileName: repair.invoiceFileName,
       invoiceFileUrl: repair.invoiceFileUrl,
     }

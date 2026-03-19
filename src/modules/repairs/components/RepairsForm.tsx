@@ -1,7 +1,6 @@
-import type { ExternalRequest, WorkOrder } from '../../../types/domain'
-import type { Supplier } from '../../../types/domain'
+import type { ExternalRequest, Supplier, WorkOrder } from '../../../types/domain'
 import type { RepairFormData, RepairFormErrors, RepairFormField } from '../types'
-import { calculateInvoicedFromSurcharge, calculateMargin } from '../services/repairsService'
+import { calculateInvoicedFromSurcharge, calculateMargin, isExternalRequestEligibleForRepair } from '../services/repairsService'
 import type { ReactNode } from 'react'
 
 interface RepairsFormProps {
@@ -11,6 +10,7 @@ interface RepairsFormProps {
   formData: RepairFormData
   errors: RepairFormErrors
   isEditing: boolean
+  currentRepairId?: string | null
   onFieldChange: <TField extends RepairFormField>(field: TField, value: RepairFormData[TField]) => void
   onSubmit: () => void
   onCancelEdit: () => void
@@ -33,6 +33,8 @@ const FormRow = ({ label, errorMessage, children }: FormRowProps) => (
   </label>
 )
 
+const toCurrency = (value: string | undefined): 'ARS' | 'USD' => (value === 'USD' ? 'USD' : 'ARS')
+
 export const RepairsForm = ({
   workOrders,
   externalRequests,
@@ -40,11 +42,23 @@ export const RepairsForm = ({
   formData,
   errors,
   isEditing,
+  currentRepairId,
   onFieldChange,
   onSubmit,
   onCancelEdit,
 }: RepairsFormProps) => {
-  const realCost = Number(formData.realCostInput.replace(/\./g, '').replace(',', '.')) || 0
+  const selectedExternalRequestIds = Array.isArray(formData.linkedExternalRequestIds) ? formData.linkedExternalRequestIds : []
+  const selectedExternalRequests = externalRequests.filter((request) => selectedExternalRequestIds.includes(request.id))
+  const eligibleExternalRequests = externalRequests.filter((request) =>
+    isExternalRequestEligibleForRepair(request, currentRepairId ?? undefined),
+  )
+
+  const partsCost = selectedExternalRequests.reduce((sum, request) => {
+    const value = Number(request.partsTotal ?? 0)
+    return sum + (Number.isFinite(value) ? value : 0)
+  }, 0)
+  const laborCost = Number(formData.laborCostInput.replace(/\./g, '').replace(',', '.')) || 0
+  const realCost = Number((laborCost + partsCost).toFixed(2))
   const surchargePercent = Number(formData.surchargePercentInput.replace(/\./g, '').replace(',', '.')) || 0
   const invoicedToClient = calculateInvoicedFromSurcharge(realCost, surchargePercent)
   const margin = calculateMargin(realCost, invoicedToClient)
@@ -55,11 +69,26 @@ export const RepairsForm = ({
     maximumFractionDigits: 2,
   })
 
+  const toggleExternalRequest = (request: ExternalRequest) => {
+    const current = new Set(selectedExternalRequestIds)
+    if (current.has(request.id)) {
+      current.delete(request.id)
+    } else {
+      current.add(request.id)
+    }
+    const nextIds = Array.from(current)
+    onFieldChange('linkedExternalRequestIds', nextIds)
+    if (nextIds.length > 0) {
+      const firstRequest = externalRequests.find((item) => item.id === nextIds[0])
+      onFieldChange('currency', toCurrency(firstRequest?.currency))
+    }
+  }
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <header>
         <h3 className="text-lg font-bold text-slate-900">{isEditing ? 'Editar reparacion' : 'Registrar reparacion'}</h3>
-        <p className="mt-1 text-sm text-slate-600">Asocia OT o nota externa, proveedor, fecha/hora, km y costos.</p>
+        <p className="mt-1 text-sm text-slate-600">Flujo NDP - Reparacion: mano de obra + repuestos vinculados.</p>
       </header>
 
       <form
@@ -69,7 +98,7 @@ export const RepairsForm = ({
           onSubmit()
         }}
       >
-        <FormRow label="Origen" errorMessage={formData.sourceType === 'WORK_ORDER' ? errors.workOrderId : errors.externalRequestId}>
+        <FormRow label="Origen" errorMessage={formData.sourceType === 'WORK_ORDER' ? errors.workOrderId : errors.linkedExternalRequestIds}>
           <div className="flex flex-col gap-2">
             <select
               className={inputClassName}
@@ -77,7 +106,7 @@ export const RepairsForm = ({
               onChange={(event) => onFieldChange('sourceType', event.target.value as RepairFormData['sourceType'])}
             >
               <option value="WORK_ORDER">Orden de trabajo</option>
-              <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
+              <option value="EXTERNAL_REQUEST">NDP (repuestos comprados)</option>
             </select>
 
             {formData.sourceType === 'WORK_ORDER' ? (
@@ -94,18 +123,42 @@ export const RepairsForm = ({
                 ))}
               </select>
             ) : (
-              <select
-                className={inputClassName}
-                value={formData.externalRequestId}
-                onChange={(event) => onFieldChange('externalRequestId', event.target.value)}
-              >
-                <option value="">Seleccionar nota externa</option>
-                {externalRequests.map((request) => (
-                  <option key={request.id} value={request.id}>
-                    {request.code ?? request.id.slice(0, 8)} - {request.companyName}
-                  </option>
-                ))}
-              </select>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">NDP elegibles</p>
+                {eligibleExternalRequests.length === 0 ? (
+                  <p className="mt-2 text-xs text-slate-600">No hay NDP listas para reparar (requieren adjunto y estado listo).</p>
+                ) : (
+                  <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
+                    {eligibleExternalRequests.map((request) => {
+                      const checked = selectedExternalRequestIds.includes(request.id)
+                      const currency = toCurrency(request.currency)
+                      const formatter = new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'es-AR', {
+                        style: 'currency',
+                        currency,
+                      })
+                      const partTotal = Number(request.partsTotal ?? 0)
+                      return (
+                        <label
+                          key={request.id}
+                          className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleExternalRequest(request)}
+                            className="mt-0.5 h-4 w-4"
+                          />
+                          <span className="flex-1 text-slate-700">
+                            <strong>{request.code}</strong> - {request.companyName}
+                            <br />
+                            Repuestos: {formatter.format(Number.isFinite(partTotal) ? partTotal : 0)}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </FormRow>
@@ -183,6 +236,7 @@ export const RepairsForm = ({
             <select
               className={inputClassName}
               value={formData.currency}
+              disabled={formData.sourceType === 'EXTERNAL_REQUEST' && selectedExternalRequestIds.length > 0}
               onChange={(event) => onFieldChange('currency', event.target.value as RepairFormData['currency'])}
             >
               <option value="ARS">ARS - Peso argentino</option>
@@ -191,12 +245,21 @@ export const RepairsForm = ({
           </FormRow>
         </div>
 
+        {formData.sourceType === 'EXTERNAL_REQUEST' ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+            <p className="font-semibold">NDP vinculadas: {selectedExternalRequests.length}</p>
+            <p className="mt-1">
+              Repuestos acumulados: <span className="font-semibold">{moneyFormatter.format(partsCost)}</span>
+            </p>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <FormRow label="Costo real" errorMessage={errors.realCostInput}>
+          <FormRow label="Mano de obra" errorMessage={errors.laborCostInput}>
             <input
               className={inputClassName}
-              value={formData.realCostInput}
-              onChange={(event) => onFieldChange('realCostInput', event.target.value)}
+              value={formData.laborCostInput}
+              onChange={(event) => onFieldChange('laborCostInput', event.target.value)}
               placeholder="Ej: 580000"
             />
           </FormRow>
@@ -212,9 +275,10 @@ export const RepairsForm = ({
         </div>
 
         <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-          <span className="font-semibold">Costo al cliente:</span> {moneyFormatter.format(invoicedToClient)}
-          <span className="ml-3 font-semibold">Margen:</span>{' '}
-          {moneyFormatter.format(margin)}
+          <span className="font-semibold">Costo repuestos:</span> {moneyFormatter.format(partsCost)}
+          <span className="ml-3 font-semibold">Costo total real:</span> {moneyFormatter.format(realCost)}
+          <span className="ml-3 font-semibold">Costo al cliente:</span> {moneyFormatter.format(invoicedToClient)}
+          <span className="ml-3 font-semibold">Margen:</span> {moneyFormatter.format(margin)}
         </p>
 
         {formData.sourceType === 'EXTERNAL_REQUEST' ? (

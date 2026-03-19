@@ -21,6 +21,7 @@ import { apiRequest } from '../../../services/api/apiClient'
 import { BackLink } from '../../../components/shared/BackLink'
 
 const allUnitsFilter = 'ALL'
+const toCurrency = (value: string | undefined): 'ARS' | 'USD' => (value === 'USD' ? 'USD' : 'ARS')
 
 export const RepairsPage = () => {
   const { can } = usePermissions()
@@ -79,10 +80,30 @@ export const RepairsPage = () => {
   }
 
   const handleFieldChange = <TField extends RepairFormField>(field: TField, value: RepairFormData[TField]) => {
-    setFormData((previousFormData) => ({
-      ...previousFormData,
-      [field]: value,
-    }))
+    setFormData((previousFormData) => {
+      const next = {
+        ...previousFormData,
+        [field]: value,
+      }
+
+      if (field === 'sourceType') {
+        const nextSourceType = value as RepairFormData['sourceType']
+        if (nextSourceType === 'WORK_ORDER') {
+          next.linkedExternalRequestIds = []
+        }
+      }
+
+      if (field === 'linkedExternalRequestIds') {
+        const nextIds = (value as string[]) ?? []
+        if (nextIds.length > 0) {
+          const firstRequest = externalRequests.find((request) => request.id === nextIds[0])
+          next.currency = toCurrency(firstRequest?.currency)
+          next.sourceType = 'EXTERNAL_REQUEST'
+        }
+      }
+
+      return next
+    })
 
     setErrors((previousErrors) => ({
       ...previousErrors,
@@ -95,7 +116,7 @@ export const RepairsPage = () => {
       return
     }
 
-    const validationErrors = validateRepairFormData(formData, workOrders, externalRequests)
+    const validationErrors = validateRepairFormData(formData, workOrders, externalRequests, editingRepairId)
 
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
@@ -229,6 +250,7 @@ export const RepairsPage = () => {
               formData={formData}
               errors={errors}
               isEditing={Boolean(editingRepairId)}
+              currentRepairId={editingRepairId}
               onFieldChange={handleFieldChange}
               onSubmit={handleSubmit}
               onCancelEdit={resetForm}
@@ -245,7 +267,7 @@ export const RepairsPage = () => {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Historial por unidad</h3>
-                <p className="mt-1 text-sm text-slate-600">Control de reparaciones vinculadas a OT.</p>
+                <p className="mt-1 text-sm text-slate-600">Control de reparaciones por OT y NDP vinculadas.</p>
               </div>
 
               <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">

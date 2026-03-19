@@ -1,6 +1,6 @@
 ﻿# ENERTRANS SIGF - Contexto Vivo del Proyecto
 
-Ultima actualizacion: 2026-03-16
+Ultima actualizacion: 2026-03-19
 Responsable de actualizacion: Codex (este chat)
 Objetivo: que cualquier dev (o nuevo chat) tenga contexto operativo completo sin depender del historial conversacional.
 
@@ -111,6 +111,16 @@ Resumen visible en modal DEV de cola:
 ## 8) Timeline de cambios (base historica)
 
 Fuente: historial git (ultimos commits visibles en este entorno).
+
+- Fecha: 2026-03-19
+  Cambio: Integracion profesional de repuestos comprados al circuito `NDP -> Reparacion`.
+  Alcance:
+  - NDP (`ExternalRequest`) con `currency`, `partsItems`, `partsTotal`, `eligibilityStatus`, `linkedRepairId`.
+  - Reparaciones (`RepairRecord`) con `linkedExternalRequestIds`, `laborCost`, `partsCost`; `realCost` consolidado server-side.
+  - Validaciones backend: NDP sin adjunto no elegible, moneda unica por reparacion, NDP ya vinculada rechazada.
+  - Cardinalidad: una reparacion puede vincular varias NDP; una NDP solo puede estar en una reparacion.
+  - UI: NDP con editor de items y estado de elegibilidad; Reparaciones con seleccion multiple de NDP, resumen de repuestos y mano de obra separada.
+  - Compatibilidad runtime: SQL de backfill/columnas y relacion FK para reducir riesgo por drift de schema en produccion.
 
 ### Cambios previos recientes (ya en `main`)
 - `ca25787` cola offline: filtro "solo con error" + contadores.

@@ -245,6 +245,9 @@ model RepairRecord {
   unitKilometers   Int      @default(0)
   currency         CurrencyCode @default(ARS)
   supplierName     String
+  linkedExternalRequestIds Json   @default("[]")
+  laborCost         Float   @default(0)
+  partsCost         Float   @default(0)
   realCost         Float
   invoicedToClient Float
   margin           Float
@@ -256,6 +259,7 @@ model RepairRecord {
 
   unit FleetUnit @relation(fields: [unitId], references: [id])
   supplier Supplier? @relation(fields: [supplierId], references: [id])
+  externalRequestsLinked ExternalRequest[] @relation("ExternalRequestsLinkedToRepair")
 }
 
 model InventoryItem {
@@ -276,12 +280,20 @@ model ExternalRequest {
   companyName String
   description String
   tasks       Json
+  currency    String   @default("ARS")
+  partsItems  Json     @default("[]")
+  partsTotal  Float    @default(0)
+  eligibilityStatus String @default("PENDING_ATTACHMENT")
+  linkedRepairId String?
   providerFileName String   @default("")
   providerFileUrl  String   @default("")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   unit FleetUnit @relation(fields: [unitId], references: [id])
+  linkedRepair RepairRecord? @relation("ExternalRequestsLinkedToRepair", fields: [linkedRepairId], references: [id])
+
+  @@index([linkedRepairId])
 }
 
 model FleetMovement {

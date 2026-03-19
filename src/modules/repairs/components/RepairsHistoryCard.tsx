@@ -36,9 +36,14 @@ export const RepairsHistoryCard = ({ item, onEdit, onDelete, canEdit = true, can
 
       <div className="mt-4 space-y-2 text-sm text-slate-700">
         <p>
-          <span className="font-semibold">{item.sourceType === 'EXTERNAL_REQUEST' ? 'Nota externa:' : 'OT:'}</span>{' '}
+          <span className="font-semibold">{item.sourceType === 'EXTERNAL_REQUEST' ? 'NDP:' : 'OT:'}</span>{' '}
           {item.sourceType === 'EXTERNAL_REQUEST' ? item.externalRequestLabel : item.workOrderLabel}
         </p>
+        {item.sourceType === 'EXTERNAL_REQUEST' && item.linkedExternalRequestLabels.length > 1 ? (
+          <p>
+            <span className="font-semibold">NDP vinculadas:</span> {item.linkedExternalRequestLabels.length}
+          </p>
+        ) : null}
         <p>
           <span className="font-semibold">Proveedor:</span> {item.supplierName}
         </p>
@@ -55,7 +60,13 @@ export const RepairsHistoryCard = ({ item, onEdit, onDelete, canEdit = true, can
           <span className="font-semibold">Moneda:</span> {item.currency}
         </p>
         <p>
-          <span className="font-semibold">Costo real:</span> {moneyFormatter.format(item.realCost)}
+          <span className="font-semibold">Mano de obra:</span> {moneyFormatter.format(item.laborCost)}
+        </p>
+        <p>
+          <span className="font-semibold">Repuestos:</span> {moneyFormatter.format(item.partsCost)}
+        </p>
+        <p>
+          <span className="font-semibold">Costo total real:</span> {moneyFormatter.format(item.realCost)}
         </p>
         <p>
           <span className="font-semibold">Facturado cliente:</span> {moneyFormatter.format(item.invoicedToClient)}

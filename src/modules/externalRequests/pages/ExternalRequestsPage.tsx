@@ -10,12 +10,15 @@ import { BackLink } from '../../../components/shared/BackLink'
 import { exportExternalRequestPdf } from '../services/externalRequestPdfService'
 import {
   buildExternalRequestView,
+  calculatePartsTotal,
   createEmptyExternalRequestFormData,
+  createEmptyPartItemFormData,
   toExternalRequest,
   validateExternalRequestFormData,
   type ExternalRequestFormData,
   type ExternalRequestFormErrors,
 } from '../services/externalRequestsService'
+import type { ExternalRequest } from '../../../types/domain'
 
 export const ExternalRequestsPage = () => {
   const { can } = usePermissions()
@@ -31,6 +34,7 @@ export const ExternalRequestsPage = () => {
   const [errors, setErrors] = useState<ExternalRequestFormErrors>({})
   const [providerFile, setProviderFile] = useState<File | null>(null)
   const [providerFileInputKey, setProviderFileInputKey] = useState(0)
+  const [uploadingAttachmentId, setUploadingAttachmentId] = useState<string | null>(null)
   const [unitFilter, setUnitFilter] = useState<string>('ALL')
   const [searchTerm, setSearchTerm] = useState('')
   const [unitSearch, setUnitSearch] = useState('')
@@ -64,7 +68,7 @@ export const ExternalRequestsPage = () => {
       if (!normalized) {
         return true
       }
-      const haystack = [item.code, item.unitLabel, item.description].join(' ').toLowerCase()
+      const haystack = [item.code, item.unitLabel, item.description, item.companyName].join(' ').toLowerCase()
       return haystack.includes(normalized)
     })
   }, [requestsView, unitFilter, searchTerm])
@@ -100,6 +104,35 @@ export const ExternalRequestsPage = () => {
     }
   }
 
+  const handlePartRowChange = (
+    rowId: string,
+    field: 'description' | 'quantityInput' | 'unitPriceInput',
+    value: string,
+  ) => {
+    setFormData((previous) => ({
+      ...previous,
+      partsItems: previous.partsItems.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)),
+    }))
+    setErrors((previous) => ({ ...previous, partsItems: undefined }))
+  }
+
+  const handleAddPartRow = () => {
+    setFormData((previous) => ({
+      ...previous,
+      partsItems: [...previous.partsItems, createEmptyPartItemFormData()],
+    }))
+  }
+
+  const handleRemovePartRow = (rowId: string) => {
+    setFormData((previous) => {
+      const nextRows = previous.partsItems.filter((row) => row.id !== rowId)
+      return {
+        ...previous,
+        partsItems: nextRows.length > 0 ? nextRows : [createEmptyPartItemFormData()],
+      }
+    })
+  }
+
   const resetForm = () => {
     setFormData(createEmptyExternalRequestFormData(''))
     setErrors({})
@@ -116,6 +149,14 @@ export const ExternalRequestsPage = () => {
     return orderedUnits.find((unit) => normalizeDomain(unit.internalCode) === query)?.id ?? ''
   }
 
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo.'))
+      reader.readAsDataURL(file)
+    })
+
   const handleSubmit = async () => {
     if (!canCreate) {
       return
@@ -127,14 +168,6 @@ export const ExternalRequestsPage = () => {
       setErrors(validationErrors)
       return
     }
-
-    const readFileAsDataUrl = (file: File): Promise<string> =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-        reader.onerror = () => reject(new Error('No se pudo leer el archivo.'))
-        reader.readAsDataURL(file)
-      })
 
     const unitCode = fleetUnits.find((unit) => unit.id === resolvedUnitId)?.internalCode ?? ''
     let providerFileBase64 = ''
@@ -174,6 +207,7 @@ export const ExternalRequestsPage = () => {
       },
       unitCode,
     )
+
     setExternalRequests([request, ...externalRequests])
     enqueueAndSync({
       id: `externalRequest.create.${request.id}`,
@@ -182,6 +216,45 @@ export const ExternalRequestsPage = () => {
       createdAt: new Date().toISOString(),
     })
     resetForm()
+  }
+
+  const handleAttachProviderFile = async (request: ExternalRequest, file?: File | null) => {
+    if (!file) {
+      return
+    }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setAppError('Para adjuntar o reemplazar presupuesto debes tener conexion.')
+      return
+    }
+
+    setUploadingAttachmentId(request.id)
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      const upload = await apiRequest<{ url: string }>('/files/upload', {
+        method: 'POST',
+        body: {
+          fileName: file.name,
+          contentType: file.type || 'application/octet-stream',
+          dataUrl,
+          folder: 'external-requests',
+        },
+      })
+
+      const updated = await apiRequest<ExternalRequest>(`/external-requests/${request.id}`, {
+        method: 'PATCH',
+        body: {
+          providerFileName: file.name,
+          providerFileUrl: upload.url,
+        },
+      })
+
+      setExternalRequests(externalRequests.map((item) => (item.id === request.id ? updated : item)))
+      setAppError('Presupuesto adjuntado correctamente.')
+    } catch {
+      setAppError('No se pudo adjuntar el presupuesto a la NDP.')
+    } finally {
+      setUploadingAttachmentId(null)
+    }
   }
 
   const handleExport = async (requestId: string) => {
@@ -202,7 +275,7 @@ export const ExternalRequestsPage = () => {
       return
     }
 
-    const confirmed = window.confirm('Â¿Eliminar esta nota de pedido externo?')
+    const confirmed = window.confirm('¿Eliminar esta nota de pedido externo?')
     if (!confirmed) {
       return
     }
@@ -260,6 +333,8 @@ export const ExternalRequestsPage = () => {
     )
   }
 
+  const formPartsTotal = calculatePartsTotal(formData.partsItems)
+
   return (
     <section className="space-y-5">
       <header>
@@ -273,7 +348,7 @@ export const ExternalRequestsPage = () => {
           {canCreate ? (
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900">Nueva nota</h3>
-              <p className="mt-1 text-sm text-slate-600">Asocia una unidad y detalla los trabajos.</p>
+              <p className="mt-1 text-sm text-slate-600">Asocia unidad, repuestos comprados y presupuesto proveedor.</p>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
                 Unidad
@@ -307,6 +382,19 @@ export const ExternalRequestsPage = () => {
               </label>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                Moneda
+                <select
+                  value={formData.currency}
+                  onChange={(event) => handleFieldChange('currency', event.target.value as ExternalRequestFormData['currency'])}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                >
+                  <option value="ARS">ARS - Peso argentino</option>
+                  <option value="USD">USD - Dolar estadounidense</option>
+                </select>
+                {errors.currency ? <span className="text-xs font-semibold text-rose-700">{errors.currency}</span> : null}
+              </label>
+
+              <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
                 Descripcion del pedido
                 <textarea
                   rows={3}
@@ -319,6 +407,57 @@ export const ExternalRequestsPage = () => {
                   <span className="text-xs font-semibold text-rose-700">{errors.description}</span>
                 ) : null}
               </label>
+
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-700">Repuestos comprados</p>
+                  <button
+                    type="button"
+                    onClick={handleAddPartRow}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Agregar item
+                  </button>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {formData.partsItems.map((row, index) => (
+                    <div key={row.id} className="grid grid-cols-12 gap-2">
+                      <input
+                        className="col-span-6 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900"
+                        placeholder={`Descripcion item ${index + 1}`}
+                        value={row.description}
+                        onChange={(event) => handlePartRowChange(row.id, 'description', event.target.value)}
+                      />
+                      <input
+                        className="col-span-2 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900"
+                        placeholder="Cant"
+                        value={row.quantityInput}
+                        onChange={(event) => handlePartRowChange(row.id, 'quantityInput', event.target.value)}
+                      />
+                      <input
+                        className="col-span-3 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900"
+                        placeholder="P.Unit"
+                        value={row.unitPriceInput}
+                        onChange={(event) => handlePartRowChange(row.id, 'unitPriceInput', event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePartRow(row.id)}
+                        className="col-span-1 rounded-lg border border-rose-300 bg-rose-50 px-2 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {errors.partsItems ? <p className="mt-2 text-xs font-semibold text-rose-700">{errors.partsItems}</p> : null}
+                <p className="mt-3 text-sm font-semibold text-slate-700">
+                  Total repuestos: {new Intl.NumberFormat(formData.currency === 'USD' ? 'en-US' : 'es-AR', {
+                    style: 'currency',
+                    currency: formData.currency,
+                  }).format(formPartsTotal)}
+                </p>
+              </div>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
                 Trabajos solicitados (uno por linea)
@@ -335,7 +474,7 @@ export const ExternalRequestsPage = () => {
               </label>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
-                Archivo del proveedor (opcional)
+                Presupuesto / archivo proveedor (opcional)
                 <input
                   key={providerFileInputKey}
                   type="file"
@@ -344,7 +483,9 @@ export const ExternalRequestsPage = () => {
                 />
                 {providerFile ? (
                   <span className="text-xs text-slate-500">Adjunto: {providerFile.name}</span>
-                ) : null}
+                ) : (
+                  <span className="text-xs text-amber-700">Sin adjunto: la NDP quedara pendiente para vincular a reparacion.</span>
+                )}
               </label>
 
               <div className="mt-5 flex justify-end gap-2">
@@ -414,63 +555,111 @@ export const ExternalRequestsPage = () => {
                   No hay notas para el filtro seleccionado.
                 </div>
               ) : (
-                filteredRequests.map((request) => (
-                  <article key={request.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nota externa</p>
-                        <h4 className="mt-1 text-base font-bold text-slate-900">{request.code}</h4>
-                        <p className="mt-1 text-sm text-slate-600">{request.unitLabel}</p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">{request.companyName}</p>
+                filteredRequests.map((request) => {
+                  const moneyFormatter = new Intl.NumberFormat(request.currency === 'USD' ? 'en-US' : 'es-AR', {
+                    style: 'currency',
+                    currency: request.currency,
+                  })
+
+                  return (
+                    <article key={request.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nota externa</p>
+                          <h4 className="mt-1 text-base font-bold text-slate-900">{request.code}</h4>
+                          <p className="mt-1 text-sm text-slate-600">{request.unitLabel}</p>
+                          <p className="mt-1 text-xs font-semibold text-slate-500">{request.companyName}</p>
+                        </div>
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                          {new Date(request.createdAt ?? new Date().toISOString()).toLocaleDateString('es-AR')}
+                        </span>
                       </div>
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
-                        {new Date(request.createdAt ?? new Date().toISOString()).toLocaleDateString('es-AR')}
-                      </span>
-                    </div>
 
-                    <p className="mt-3 text-sm text-slate-600">{request.description}</p>
-                    <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-sm text-slate-600">
-                      {request.tasks.map((task) => (
-                        <li key={`${request.id}-${task}`}>{task}</li>
-                      ))}
-                    </ul>
-
-                    {request.providerFileUrl || request.providerFileName ? (
-                      <p className="mt-3 text-xs text-slate-500">
-                        Adjunto proveedor: {request.providerFileName ?? 'Archivo'}
-                      </p>
-                    ) : null}
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {request.providerFileUrl ? (
-                        <a
-                          href={request.providerFileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                      <div className="mt-2 flex items-center gap-2 text-xs">
+                        <span
+                          className={`rounded-full border px-2 py-1 font-semibold ${
+                            request.eligibilityStatus === 'READY_FOR_REPAIR'
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                              : 'border-amber-300 bg-amber-50 text-amber-700'
+                          }`}
                         >
-                          Ver adjunto
-                        </a>
+                          {request.eligibilityStatus === 'READY_FOR_REPAIR' ? 'Lista para reparacion' : 'Pendiente adjunto'}
+                        </span>
+                        {request.linkedRepairId ? (
+                          <span className="rounded-full border border-sky-300 bg-sky-50 px-2 py-1 font-semibold text-sky-700">
+                            Vinculada a reparacion
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <p className="mt-3 text-sm text-slate-600">{request.description}</p>
+                      <ul className="mt-3 flex list-disc flex-col gap-1 pl-5 text-sm text-slate-600">
+                        {request.tasks.map((task) => (
+                          <li key={`${request.id}-${task}`}>{task}</li>
+                        ))}
+                      </ul>
+
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                        <p className="text-xs font-semibold text-slate-700">Repuestos ({request.partsItems.length} items)</p>
+                        <p className="text-sm font-bold text-slate-900">Total: {moneyFormatter.format(request.partsTotal)}</p>
+                      </div>
+
+                      {request.providerFileUrl || request.providerFileName ? (
+                        <p className="mt-3 text-xs text-slate-500">
+                          Adjunto proveedor: {request.providerFileName ?? 'Archivo'}
+                        </p>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => handleExport(request.id)}
-                        className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
-                      >
-                        Imprimir nota
-                      </button>
-                      {canDelete ? (
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {request.providerFileUrl ? (
+                          <a
+                            href={request.providerFileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            Ver adjunto
+                          </a>
+                        ) : null}
+
+                        <label className="inline-flex cursor-pointer items-center rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100">
+                          {uploadingAttachmentId === request.id
+                            ? 'Adjuntando...'
+                            : request.providerFileUrl
+                              ? 'Reemplazar presupuesto'
+                              : 'Adjuntar presupuesto'}
+                          <input
+                            type="file"
+                            className="hidden"
+                            disabled={uploadingAttachmentId === request.id}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0]
+                              void handleAttachProviderFile(request, file)
+                              event.target.value = ''
+                            }}
+                          />
+                        </label>
+
                         <button
                           type="button"
-                          onClick={() => void handleDelete(request.id)}
-                          className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                          onClick={() => handleExport(request.id)}
+                          className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
                         >
-                          Eliminar
+                          Imprimir nota
                         </button>
-                      ) : null}
-                    </div>
-                  </article>
-                ))
+                        {canDelete ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(request.id)}
+                            className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                          >
+                            Eliminar
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  )
+                })
               )}
             </div>
           </section>
@@ -479,5 +668,3 @@ export const ExternalRequestsPage = () => {
     </section>
   )
 }
-
-

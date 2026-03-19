@@ -258,6 +258,61 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(
     `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoAttachedByUserName" TEXT NOT NULL DEFAULT '';`,
   )
+
+  // NDP/Reparaciones: columnas para repuestos comprados vinculados a reparacion.
+  await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "currency" TEXT NOT NULL DEFAULT 'ARS';`)
+  await safeExecuteCompatSql(
+    `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "partsItems" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "partsTotal" DOUBLE PRECISION NOT NULL DEFAULT 0;`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "eligibilityStatus" TEXT NOT NULL DEFAULT 'PENDING_ATTACHMENT';`,
+  )
+  await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "linkedRepairId" TEXT;`)
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "ExternalRequest_linkedRepairId_idx" ON "ExternalRequest"("linkedRepairId");`,
+  )
+  await safeExecuteCompatSql(
+    `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "linkedExternalRequestIds" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+  )
+  await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "laborCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
+  await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "partsCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
+  await safeExecuteCompatSql(`
+    UPDATE "ExternalRequest"
+    SET "eligibilityStatus" = CASE
+      WHEN COALESCE("providerFileUrl", '') <> '' THEN 'READY_FOR_REPAIR'
+      ELSE 'PENDING_ATTACHMENT'
+    END
+    WHERE "eligibilityStatus" NOT IN ('PENDING_ATTACHMENT', 'READY_FOR_REPAIR');
+  `)
+  await safeExecuteCompatSql(`
+    UPDATE "RepairRecord"
+    SET "linkedExternalRequestIds" = jsonb_build_array("externalRequestId")
+    WHERE COALESCE("externalRequestId", '') <> ''
+      AND COALESCE(jsonb_array_length("linkedExternalRequestIds"), 0) = 0;
+  `)
+  await safeExecuteCompatSql(`
+    UPDATE "RepairRecord"
+    SET "laborCost" = COALESCE("realCost", 0)
+    WHERE COALESCE("laborCost", 0) = 0
+      AND COALESCE("partsCost", 0) = 0;
+  `)
+  await safeExecuteCompatSql(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ExternalRequest_linkedRepairId_fkey'
+      ) THEN
+        ALTER TABLE "ExternalRequest"
+          ADD CONSTRAINT "ExternalRequest_linkedRepairId_fkey"
+          FOREIGN KEY ("linkedRepairId") REFERENCES "RepairRecord"("id")
+          ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+    END
+    $$;
+  `)
 }
 
 const activateSchema = async (schema: string): Promise<boolean> => {
