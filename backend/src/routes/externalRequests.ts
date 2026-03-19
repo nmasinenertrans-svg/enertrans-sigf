@@ -305,9 +305,17 @@ router.get('/', async (_req, res) => {
   })
 
   try {
-    const items = await runWithSchemaFailover(() => prisma.externalRequest.findMany({ orderBy: { createdAt: 'desc' } }))
+    // Para lectura mas robusta, priorizamos el recovery SQL multi-schema.
+    // Evita que un mismatch del modelo Prisma deje al frontend con cache parcial.
     const recovered = await recoveryPromise
-    return res.json(mergeExternalRequests(items, recovered))
+    if (recovered.length > 0) {
+      return res.json(recovered)
+    }
+
+    const fallbackItems = await runWithSchemaFailover(() =>
+      prisma.externalRequest.findMany({ orderBy: { createdAt: 'desc' } }),
+    )
+    return res.json(fallbackItems)
   } catch (error: any) {
     console.error('ExternalRequest GET error:', error)
     const recovered = await recoveryPromise
