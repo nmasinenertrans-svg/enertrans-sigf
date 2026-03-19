@@ -8,6 +8,7 @@ const router = Router()
 
 const CURRENCY_VALUES = ['ARS', 'USD'] as const
 const ELIGIBILITY_VALUES = ['PENDING_ATTACHMENT', 'READY_FOR_REPAIR'] as const
+const EXTERNAL_REQUEST_RECOVERY_SCHEMAS = ['enertrans_prod', 'public'] as const
 
 const externalRequestPartItemSchema = z.object({
   description: z.string().min(1).max(240),
@@ -42,6 +43,23 @@ type ExternalRequestPartItem = {
   quantity: number
   unitPrice: number
   lineTotal: number
+}
+type RecoveryExternalRequestRow = {
+  id: string
+  code: string
+  unitId: string
+  companyName: string
+  description: string
+  tasks: unknown
+  currency: string | null
+  partsItems: unknown
+  partsTotal: number | null
+  eligibilityStatus: string | null
+  linkedRepairId: string | null
+  providerFileName: string | null
+  providerFileUrl: string | null
+  createdAt: Date | string
+  updatedAt: Date | string
 }
 
 const normalizeCurrency = (value: unknown): (typeof CURRENCY_VALUES)[number] => {
@@ -85,6 +103,134 @@ const calculatePartsTotal = (items: ExternalRequestPartItem[]): number =>
 
 const resolveEligibilityStatus = (providerFileUrl: string): (typeof ELIGIBILITY_VALUES)[number] =>
   providerFileUrl.trim() ? 'READY_FOR_REPAIR' : 'PENDING_ATTACHMENT'
+
+const isSafeSqlIdentifier = (value: string) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)
+
+const asIsoString = (value: Date | string | null | undefined): string | undefined => {
+  if (!value) {
+    return undefined
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value.toISOString()
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined
+  }
+  return parsed.toISOString()
+}
+
+const mapRecoveryExternalRequestToPublicShape = (row: RecoveryExternalRequestRow) => ({
+  id: row.id,
+  code: row.code,
+  unitId: row.unitId,
+  companyName: row.companyName,
+  description: row.description,
+  tasks: Array.isArray(row.tasks) ? row.tasks.map((task) => String(task ?? '').trim()).filter(Boolean) : [],
+  currency: normalizeCurrency(row.currency),
+  partsItems: normalizePartItems(row.partsItems),
+  partsTotal: Number.isFinite(row.partsTotal ?? NaN) ? Number(row.partsTotal) : 0,
+  eligibilityStatus:
+    row.eligibilityStatus === 'READY_FOR_REPAIR' ? ('READY_FOR_REPAIR' as const) : ('PENDING_ATTACHMENT' as const),
+  linkedRepairId: row.linkedRepairId ?? null,
+  providerFileName: row.providerFileName ?? '',
+  providerFileUrl: row.providerFileUrl ?? '',
+  createdAt: asIsoString(row.createdAt),
+  updatedAt: asIsoString(row.updatedAt),
+})
+
+const mergeExternalRequests = (primary: any[], secondary: any[]) => {
+  const map = new Map<string, any>()
+  const push = (item: any) => {
+    if (!item?.id) {
+      return
+    }
+    const previous = map.get(item.id)
+    if (!previous) {
+      map.set(item.id, item)
+      return
+    }
+    const previousTime = new Date(previous.updatedAt ?? previous.createdAt ?? 0).getTime()
+    const nextTime = new Date(item.updatedAt ?? item.createdAt ?? 0).getTime()
+    if (nextTime >= previousTime) {
+      map.set(item.id, item)
+    }
+  }
+
+  primary.forEach(push)
+  secondary.forEach(push)
+
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
+  )
+}
+
+const listExternalRequestsFromRecoverySchemas = async () => {
+  const schemaRows = await prisma.$queryRaw<{ schema_name: string }[]>`
+    SELECT DISTINCT n.nspname AS schema_name
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname = 'ExternalRequest'
+  `
+
+  const targetSchemas = schemaRows
+    .map((row) => row.schema_name)
+    .filter((schema) => EXTERNAL_REQUEST_RECOVERY_SCHEMAS.includes(schema as (typeof EXTERNAL_REQUEST_RECOVERY_SCHEMAS)[number]))
+
+  const allRows: RecoveryExternalRequestRow[] = []
+
+  for (const schema of targetSchemas) {
+    if (!isSafeSqlIdentifier(schema)) {
+      continue
+    }
+
+    const columnRows = await prisma.$queryRaw<{ column_name: string }[]>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = ${schema}
+        AND table_name = 'ExternalRequest'
+    `
+    const columns = new Set(columnRows.map((row) => row.column_name))
+    const currencySelect = columns.has('currency') ? `"currency"::text` : `'ARS'::text AS "currency"`
+    const partsItemsSelect = columns.has('partsItems') ? `"partsItems"` : `'[]'::jsonb AS "partsItems"`
+    const partsTotalSelect = columns.has('partsTotal') ? `"partsTotal"` : `0 AS "partsTotal"`
+    const eligibilitySelect = columns.has('eligibilityStatus')
+      ? `"eligibilityStatus"`
+      : `CASE WHEN COALESCE("providerFileUrl", '') <> '' THEN 'READY_FOR_REPAIR' ELSE 'PENDING_ATTACHMENT' END AS "eligibilityStatus"`
+    const linkedRepairSelect = columns.has('linkedRepairId') ? `"linkedRepairId"` : `NULL::text AS "linkedRepairId"`
+    const providerFileNameSelect = columns.has('providerFileName')
+      ? `"providerFileName"`
+      : `''::text AS "providerFileName"`
+    const providerFileUrlSelect = columns.has('providerFileUrl') ? `"providerFileUrl"` : `''::text AS "providerFileUrl"`
+    const updatedAtSelect = columns.has('updatedAt') ? `"updatedAt"` : `"createdAt" AS "updatedAt"`
+
+    const query = `
+      SELECT
+        "id",
+        "code",
+        "unitId",
+        "companyName",
+        "description",
+        "tasks",
+        ${currencySelect},
+        ${partsItemsSelect},
+        ${partsTotalSelect},
+        ${eligibilitySelect},
+        ${linkedRepairSelect},
+        ${providerFileNameSelect},
+        ${providerFileUrlSelect},
+        "createdAt",
+        ${updatedAtSelect}
+      FROM "${schema}"."ExternalRequest"
+      ORDER BY "createdAt" DESC
+    `
+
+    const rows = await prisma.$queryRawUnsafe<RecoveryExternalRequestRow[]>(query)
+    allRows.push(...rows)
+  }
+
+  return allRows.map(mapRecoveryExternalRequestToPublicShape)
+}
 
 const toCreateData = (input: ExternalRequestInput) => {
   const partsItems = normalizePartItems(input.partsItems ?? [])
@@ -153,12 +299,22 @@ const toUpdateData = (input: ExternalRequestUpdateInput, existing: any) => {
 }
 
 router.get('/', async (_req, res) => {
+  const recoveryPromise = listExternalRequestsFromRecoverySchemas().catch((error) => {
+    console.error('ExternalRequest recovery GET error:', error)
+    return []
+  })
+
   try {
     const items = await runWithSchemaFailover(() => prisma.externalRequest.findMany({ orderBy: { createdAt: 'desc' } }))
-    return res.json(items)
+    const recovered = await recoveryPromise
+    return res.json(mergeExternalRequests(items, recovered))
   } catch (error: any) {
     console.error('ExternalRequest GET error:', error)
-    return res.json([])
+    const recovered = await recoveryPromise
+    if (recovered.length > 0) {
+      return res.json(recovered)
+    }
+    return res.status(500).json({ message: 'No se pudieron cargar las notas de pedido.' })
   }
 })
 
