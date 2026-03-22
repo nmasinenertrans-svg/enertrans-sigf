@@ -34,6 +34,7 @@ const dealSchema = z.object({
   stage: z.enum(stageValues).optional().default('LEAD'),
   expectedCloseDate: z.string().optional(),
   assignedToUserId: z.string().optional().nullable(),
+  lostReason: z.string().max(400).optional().default(''),
   notes: z.string().max(2000).optional().default(''),
 })
 
@@ -163,7 +164,7 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
           createdByUserId: req.userId,
           lastContactAt: new Date(),
           wonAt: stage === 'WON' ? new Date() : null,
-          lostReason: stage === 'LOST' ? normalizeText(parsed.data.notes) : '',
+          lostReason: stage === 'LOST' ? normalizeText(parsed.data.lostReason || parsed.data.notes) : '',
         },
         include: dealInclude,
       }),
@@ -175,7 +176,7 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
   }
 })
 
-router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req, res) => {
+router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req: any, res) => {
   const parsed = dealUpdateSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: 'Datos invalidos.' })
@@ -197,29 +198,55 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req, res) =>
     const nextExpectedCloseDate =
       parsed.data.expectedCloseDate !== undefined ? parseOptionalDate(parsed.data.expectedCloseDate) : undefined
 
+    const nextLostReason =
+      nextStage === 'LOST'
+        ? parsed.data.lostReason !== undefined
+          ? normalizeText(parsed.data.lostReason)
+          : parsed.data.stage !== undefined && parsed.data.stage !== existing.stage
+            ? normalizeText(parsed.data.notes ?? existing.notes)
+            : existing.lostReason
+        : ''
+
     const updated = await runWithSchemaFailover(() =>
-      prisma.crmDeal.update({
-        where: { id: dealId },
-        data: {
-          title: parsed.data.title !== undefined ? normalizeText(parsed.data.title) : undefined,
-          companyName: parsed.data.companyName !== undefined ? normalizeText(parsed.data.companyName) : undefined,
-          contactName: parsed.data.contactName !== undefined ? normalizeText(parsed.data.contactName) : undefined,
-          contactEmail: parsed.data.contactEmail !== undefined ? normalizeText(parsed.data.contactEmail) : undefined,
-          contactPhone: parsed.data.contactPhone !== undefined ? normalizeText(parsed.data.contactPhone) : undefined,
-          source: parsed.data.source !== undefined ? normalizeText(parsed.data.source) : undefined,
-          serviceLine: parsed.data.serviceLine !== undefined ? normalizeText(parsed.data.serviceLine) : undefined,
-          amount: parsed.data.amount !== undefined ? Number(parsed.data.amount) : undefined,
-          currency: parsed.data.currency,
-          stage: parsed.data.stage,
-          probability: nextProbability,
-          expectedCloseDate: nextExpectedCloseDate,
-          assignedToUserId: parsed.data.assignedToUserId,
-          notes: parsed.data.notes !== undefined ? normalizeText(parsed.data.notes) : undefined,
-          wonAt: nextStage === 'WON' ? existing.wonAt ?? new Date() : null,
-          lostReason: nextStage === 'LOST' ? existing.lostReason : '',
-          convertedClientId: nextStage === 'WON' ? existing.convertedClientId : existing.convertedClientId,
-        },
-        include: dealInclude,
+      prisma.$transaction(async (tx) => {
+        const deal = await tx.crmDeal.update({
+          where: { id: dealId },
+          data: {
+            title: parsed.data.title !== undefined ? normalizeText(parsed.data.title) : undefined,
+            companyName: parsed.data.companyName !== undefined ? normalizeText(parsed.data.companyName) : undefined,
+            contactName: parsed.data.contactName !== undefined ? normalizeText(parsed.data.contactName) : undefined,
+            contactEmail: parsed.data.contactEmail !== undefined ? normalizeText(parsed.data.contactEmail) : undefined,
+            contactPhone: parsed.data.contactPhone !== undefined ? normalizeText(parsed.data.contactPhone) : undefined,
+            source: parsed.data.source !== undefined ? normalizeText(parsed.data.source) : undefined,
+            serviceLine: parsed.data.serviceLine !== undefined ? normalizeText(parsed.data.serviceLine) : undefined,
+            amount: parsed.data.amount !== undefined ? Number(parsed.data.amount) : undefined,
+            currency: parsed.data.currency,
+            stage: parsed.data.stage,
+            probability: nextProbability,
+            expectedCloseDate: nextExpectedCloseDate,
+            assignedToUserId: parsed.data.assignedToUserId,
+            notes: parsed.data.notes !== undefined ? normalizeText(parsed.data.notes) : undefined,
+            wonAt: nextStage === 'WON' ? existing.wonAt ?? new Date() : null,
+            lostReason: nextLostReason,
+            lastContactAt: new Date(),
+          },
+          include: dealInclude,
+        })
+
+        if (parsed.data.stage !== undefined && parsed.data.stage !== existing.stage) {
+          await tx.crmActivity.create({
+            data: {
+              dealId,
+              type: 'TASK',
+              status: 'DONE',
+              summary: `Etapa actualizada a ${parsed.data.stage}`,
+              completedAt: new Date(),
+              createdByUserId: req.userId ?? existing.createdByUserId,
+            },
+          })
+        }
+
+        return deal
       }),
     )
     return res.json(updated)
@@ -229,7 +256,7 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req, res) =>
   }
 })
 
-router.patch('/deals/:id/stage', requirePermission('CRM', 'edit'), async (req, res) => {
+router.patch('/deals/:id/stage', requirePermission('CRM', 'edit'), async (req: any, res) => {
   const parsed = stageUpdateSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: 'Datos invalidos.' })
@@ -268,7 +295,7 @@ router.patch('/deals/:id/stage', requirePermission('CRM', 'edit'), async (req, r
             status: 'DONE',
             summary: `Etapa actualizada a ${stage}`,
             completedAt: new Date(),
-            createdByUserId: deal.createdByUserId,
+            createdByUserId: req.userId ?? deal.createdByUserId,
           },
         })
 
@@ -282,7 +309,7 @@ router.patch('/deals/:id/stage', requirePermission('CRM', 'edit'), async (req, r
   }
 })
 
-router.post('/deals/:id/convert-client', requirePermission('CRM', 'edit'), async (_req, res) => {
+router.post('/deals/:id/convert-client', requirePermission('CRM', 'edit'), async (_req: any, res) => {
   try {
     const dealId = typeof _req.params.id === 'string' ? _req.params.id : null
     if (!dealId) {
@@ -350,7 +377,7 @@ router.post('/deals/:id/convert-client', requirePermission('CRM', 'edit'), async
               ? `Oportunidad convertida a cliente (${client.name}).`
               : `Oportunidad vinculada a cliente existente (${client.name}).`,
             completedAt: new Date(),
-            createdByUserId: updatedDeal.createdByUserId,
+            createdByUserId: _req.userId ?? updatedDeal.createdByUserId,
           },
         })
 

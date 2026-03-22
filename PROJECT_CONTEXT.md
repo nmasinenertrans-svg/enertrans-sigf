@@ -808,6 +808,19 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - KPI monetarios del CRM se muestran en ARS por simplicidad visual; no hay conversion multi-moneda para consolidado global.
   - Conversion a cliente no genera todavia alta automatica de unidad/contrato ni workflows comerciales avanzados (seguimiento por SLA/recordatorios push).
+- Fecha: 2026-03-21
+  Cambio: Cierre funcional final de CRM Comercial (UX profesional de punta a punta) antes de deploy.
+  Archivos:
+  - `backend/src/routes/crm.ts`
+  - `src/modules/crm/pages/CrmPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se completa flujo operativo en una sola pantalla: alta + pipeline + detalle editable + agenda de actividades + conversion a cliente + eliminacion con confirmacion.
+  - Se corrige consistencia de auditoria interna del CRM: los cambios de etapa y conversion quedan atribuidos al usuario actor.
+  - Se habilita manejo explicito de oportunidades perdidas (`lostReason`) tanto en alta como en edicion.
+  Riesgo residual:
+  - Actividades CRM no tienen aun recordatorios push/email automáticos.
+  - No hay panel historico de cambios por campo (solo actividades y cambios de etapa).
 
 ## 9) Riesgos abiertos (a seguir)
 

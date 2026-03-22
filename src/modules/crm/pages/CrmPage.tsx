@@ -1,301 +1,220 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
-import type { CrmActivity, CrmDeal, CrmDealStage } from '../../../types/domain'
+import type { CrmActivity, CrmActivityType, CrmDeal, CrmDealStage } from '../../../types/domain'
 
 const STAGES: Array<{ key: CrmDealStage; label: string }> = [
-  { key: 'LEAD', label: 'Leads' },
-  { key: 'CONTACTED', label: 'Contactado' },
-  { key: 'QUALIFICATION', label: 'Calificado' },
-  { key: 'PROPOSAL', label: 'Propuesta' },
-  { key: 'NEGOTIATION', label: 'Negociacion' },
-  { key: 'WON', label: 'Ganadas' },
-  { key: 'LOST', label: 'Perdidas' },
+  { key: 'LEAD', label: 'Lead' }, { key: 'CONTACTED', label: 'Contactado' }, { key: 'QUALIFICATION', label: 'Calificado' },
+  { key: 'PROPOSAL', label: 'Propuesta' }, { key: 'NEGOTIATION', label: 'Negociacion' }, { key: 'WON', label: 'Ganada' }, { key: 'LOST', label: 'Perdida' },
+]
+const ACTIVITY_TYPES: Array<{ key: CrmActivityType; label: string }> = [
+  { key: 'CALL', label: 'Llamada' }, { key: 'WHATSAPP', label: 'WhatsApp' }, { key: 'EMAIL', label: 'Email' }, { key: 'MEETING', label: 'Reunion' }, { key: 'TASK', label: 'Tarea' },
 ]
 
-const EMPTY_FORM = { title: '', companyName: '', amount: '', currency: 'ARS' as 'ARS' | 'USD', assignedToUserId: '' }
-const EMPTY_ACTIVITY = { summary: '' }
+type DealForm = { title: string; companyName: string; contactName: string; contactEmail: string; contactPhone: string; source: string; serviceLine: string; amount: string; currency: 'ARS' | 'USD'; probability: string; stage: CrmDealStage; expectedCloseDate: string; assignedToUserId: string; notes: string; lostReason: string }
+type ActivityForm = { type: CrmActivityType; summary: string; dueAt: string }
 
-const money = (value: number, currency: 'ARS' | 'USD') =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0)
+const EMPTY_DEAL: DealForm = { title: '', companyName: '', contactName: '', contactEmail: '', contactPhone: '', source: '', serviceLine: '', amount: '', currency: 'ARS', probability: '', stage: 'LEAD', expectedCloseDate: '', assignedToUserId: '', notes: '', lostReason: '' }
+const EMPTY_ACTIVITY: ActivityForm = { type: 'TASK', summary: '', dueAt: '' }
 
-const stale = (dateValue?: string | null) => {
-  if (!dateValue) {
-    return true
-  }
-  const date = new Date(dateValue)
-  if (Number.isNaN(date.getTime())) {
-    return true
-  }
-  return Date.now() - date.getTime() > 1000 * 60 * 60 * 24 * 14
+const asDateInput = (value?: string | null) => (value ? new Date(value).toISOString().slice(0, 10) : '')
+const money = (value: number, currency: 'ARS' | 'USD') => new Intl.NumberFormat('es-AR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0)
+const sortTime = (item: CrmActivity) => new Date(item.dueAt || item.updatedAt || item.createdAt || 0).getTime() || 0
+const stale = (value?: string | null) => {
+  if (!value) return true
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) || Date.now() - ts > 1000 * 60 * 60 * 24 * 14
 }
-
-const getActivitySortTime = (activity: CrmActivity) => {
-  const value = activity.dueAt || activity.updatedAt || activity.createdAt
-  const parsed = value ? new Date(value).getTime() : 0
-  return Number.isNaN(parsed) ? 0 : parsed
-}
+const overdue = (activity: CrmActivity) => activity.status === 'PENDING' && Boolean(activity.dueAt) && new Date(activity.dueAt as string).getTime() < Date.now()
+const trim = (v: string) => v.trim()
+const num = (v: string, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d)
+const toForm = (deal: CrmDeal): DealForm => ({ title: deal.title || '', companyName: deal.companyName || '', contactName: deal.contactName || '', contactEmail: deal.contactEmail || '', contactPhone: deal.contactPhone || '', source: deal.source || '', serviceLine: deal.serviceLine || '', amount: String(deal.amount || 0), currency: deal.currency || 'ARS', probability: String(deal.probability || 0), stage: deal.stage, expectedCloseDate: asDateInput(deal.expectedCloseDate), assignedToUserId: deal.assignedToUserId || '', notes: deal.notes || '', lostReason: deal.lostReason || '' })
 
 export const CrmPage = () => {
   const { can } = usePermissions()
-  const {
-    state: { users },
-    actions: { setAppError },
-  } = useAppContext()
-
+  const { state: { users }, actions: { setAppError } } = useAppContext()
   const canCreate = can('CRM', 'create')
   const canEdit = can('CRM', 'edit')
   const canDelete = can('CRM', 'delete')
+  const salesUsers = useMemo(() => users.filter((u) => ['DEV', 'GERENTE', 'COORDINADOR'].includes(u.role)), [users])
 
   const [deals, setDeals] = useState<CrmDeal[]>([])
   const [activities, setActivities] = useState<CrmActivity[]>([])
+  const [selectedDealId, setSelectedDealId] = useState('')
   const [search, setSearch] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
   const [draggingDealId, setDraggingDealId] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
   const [stageDraft, setStageDraft] = useState<Record<string, CrmDealStage>>({})
-  const [activityDraft, setActivityDraft] = useState<Record<string, { summary: string }>>({})
-  const [isConvertingDealId, setIsConvertingDealId] = useState<string | null>(null)
+  const [createForm, setCreateForm] = useState<DealForm>(EMPTY_DEAL)
+  const [editForm, setEditForm] = useState<DealForm>(EMPTY_DEAL)
+  const [activityForm, setActivityForm] = useState<ActivityForm>(EMPTY_ACTIVITY)
+  const [confirmDelete, setConfirmDelete] = useState<CrmDeal | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isCreateSaving, setIsCreateSaving] = useState(false)
+  const [isEditSaving, setIsEditSaving] = useState(false)
+  const [isActivitySaving, setIsActivitySaving] = useState(false)
+  const [isConvertingId, setIsConvertingId] = useState<string | null>(null)
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
 
-  const salesUsers = useMemo(() => users.filter((u) => ['DEV', 'GERENTE', 'COORDINADOR'].includes(u.role)), [users])
-
-  const load = async () => {
+  const loadCrm = useCallback(async (withLoader = false) => {
+    if (withLoader) setIsLoading(true)
     try {
-      const response = await apiRequest<{ deals: CrmDeal[]; activities: CrmActivity[] }>('/crm')
-      const nextDeals = Array.isArray(response.deals) ? response.deals : []
+      const data = await apiRequest<{ deals: CrmDeal[]; activities: CrmActivity[] }>('/crm')
+      const nextDeals = Array.isArray(data.deals) ? data.deals : []
       setDeals(nextDeals)
-      setActivities(Array.isArray(response.activities) ? response.activities : [])
-      setStageDraft(nextDeals.reduce<Record<string, CrmDealStage>>((acc, d) => ({ ...acc, [d.id]: d.stage }), {}))
+      setActivities(Array.isArray(data.activities) ? data.activities : [])
+      setStageDraft(nextDeals.reduce<Record<string, CrmDealStage>>((acc, deal) => { acc[deal.id] = deal.stage; return acc }, {}))
+      setSelectedDealId((prev) => (prev && nextDeals.some((deal) => deal.id === prev) ? prev : nextDeals[0]?.id || ''))
     } catch {
       setAppError('No se pudo cargar CRM.')
     } finally {
-      setIsLoading(false)
+      if (withLoader) setIsLoading(false)
     }
-  }
+  }, [setAppError])
 
-  useEffect(() => {
-    void load()
-  }, [])
+  useEffect(() => { void loadCrm(true) }, [loadCrm])
 
   const filteredDeals = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.toLowerCase().trim()
     return deals.filter((deal) => {
-      if (ownerFilter && (deal.assignedToUserId || '') !== ownerFilter) {
-        return false
-      }
-      if (!q) {
-        return true
-      }
+      if (ownerFilter && (deal.assignedToUserId || '') !== ownerFilter) return false
+      if (!q) return true
       return [deal.title, deal.companyName, deal.contactName, deal.source, deal.serviceLine].join(' ').toLowerCase().includes(q)
     })
   }, [deals, ownerFilter, search])
 
+  useEffect(() => {
+    if (!filteredDeals.length) { setSelectedDealId(''); return }
+    if (!selectedDealId || !filteredDeals.some((deal) => deal.id === selectedDealId)) setSelectedDealId(filteredDeals[0].id)
+  }, [filteredDeals, selectedDealId])
+
+  const selectedDeal = useMemo(() => deals.find((deal) => deal.id === selectedDealId) ?? null, [deals, selectedDealId])
+  useEffect(() => { setEditForm(selectedDeal ? toForm(selectedDeal) : EMPTY_DEAL) }, [selectedDeal])
+  const selectedActivities = useMemo(() => activities.filter((a) => a.dealId === selectedDealId).sort((a, b) => sortTime(b) - sortTime(a)), [activities, selectedDealId])
+
   const kpis = useMemo(() => {
-    const openDeals = deals.filter((d) => d.stage !== 'WON' && d.stage !== 'LOST')
-    const pipeline = openDeals.reduce((sum, d) => sum + (d.amount || 0), 0)
-    const forecast = openDeals.reduce((sum, d) => sum + (d.amount || 0) * ((d.probability || 0) / 100), 0)
-    const won = deals.filter((d) => d.stage === 'WON').length
-    const lost = deals.filter((d) => d.stage === 'LOST').length
-    const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0
-    const staleCount = openDeals.filter((d) => stale(d.lastContactAt ?? d.updatedAt ?? d.createdAt)).length
-    return { pipeline, forecast, winRate, staleCount }
-  }, [deals])
+    const open = deals.filter((deal) => deal.stage !== 'WON' && deal.stage !== 'LOST')
+    const won = deals.filter((deal) => deal.stage === 'WON').length
+    const lost = deals.filter((deal) => deal.stage === 'LOST').length
+    return {
+      pipelineArs: open.filter((deal) => deal.currency === 'ARS').reduce((sum, deal) => sum + (deal.amount || 0), 0),
+      pipelineUsd: open.filter((deal) => deal.currency === 'USD').reduce((sum, deal) => sum + (deal.amount || 0), 0),
+      winRate: won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0,
+      pendingActivities: activities.filter((activity) => activity.status === 'PENDING').length,
+      overdueActivities: activities.filter((activity) => overdue(activity)).length,
+      staleDeals: open.filter((deal) => stale(deal.lastContactAt ?? deal.updatedAt ?? deal.createdAt)).length,
+    }
+  }, [activities, deals])
+
+  const payload = (form: DealForm) => ({ title: trim(form.title), companyName: trim(form.companyName), contactName: trim(form.contactName), contactEmail: trim(form.contactEmail), contactPhone: trim(form.contactPhone), source: trim(form.source), serviceLine: trim(form.serviceLine), amount: num(form.amount), currency: form.currency, probability: num(form.probability), stage: form.stage, expectedCloseDate: form.expectedCloseDate ? new Date(`${form.expectedCloseDate}T00:00:00.000Z`).toISOString() : undefined, assignedToUserId: form.assignedToUserId || null, notes: trim(form.notes), lostReason: form.stage === 'LOST' ? trim(form.lostReason) : '' })
 
   const createDeal = async () => {
     if (!canCreate) return
-    if (!form.title.trim() || !form.companyName.trim()) {
-      setAppError('Completá titulo y empresa.')
-      return
-    }
-    setIsSaving(true)
+    if (!trim(createForm.title) || !trim(createForm.companyName)) { setAppError('Completa titulo y empresa.'); return }
+    setIsCreateSaving(true)
     try {
-      const created = await apiRequest<CrmDeal>('/crm/deals', {
-        method: 'POST',
-        body: {
-          title: form.title,
-          companyName: form.companyName,
-          amount: Number(form.amount || 0),
-          currency: form.currency,
-          assignedToUserId: form.assignedToUserId || null,
-        },
-      })
-      setDeals((prev) => [created, ...prev])
-      setStageDraft((prev) => ({ ...prev, [created.id]: created.stage }))
-      setForm(EMPTY_FORM)
-    } catch {
-      setAppError('No se pudo crear la oportunidad.')
-    } finally {
-      setIsSaving(false)
-    }
+      const created = await apiRequest<CrmDeal>('/crm/deals', { method: 'POST', body: payload(createForm) })
+      setDeals((prev) => [created, ...prev]); setStageDraft((prev) => ({ ...prev, [created.id]: created.stage })); setCreateForm(EMPTY_DEAL); setSelectedDealId(created.id)
+    } catch { setAppError('No se pudo crear la oportunidad.') } finally { setIsCreateSaving(false) }
   }
-
-  const moveStage = async (dealId: string, nextStage: CrmDealStage) => {
+  const saveDeal = async () => {
+    if (!canEdit || !selectedDeal) return
+    setIsEditSaving(true)
+    try {
+      const updated = await apiRequest<CrmDeal>(`/crm/deals/${selectedDeal.id}`, { method: 'PATCH', body: payload(editForm) })
+      setDeals((prev) => prev.map((deal) => deal.id === updated.id ? updated : deal)); setStageDraft((prev) => ({ ...prev, [updated.id]: updated.stage })); void loadCrm(false)
+    } catch { setAppError('No se pudo actualizar la oportunidad.') } finally { setIsEditSaving(false) }
+  }
+  const moveStage = async (dealId: string, stage: CrmDealStage) => {
     if (!canEdit) return
-    const current = deals.find((d) => d.id === dealId)
-    if (!current || current.stage === nextStage) return
-    const prevDeals = deals
-    setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage: nextStage } : d)))
-    setStageDraft((prev) => ({ ...prev, [dealId]: nextStage }))
+    const current = deals.find((deal) => deal.id === dealId); if (!current || current.stage === stage) return
+    const prev = deals
+    setDeals((list) => list.map((deal) => deal.id === dealId ? { ...deal, stage } : deal)); setStageDraft((map) => ({ ...map, [dealId]: stage }))
     try {
-      const updated = await apiRequest<CrmDeal>(`/crm/deals/${dealId}/stage`, { method: 'PATCH', body: { stage: nextStage } })
-      setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, ...updated } : d)))
-    } catch {
-      setDeals(prevDeals)
-      setStageDraft((prev) => ({ ...prev, [dealId]: current.stage }))
-      setAppError('No se pudo mover la etapa.')
-    }
+      const reason = selectedDeal?.id === dealId && stage === 'LOST' ? trim(editForm.lostReason) : ''
+      const updated = await apiRequest<CrmDeal>(`/crm/deals/${dealId}/stage`, { method: 'PATCH', body: { stage, lostReason: reason } })
+      setDeals((list) => list.map((deal) => deal.id === dealId ? updated : deal)); void loadCrm(false)
+    } catch { setDeals(prev); setStageDraft((map) => ({ ...map, [dealId]: current.stage })); setAppError('No se pudo mover la etapa.') }
   }
-
-  const addActivity = async (dealId: string) => {
+  const convertDeal = async (deal: CrmDeal) => {
     if (!canEdit) return
-    const summary = (activityDraft[dealId] ?? EMPTY_ACTIVITY).summary.trim()
-    if (!summary) return
-    try {
-      const created = await apiRequest<CrmActivity>(`/crm/deals/${dealId}/activities`, {
-        method: 'POST',
-        body: { type: 'TASK', summary },
-      })
-      setActivities((prev) => [created, ...prev])
-      setActivityDraft((prev) => ({ ...prev, [dealId]: EMPTY_ACTIVITY }))
-    } catch {
-      setAppError('No se pudo agregar la actividad.')
-    }
+    setIsConvertingId(deal.id)
+    try { const res = await apiRequest<{ deal: CrmDeal }>(`/crm/deals/${deal.id}/convert-client`, { method: 'POST' }); setDeals((list) => list.map((item) => item.id === deal.id ? res.deal : item)); void loadCrm(false) }
+    catch { setAppError('No se pudo convertir a cliente.') } finally { setIsConvertingId(null) }
   }
-
-  const convertToClient = async (deal: CrmDeal) => {
+  const addActivity = async () => {
+    if (!canEdit || !selectedDeal) return
+    if (!trim(activityForm.summary)) { setAppError('Completa el resumen de actividad.'); return }
+    setIsActivitySaving(true)
+    try {
+      const created = await apiRequest<CrmActivity>(`/crm/deals/${selectedDeal.id}/activities`, { method: 'POST', body: { type: activityForm.type, summary: trim(activityForm.summary), dueAt: activityForm.dueAt ? new Date(`${activityForm.dueAt}T00:00:00.000Z`).toISOString() : undefined } })
+      setActivities((prev) => [created, ...prev]); setActivityForm(EMPTY_ACTIVITY)
+    } catch { setAppError('No se pudo registrar la actividad.') } finally { setIsActivitySaving(false) }
+  }
+  const toggleActivity = async (activity: CrmActivity) => {
     if (!canEdit) return
-    setIsConvertingDealId(deal.id)
-    try {
-      const response = await apiRequest<{ deal: CrmDeal; client: { id: string; name: string }; createdClient: boolean }>(
-        `/crm/deals/${deal.id}/convert-client`,
-        { method: 'POST' },
-      )
-      setDeals((prev) => prev.map((d) => (d.id === deal.id ? response.deal : d)))
-      setAppError(response.createdClient ? `Cliente creado: ${response.client.name}` : `Cliente vinculado: ${response.client.name}`)
-    } catch {
-      setAppError('No se pudo convertir a cliente.')
-    } finally {
-      setIsConvertingDealId(null)
-    }
+    try { const updated = await apiRequest<CrmActivity>(`/crm/activities/${activity.id}`, { method: 'PATCH', body: { status: activity.status === 'DONE' ? 'PENDING' : 'DONE' } }); setActivities((list) => list.map((item) => item.id === updated.id ? updated : item)) }
+    catch { setAppError('No se pudo actualizar la actividad.') }
   }
-
-  const removeDeal = async (deal: CrmDeal) => {
-    if (!canDelete) return
-    if (!window.confirm(`¿Eliminar oportunidad "${deal.title}"?`)) return
-    try {
-      await apiRequest(`/crm/deals/${deal.id}`, { method: 'DELETE' })
-      setDeals((prev) => prev.filter((d) => d.id !== deal.id))
-      setActivities((prev) => prev.filter((a) => a.dealId !== deal.id))
-    } catch {
-      setAppError('No se pudo eliminar la oportunidad.')
-    }
+  const deleteDeal = async () => {
+    if (!confirmDelete || !canDelete) return
+    setIsDeletingId(confirmDelete.id)
+    try { await apiRequest(`/crm/deals/${confirmDelete.id}`, { method: 'DELETE' }); setDeals((list) => list.filter((item) => item.id !== confirmDelete.id)); setActivities((list) => list.filter((item) => item.dealId !== confirmDelete.id)); setConfirmDelete(null) }
+    catch { setAppError('No se pudo eliminar la oportunidad.') } finally { setIsDeletingId(null) }
   }
 
   return (
     <section className="space-y-5">
-      <header>
-        <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
-        <h2 className="text-2xl font-bold text-slate-900">CRM Comercial</h2>
-        <p className="text-sm text-slate-600">Pipeline con drag & drop, seguimiento y conversión directa a cliente.</p>
-      </header>
-
+      <header><BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" /><h2 className="text-2xl font-bold text-slate-900">CRM Comercial</h2><p className="text-sm text-slate-600">Pipeline completo con conversion a cliente y seguimiento de actividades.</p></header>
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pipeline</p><p className="text-xl font-bold">{money(kpis.pipeline, 'ARS')}</p></article>
-        <article className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm"><p className="text-xs text-blue-600">Forecast</p><p className="text-xl font-bold text-blue-900">{money(kpis.forecast, 'ARS')}</p></article>
-        <article className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm"><p className="text-xs text-violet-600">Win rate</p><p className="text-xl font-bold text-violet-900">{kpis.winRate}%</p></article>
-        <article className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm"><p className="text-xs text-amber-700">Estancadas</p><p className="text-xl font-bold text-amber-900">{kpis.staleCount}</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pipeline ARS</p><p className="text-xl font-bold">{money(kpis.pipelineArs, 'ARS')}</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pipeline USD</p><p className="text-xl font-bold">{money(kpis.pipelineUsd, 'USD')}</p></article>
+        <article className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm"><p className="text-xs text-blue-600">Win rate</p><p className="text-xl font-bold text-blue-900">{kpis.winRate}%</p></article>
+        <article className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm"><p className="text-xs text-amber-700">Pendientes / Vencidas</p><p className="text-xl font-bold text-amber-900">{kpis.pendingActivities} / {kpis.overdueActivities}</p></article>
       </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
           <h3 className="text-lg font-bold text-slate-900">Nueva oportunidad</h3>
           <form className="mt-3 grid gap-2" onSubmit={(e) => { e.preventDefault(); void createDeal() }}>
-            <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Titulo" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
-            <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Empresa" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
-            <div className="grid grid-cols-2 gap-2">
-              <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" type="number" min={0} placeholder="Monto" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} />
-              <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={form.currency} onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value as 'ARS' | 'USD' }))}>
-                <option value="ARS">ARS</option><option value="USD">USD</option>
-              </select>
-            </div>
-            <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={form.assignedToUserId} onChange={(e) => setForm((p) => ({ ...p, assignedToUserId: e.target.value }))}>
-              <option value="">Sin asignar</option>
-              {salesUsers.map((user) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
-            </select>
-            <button type="submit" disabled={isSaving || !canCreate} className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-60">
-              {isSaving ? 'Guardando...' : 'Crear oportunidad'}
-            </button>
+            <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Titulo" value={createForm.title} onChange={(e) => setCreateForm((p) => ({ ...p, title: e.target.value }))} />
+            <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Empresa" value={createForm.companyName} onChange={(e) => setCreateForm((p) => ({ ...p, companyName: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-2"><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Origen" value={createForm.source} onChange={(e) => setCreateForm((p) => ({ ...p, source: e.target.value }))} /><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Servicio" value={createForm.serviceLine} onChange={(e) => setCreateForm((p) => ({ ...p, serviceLine: e.target.value }))} /></div>
+            <div className="grid grid-cols-3 gap-2"><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" type="number" placeholder="Monto" value={createForm.amount} onChange={(e) => setCreateForm((p) => ({ ...p, amount: e.target.value }))} /><select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={createForm.currency} onChange={(e) => setCreateForm((p) => ({ ...p, currency: e.target.value as 'ARS' | 'USD' }))}><option value="ARS">ARS</option><option value="USD">USD</option></select><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" type="number" min={0} max={100} placeholder="Prob %" value={createForm.probability} onChange={(e) => setCreateForm((p) => ({ ...p, probability: e.target.value }))} /></div>
+            <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={createForm.assignedToUserId} onChange={(e) => setCreateForm((p) => ({ ...p, assignedToUserId: e.target.value }))}><option value="">Sin asignar</option>{salesUsers.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}</select>
+            <button type="submit" disabled={isCreateSaving || !canCreate} className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-60">{isCreateSaving ? 'Guardando...' : 'Crear oportunidad'}</button>
           </form>
         </article>
-
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-lg font-bold text-slate-900">Pipeline</h3>
-            <div className="flex gap-2">
-              <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
-                <option value="">Todos</option>
-                {salesUsers.map((user) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
-              </select>
-              <input className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-          </div>
-
-          {isLoading ? <div className="mt-4 text-sm text-slate-500">Cargando...</div> : (
-            <div className="mt-4 grid grid-cols-1 gap-3 2xl:grid-cols-3">
-              {STAGES.map((stage) => {
-                const stageDeals = filteredDeals.filter((deal) => deal.stage === stage.key)
-                return (
-                  <section key={stage.key} className="rounded-xl border border-slate-200 bg-slate-50 p-3" onDragOver={(e) => { if (canEdit) e.preventDefault() }} onDrop={(e) => {
-                    if (!canEdit) return
-                    e.preventDefault()
-                    const dealId = e.dataTransfer.getData('text/plain') || draggingDealId
-                    if (dealId) void moveStage(dealId, stage.key)
-                    setDraggingDealId(null)
-                  }}>
-                    <div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-bold">{stage.label}</h4><span className="rounded-full bg-white px-2 py-1 text-xs">{stageDeals.length}</span></div>
-                    <div className="space-y-2">
-                      {stageDeals.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-2 text-xs text-slate-500">Sin oportunidades</div> : stageDeals.map((deal) => {
-                        const dealActs = (activities.filter((a) => a.dealId === deal.id).slice().sort((a, b) => getActivitySortTime(b) - getActivitySortTime(a))).slice(0, 2)
-                        const canConvert = deal.stage === 'WON' && !deal.convertedClientId
-                        return (
-                          <article key={deal.id} draggable={canEdit} onDragStart={(e) => { if (!canEdit) return; e.dataTransfer.setData('text/plain', deal.id); setDraggingDealId(deal.id) }} onDragEnd={() => setDraggingDealId(null)} className="rounded-lg border border-slate-200 bg-white p-3">
-                            <p className="text-sm font-bold text-slate-900">{deal.title}</p>
-                            <p className="text-xs font-semibold text-slate-600">{deal.companyName}</p>
-                            <p className="mt-1 text-xs text-slate-500">{money(deal.amount, deal.currency)} · {deal.probability}%</p>
-                            <p className="text-xs text-slate-500">Responsable: {deal.assignedToUser?.fullName ?? deal.createdByUser?.fullName ?? 'Sin asignar'}</p>
-                            {stale(deal.lastContactAt ?? deal.updatedAt ?? deal.createdAt) && deal.stage !== 'WON' && deal.stage !== 'LOST' ? <p className="mt-1 text-[11px] font-semibold text-amber-700">Sin contacto reciente</p> : null}
-                            {deal.convertedClient ? <p className="mt-1 text-[11px] font-semibold text-emerald-700">Cliente: {deal.convertedClient.name}</p> : null}
-                            <div className="mt-2 flex gap-2">
-                              <select value={stageDraft[deal.id] ?? deal.stage} onChange={(e) => setStageDraft((p) => ({ ...p, [deal.id]: e.target.value as CrmDealStage }))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">
-                                {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                              </select>
-                              <button type="button" className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" disabled={!canEdit} onClick={() => void moveStage(deal.id, stageDraft[deal.id] ?? deal.stage)}>Mover</button>
-                            </div>
-                            {canConvert ? <button type="button" className="mt-2 w-full rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-60" disabled={isConvertingDealId === deal.id} onClick={() => void convertToClient(deal)}>{isConvertingDealId === deal.id ? 'Convirtiendo...' : 'Convertir a cliente'}</button> : null}
-                            <div className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                              {dealActs.length === 0 ? <p className="text-xs text-slate-500">Sin actividades</p> : dealActs.map((act) => <button type="button" key={act.id} className={['w-full rounded-md border px-2 py-1 text-left text-xs', act.status === 'DONE' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'].join(' ')} onClick={() => canEdit && void apiRequest<CrmActivity>(`/crm/activities/${act.id}`, { method: 'PATCH', body: { status: act.status === 'DONE' ? 'PENDING' : 'DONE' } }).then((updated) => setActivities((prev) => prev.map((a) => a.id === updated.id ? updated : a))).catch(() => setAppError('No se pudo actualizar actividad.'))}>{act.summary}</button>)}
-                            </div>
-                            <div className="mt-2 flex gap-2">
-                              <input value={(activityDraft[deal.id] ?? EMPTY_ACTIVITY).summary} onChange={(e) => setActivityDraft((p) => ({ ...p, [deal.id]: { summary: e.target.value } }))} className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs" placeholder="Nueva actividad..." />
-                              <button type="button" className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50" disabled={!canEdit} onClick={() => void addActivity(deal.id)}>+Act</button>
-                            </div>
-                            {canDelete ? <button type="button" className="mt-2 w-full rounded-lg border border-rose-300 bg-white px-2 py-1 text-xs font-semibold text-rose-700" onClick={() => void removeDeal(deal)}>Eliminar</button> : null}
-                          </article>
-                        )
-                      })}
-                    </div>
-                  </section>
-                )
-              })}
-            </div>
-          )}
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-8">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-lg font-bold text-slate-900">Pipeline</h3><div className="flex flex-wrap gap-2"><select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}><option value="">Todos</option>{salesUsers.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}</select><input className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} /></div></div>
+          <div className="mt-2 text-xs text-slate-500">Estancadas: {kpis.staleDeals}</div>
+          {isLoading ? <div className="mt-4 text-sm text-slate-500">Cargando CRM...</div> : <div className="mt-4 overflow-x-auto"><div className="flex min-w-max gap-3">{STAGES.map((stage) => { const stageDeals = filteredDeals.filter((d) => d.stage === stage.key); return <section key={stage.key} className="w-[290px] rounded-xl border border-slate-200 bg-slate-50 p-3" onDragOver={(e) => { if (canEdit) e.preventDefault() }} onDrop={(e) => { if (!canEdit) return; e.preventDefault(); const id = e.dataTransfer.getData('text/plain') || draggingDealId; if (id) void moveStage(id, stage.key); setDraggingDealId(null) }}><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-bold">{stage.label}</h4><span className="rounded-full bg-white px-2 py-1 text-xs">{stageDeals.length}</span></div><div className="space-y-2">{stageDeals.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-2 text-xs text-slate-500">Sin oportunidades</div> : stageDeals.map((deal) => <article key={deal.id} draggable={canEdit} onDragStart={(e) => { if (!canEdit) return; e.dataTransfer.setData('text/plain', deal.id); setDraggingDealId(deal.id) }} onDragEnd={() => setDraggingDealId(null)} onClick={() => setSelectedDealId(deal.id)} className={['rounded-lg border bg-white p-3', deal.id === selectedDealId ? 'border-amber-400' : 'border-slate-200'].join(' ')}><p className="text-sm font-bold text-slate-900">{deal.title}</p><p className="text-xs font-semibold text-slate-600">{deal.companyName}</p><p className="mt-1 text-xs text-slate-500">{money(deal.amount, deal.currency)} | {deal.probability}%</p>{stale(deal.lastContactAt ?? deal.updatedAt ?? deal.createdAt) && deal.stage !== 'WON' && deal.stage !== 'LOST' ? <p className="text-[11px] font-semibold text-amber-700">Sin contacto reciente</p> : null}<div className="mt-2 flex gap-2" onClick={(e) => e.stopPropagation()}><select value={stageDraft[deal.id] ?? deal.stage} onChange={(e) => setStageDraft((p) => ({ ...p, [deal.id]: e.target.value as CrmDealStage }))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">{STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</select><button type="button" className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" disabled={!canEdit} onClick={() => void moveStage(deal.id, stageDraft[deal.id] ?? deal.stage)}>Mover</button></div>{deal.stage === 'WON' && !deal.convertedClientId ? <button type="button" className="mt-2 w-full rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-60" disabled={isConvertingId === deal.id || !canEdit} onClick={(e) => { e.stopPropagation(); void convertDeal(deal) }}>{isConvertingId === deal.id ? 'Convirtiendo...' : 'Convertir a cliente'}</button> : null}</article>)}</div></section> })}</div></div>}
         </article>
       </section>
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-6">
+          <h3 className="text-lg font-bold text-slate-900">Detalle de oportunidad</h3>
+          {!selectedDeal ? <p className="mt-3 text-sm text-slate-500">Selecciona una oportunidad.</p> : <form className="mt-3 grid gap-2" onSubmit={(e) => { e.preventDefault(); void saveDeal() }}><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Titulo" value={editForm.title} onChange={(e) => setEditForm((p) => ({ ...p, title: e.target.value }))} /><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Empresa" value={editForm.companyName} onChange={(e) => setEditForm((p) => ({ ...p, companyName: e.target.value }))} /><div className="grid grid-cols-2 gap-2"><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Contacto" value={editForm.contactName} onChange={(e) => setEditForm((p) => ({ ...p, contactName: e.target.value }))} /><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Telefono" value={editForm.contactPhone} onChange={(e) => setEditForm((p) => ({ ...p, contactPhone: e.target.value }))} /></div><div className="grid grid-cols-3 gap-2"><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" type="number" placeholder="Monto" value={editForm.amount} onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))} /><select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={editForm.currency} onChange={(e) => setEditForm((p) => ({ ...p, currency: e.target.value as 'ARS' | 'USD' }))}><option value="ARS">ARS</option><option value="USD">USD</option></select><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" type="number" min={0} max={100} placeholder="Prob %" value={editForm.probability} onChange={(e) => setEditForm((p) => ({ ...p, probability: e.target.value }))} /></div><div className="grid grid-cols-2 gap-2"><select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={editForm.stage} onChange={(e) => setEditForm((p) => ({ ...p, stage: e.target.value as CrmDealStage }))}>{STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}</select><input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" type="date" value={editForm.expectedCloseDate} onChange={(e) => setEditForm((p) => ({ ...p, expectedCloseDate: e.target.value }))} /></div>{editForm.stage === 'LOST' ? <textarea className="min-h-[64px] rounded-lg border border-rose-300 px-3 py-2 text-sm" placeholder="Motivo de perdida" value={editForm.lostReason} onChange={(e) => setEditForm((p) => ({ ...p, lostReason: e.target.value }))} /> : null}<textarea className="min-h-[72px] rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Notas internas" value={editForm.notes} onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))} /><div className="flex flex-wrap gap-2"><button type="submit" disabled={isEditSaving || !canEdit} className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-60">{isEditSaving ? 'Guardando...' : 'Guardar cambios'}</button>{selectedDeal.stage === 'WON' && !selectedDeal.convertedClientId ? <button type="button" className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-60" disabled={isConvertingId === selectedDeal.id || !canEdit} onClick={() => void convertDeal(selectedDeal)}>{isConvertingId === selectedDeal.id ? 'Convirtiendo...' : 'Convertir a cliente'}</button> : null}{canDelete ? <button type="button" className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-semibold text-rose-700 disabled:opacity-60" disabled={isDeletingId === selectedDeal.id} onClick={() => setConfirmDelete(selectedDeal)}>{isDeletingId === selectedDeal.id ? 'Eliminando...' : 'Eliminar'}</button> : null}</div></form>}
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-6">
+          <h3 className="text-lg font-bold text-slate-900">Actividades</h3>
+          {!selectedDeal ? <p className="mt-3 text-sm text-slate-500">Selecciona una oportunidad para gestionar actividades.</p> : <>
+            <form className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-12" onSubmit={(e) => { e.preventDefault(); void addActivity() }}>
+              <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm md:col-span-3" value={activityForm.type} onChange={(e) => setActivityForm((p) => ({ ...p, type: e.target.value as CrmActivityType }))}>{ACTIVITY_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
+              <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:col-span-6" placeholder="Resumen de actividad" value={activityForm.summary} onChange={(e) => setActivityForm((p) => ({ ...p, summary: e.target.value }))} />
+              <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm md:col-span-3" type="date" value={activityForm.dueAt} onChange={(e) => setActivityForm((p) => ({ ...p, dueAt: e.target.value }))} />
+              <button type="submit" disabled={isActivitySaving || !canEdit} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 md:col-span-12">{isActivitySaving ? 'Guardando actividad...' : 'Agregar actividad'}</button>
+            </form>
+            <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+              {selectedActivities.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-500">Sin actividades.</div> : selectedActivities.map((activity) => <article key={activity.id} className={['rounded-lg border p-3', overdue(activity) ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'].join(' ')}><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{activity.summary}</p><p className="text-xs text-slate-500">Tipo: {ACTIVITY_TYPES.find((t) => t.key === activity.type)?.label ?? activity.type} | Vence: {activity.dueAt ? new Date(activity.dueAt).toLocaleDateString('es-AR') : 'Sin fecha'}</p></div><button type="button" className={['rounded-lg border px-3 py-1 text-xs font-semibold', activity.status === 'DONE' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'].join(' ')} disabled={!canEdit} onClick={() => void toggleActivity(activity)}>{activity.status === 'DONE' ? 'Marcar pendiente' : 'Marcar realizada'}</button></div></article>)}
+            </div>
+          </>}
+        </article>
+      </section>
+      <ConfirmModal isOpen={Boolean(confirmDelete)} title="Eliminar oportunidad" message={confirmDelete ? `Se eliminara ${confirmDelete.title}. Esta accion no se puede deshacer.` : ''} onCancel={() => setConfirmDelete(null)} onConfirm={() => void deleteDeal()} />
     </section>
   )
 }
