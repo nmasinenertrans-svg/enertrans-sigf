@@ -842,6 +842,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - Carga historica sigue siendo manual registro por registro (sin importador por lote).
   - No existe todavia forecast avanzado por disponibilidad futura ni scoring de conflictos por fechas de contrato.
+- Fecha: 2026-03-21
+  Cambio: Ajuste UX CRM para recuperar layout profesional previo y mezclarlo con funciones nuevas de concursos/contratos.
+  Archivos:
+  - `src/modules/crm/pages/CrmPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se restablece pantalla completa de CRM (pipeline + detalle + actividades) evitando quedar en un flujo reducido de solo alta.
+  - Se integran en ese mismo formato los campos nuevos (`dealKind`, `referenceCode`, `isHistorical`) y el panel de unidades vinculadas por oportunidad.
+  - Se mantiene continuidad operativa comercial con edición de oportunidades, cambio de etapa, conversión a cliente y gestión de unidades en un único módulo.
+  Riesgo residual:
+  - La búsqueda de unidades para vincular sigue siendo por texto/manual; no hay autocompletado incremental en tiempo real.
 
 ## 9) Riesgos abiertos (a seguir)
 
