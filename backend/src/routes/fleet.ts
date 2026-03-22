@@ -97,6 +97,71 @@ const readLegacyFleetUnitById = async (id: string): Promise<any | null> => {
   return rows[0] ?? null
 }
 
+const hasCrmDealUnitTable = async (): Promise<boolean> => {
+  try {
+    const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = 'CrmDealUnit'
+      ) AS exists
+    `
+    return Boolean(rows[0]?.exists)
+  } catch {
+    return false
+  }
+}
+
+const enrichUnitsWithCrmVisibility = async <T extends { id: string }>(units: T[]): Promise<Array<T & { crmDealLink?: any }>> => {
+  if (!units.length) {
+    return units.map((unit) => ({ ...unit, crmDealLink: null }))
+  }
+
+  const canReadLinks = await hasCrmDealUnitTable()
+  if (!canReadLinks) {
+    return units.map((unit) => ({ ...unit, crmDealLink: null }))
+  }
+
+  try {
+    const links = await prisma.crmDealUnit.findMany({
+      where: {
+        unitId: { in: units.map((unit) => unit.id) },
+        status: { in: ['EN_CONCURSO', 'ADJUDICADA'] as any },
+      },
+      include: {
+        deal: {
+          select: { id: true, title: true, companyName: true, dealKind: true, stage: true },
+        },
+      },
+      orderBy: [{ linkedAt: 'desc' }],
+    })
+
+    const mapByUnit = new Map<string, (typeof links)[number]>()
+    links.forEach((link) => {
+      if (!mapByUnit.has(link.unitId)) {
+        mapByUnit.set(link.unitId, link)
+      }
+    })
+
+    return units.map((unit) => ({
+      ...unit,
+      crmDealLink: mapByUnit.get(unit.id)
+        ? {
+            dealId: mapByUnit.get(unit.id)?.deal.id,
+            dealTitle: mapByUnit.get(unit.id)?.deal.title,
+            dealKind: mapByUnit.get(unit.id)?.deal.dealKind,
+            companyName: mapByUnit.get(unit.id)?.deal.companyName,
+            stage: mapByUnit.get(unit.id)?.deal.stage,
+            status: mapByUnit.get(unit.id)?.status,
+          }
+        : null,
+    }))
+  } catch {
+    return units.map((unit) => ({ ...unit, crmDealLink: null }))
+  }
+}
+
 type FleetOperationalStatus = 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'
 
 const deriveOperationalStatus = (
@@ -209,18 +274,23 @@ router.get('/', async (_req, res) => {
     const hasClientIdColumn = await hasFleetColumn('clientId')
     if (!hasClientIdColumn) {
       const legacyUnits = await readLegacyFleetUnits()
-      return res.json(legacyUnits.map(normalizeLegacyUnit))
+      const normalized = legacyUnits.map(normalizeLegacyUnit)
+      const withCrm = await enrichUnitsWithCrmVisibility(normalized)
+      return res.json(withCrm)
     }
 
     const units = await runWithSchemaFailover(() =>
       prisma.fleetUnit.findMany({ orderBy: { createdAt: 'desc' } }),
     )
-    return res.json(units)
+    const withCrm = await enrichUnitsWithCrmVisibility(units)
+    return res.json(withCrm)
   } catch (error) {
     if (isSchemaMismatchError(error)) {
       try {
         const legacyUnits = await readLegacyFleetUnits()
-        return res.json(legacyUnits.map(normalizeLegacyUnit))
+        const normalized = legacyUnits.map(normalizeLegacyUnit)
+        const withCrm = await enrichUnitsWithCrmVisibility(normalized)
+        return res.json(withCrm)
       } catch {
         // continue with default handling
       }
@@ -238,7 +308,9 @@ router.get('/:id', async (req, res) => {
       if (!legacyUnit) {
         return res.status(404).json({ message: 'Unidad no encontrada.' })
       }
-      return res.json(normalizeLegacyUnit(legacyUnit))
+      const normalized = normalizeLegacyUnit(legacyUnit)
+      const withCrm = await enrichUnitsWithCrmVisibility([normalized])
+      return res.json(withCrm[0])
     }
 
     const unit = await runWithSchemaFailover(() =>
@@ -247,7 +319,8 @@ router.get('/:id', async (req, res) => {
     if (!unit) {
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
-    return res.json(unit)
+    const withCrm = await enrichUnitsWithCrmVisibility([unit])
+    return res.json(withCrm[0])
   } catch (error) {
     if (isSchemaMismatchError(error)) {
       try {
@@ -255,7 +328,9 @@ router.get('/:id', async (req, res) => {
         if (!legacyUnit) {
           return res.status(404).json({ message: 'Unidad no encontrada.' })
         }
-        return res.json(normalizeLegacyUnit(legacyUnit))
+        const normalized = normalizeLegacyUnit(legacyUnit)
+        const withCrm = await enrichUnitsWithCrmVisibility([normalized])
+        return res.json(withCrm[0])
       } catch {
         // continue with default handling
       }

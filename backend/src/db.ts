@@ -298,6 +298,15 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`
     DO $$
     BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmDealKind') THEN
+        CREATE TYPE "CrmDealKind" AS ENUM ('TENDER', 'CONTRACT');
+      END IF;
+    END
+    $$;
+  `)
+  await safeExecuteCompatSql(`
+    DO $$
+    BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmActivityType') THEN
         CREATE TYPE "CrmActivityType" AS ENUM ('CALL', 'WHATSAPP', 'EMAIL', 'MEETING', 'TASK');
       END IF;
@@ -314,10 +323,22 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     $$;
   `)
   await safeExecuteCompatSql(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmDealUnitStatus') THEN
+        CREATE TYPE "CrmDealUnitStatus" AS ENUM ('EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA');
+      END IF;
+    END
+    $$;
+  `)
+  await safeExecuteCompatSql(`
     CREATE TABLE IF NOT EXISTS "CrmDeal" (
       "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
       "title" TEXT NOT NULL,
       "companyName" TEXT NOT NULL,
+      "dealKind" "CrmDealKind" NOT NULL DEFAULT 'TENDER',
+      "referenceCode" TEXT NOT NULL DEFAULT '',
+      "isHistorical" BOOLEAN NOT NULL DEFAULT false,
       "contactName" TEXT NOT NULL DEFAULT '',
       "contactEmail" TEXT NOT NULL DEFAULT '',
       "contactPhone" TEXT NOT NULL DEFAULT '',
@@ -340,6 +361,9 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       CONSTRAINT "CrmDeal_pkey" PRIMARY KEY ("id")
     );
   `)
+  await safeExecuteCompatSql(`ALTER TABLE "CrmDeal" ADD COLUMN IF NOT EXISTS "dealKind" "CrmDealKind" NOT NULL DEFAULT 'TENDER';`)
+  await safeExecuteCompatSql(`ALTER TABLE "CrmDeal" ADD COLUMN IF NOT EXISTS "referenceCode" TEXT NOT NULL DEFAULT '';`)
+  await safeExecuteCompatSql(`ALTER TABLE "CrmDeal" ADD COLUMN IF NOT EXISTS "isHistorical" BOOLEAN NOT NULL DEFAULT false;`)
   await safeExecuteCompatSql(`
     CREATE TABLE IF NOT EXISTS "CrmActivity" (
       "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
@@ -355,6 +379,21 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       CONSTRAINT "CrmActivity_pkey" PRIMARY KEY ("id")
     );
   `)
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "CrmDealUnit" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "dealId" TEXT NOT NULL,
+      "unitId" TEXT NOT NULL,
+      "status" "CrmDealUnitStatus" NOT NULL DEFAULT 'EN_CONCURSO',
+      "notes" TEXT NOT NULL DEFAULT '',
+      "createdByUserId" TEXT NOT NULL,
+      "linkedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "releasedAt" TIMESTAMP(3),
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "CrmDealUnit_pkey" PRIMARY KEY ("id")
+    );
+  `)
 	  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_stage_createdAt_idx" ON "CrmDeal"("stage","createdAt");`)
 	  await safeExecuteCompatSql(
 	    `CREATE INDEX IF NOT EXISTS "CrmDeal_assignedToUserId_stage_idx" ON "CrmDeal"("assignedToUserId","stage");`,
@@ -362,11 +401,21 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
 	  await safeExecuteCompatSql(`ALTER TABLE "CrmDeal" ADD COLUMN IF NOT EXISTS "convertedClientId" TEXT;`)
 	  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_convertedClientId_idx" ON "CrmDeal"("convertedClientId");`)
 	  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_companyName_idx" ON "CrmDeal"("companyName");`)
+	  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_dealKind_stage_idx" ON "CrmDeal"("dealKind","stage");`)
   await safeExecuteCompatSql(
     `CREATE INDEX IF NOT EXISTS "CrmActivity_dealId_status_dueAt_idx" ON "CrmActivity"("dealId","status","dueAt");`,
   )
   await safeExecuteCompatSql(
     `CREATE INDEX IF NOT EXISTS "CrmActivity_createdByUserId_createdAt_idx" ON "CrmActivity"("createdByUserId","createdAt");`,
+  )
+  await safeExecuteCompatSql(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "CrmDealUnit_dealId_unitId_key" ON "CrmDealUnit"("dealId","unitId");`,
+  )
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "CrmDealUnit_dealId_status_idx" ON "CrmDealUnit"("dealId","status");`,
+  )
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "CrmDealUnit_unitId_status_idx" ON "CrmDealUnit"("unitId","status");`,
   )
 	  await safeExecuteCompatSql(`
 	    DO $$
@@ -432,6 +481,48 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       ) THEN
         ALTER TABLE "CrmActivity"
           ADD CONSTRAINT "CrmActivity_createdByUserId_fkey"
+          FOREIGN KEY ("createdByUserId") REFERENCES "User"("id")
+          ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END
+    $$;
+  `)
+  await safeExecuteCompatSql(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CrmDealUnit_dealId_fkey'
+      ) THEN
+        ALTER TABLE "CrmDealUnit"
+          ADD CONSTRAINT "CrmDealUnit_dealId_fkey"
+          FOREIGN KEY ("dealId") REFERENCES "CrmDeal"("id")
+          ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END
+    $$;
+  `)
+  await safeExecuteCompatSql(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CrmDealUnit_unitId_fkey'
+      ) THEN
+        ALTER TABLE "CrmDealUnit"
+          ADD CONSTRAINT "CrmDealUnit_unitId_fkey"
+          FOREIGN KEY ("unitId") REFERENCES "FleetUnit"("id")
+          ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END
+    $$;
+  `)
+  await safeExecuteCompatSql(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CrmDealUnit_createdByUserId_fkey'
+      ) THEN
+        ALTER TABLE "CrmDealUnit"
+          ADD CONSTRAINT "CrmDealUnit_createdByUserId_fkey"
           FOREIGN KEY ("createdByUserId") REFERENCES "User"("id")
           ON DELETE RESTRICT ON UPDATE CASCADE;
       END IF;

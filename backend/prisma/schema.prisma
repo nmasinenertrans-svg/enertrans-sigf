@@ -109,6 +109,11 @@ enum CrmDealStage {
   LOST
 }
 
+enum CrmDealKind {
+  TENDER
+  CONTRACT
+}
+
 enum CrmActivityType {
   CALL
   WHATSAPP
@@ -120,6 +125,13 @@ enum CrmActivityType {
 enum CrmActivityStatus {
   PENDING
   DONE
+}
+
+enum CrmDealUnitStatus {
+  EN_CONCURSO
+  ADJUDICADA
+  PERDIDA
+  LIBERADA
 }
 
 model User {
@@ -143,6 +155,7 @@ model User {
   crmDealsCreated     CrmDeal[]      @relation("CrmDealCreatedBy")
   crmDealsAssigned    CrmDeal[]      @relation("CrmDealAssignedTo")
   crmActivitiesCreated CrmActivity[] @relation("CrmActivityCreatedBy")
+  crmDealUnitsCreated CrmDealUnit[]  @relation("CrmDealUnitCreatedBy")
 }
 
 model FleetUnit {
@@ -198,6 +211,7 @@ model FleetUnit {
   externalRequests         ExternalRequest[]
   movementLinks            FleetMovementUnit[]
   deliveryOperations       DeliveryOperation[]
+  crmDealLinks             CrmDealUnit[]
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -484,6 +498,9 @@ model CrmDeal {
   id                 String          @id @default(uuid())
   title              String
   companyName        String
+  dealKind           CrmDealKind     @default(TENDER)
+  referenceCode      String          @default("")
+  isHistorical       Boolean         @default(false)
   contactName        String          @default("")
   contactEmail       String          @default("")
   contactPhone       String          @default("")
@@ -508,11 +525,13 @@ model CrmDeal {
   createdByUser      User            @relation("CrmDealCreatedBy", fields: [createdByUserId], references: [id])
   convertedClient    ClientAccount?  @relation(fields: [convertedClientId], references: [id])
   activities         CrmActivity[]
+  unitLinks          CrmDealUnit[]
 
   @@index([stage, createdAt])
   @@index([assignedToUserId, stage])
   @@index([convertedClientId])
   @@index([companyName])
+  @@index([dealKind, stage])
 }
 
 model CrmActivity {
@@ -532,4 +551,25 @@ model CrmActivity {
 
   @@index([dealId, status, dueAt])
   @@index([createdByUserId, createdAt])
+}
+
+model CrmDealUnit {
+  id              String            @id @default(uuid())
+  dealId          String
+  unitId          String
+  status          CrmDealUnitStatus @default(EN_CONCURSO)
+  notes           String            @default("")
+  createdByUserId String
+  linkedAt        DateTime          @default(now())
+  releasedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  deal            CrmDeal           @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  unit            FleetUnit         @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  createdByUser   User              @relation("CrmDealUnitCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([dealId, unitId])
+  @@index([dealId, status])
+  @@index([unitId, status])
 }

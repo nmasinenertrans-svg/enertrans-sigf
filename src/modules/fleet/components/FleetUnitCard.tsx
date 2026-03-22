@@ -52,6 +52,11 @@ export const FleetUnitCard = ({ unit, onRequestDelete, canEdit, canDelete }: Fle
     </dl>
 
     <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+      {unit.crmDealLink ? (
+        <span className="rounded-full border border-indigo-300 bg-indigo-50 px-2 py-1 text-indigo-700">
+          {unit.crmDealLink.dealKind === 'CONTRACT' ? 'Contrato' : 'Concurso'}: {unit.crmDealLink.dealTitle}
+        </span>
+      ) : null}
       {(['rto', 'insurance', 'hoist'] as const).map((docKey) => {
         if (docKey === 'hoist' && unit.documents?.hoistNotApplicable) {
           return (

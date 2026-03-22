@@ -1,13 +1,16 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma, runWithSchemaFailover } from '../db.js'
 import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
 const stageValues = ['LEAD', 'CONTACTED', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const
+const dealKindValues = ['TENDER', 'CONTRACT'] as const
 const activityTypeValues = ['CALL', 'WHATSAPP', 'EMAIL', 'MEETING', 'TASK'] as const
 const activityStatusValues = ['PENDING', 'DONE'] as const
+const dealUnitStatusValues = ['EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA'] as const
 const currencyValues = ['ARS', 'USD'] as const
 
 const stageDefaultProbability: Record<(typeof stageValues)[number], number> = {
@@ -23,6 +26,9 @@ const stageDefaultProbability: Record<(typeof stageValues)[number], number> = {
 const dealSchema = z.object({
   title: z.string().min(2).max(180),
   companyName: z.string().min(2).max(160),
+  dealKind: z.enum(dealKindValues).optional().default('TENDER'),
+  referenceCode: z.string().max(80).optional().default(''),
+  isHistorical: z.boolean().optional().default(false),
   contactName: z.string().max(120).optional().default(''),
   contactEmail: z.string().max(180).optional().default(''),
   contactPhone: z.string().max(80).optional().default(''),
@@ -55,6 +61,17 @@ const activityUpdateSchema = z.object({
   status: z.enum(activityStatusValues).optional(),
   summary: z.string().min(2).max(400).optional(),
   dueAt: z.string().optional().nullable(),
+})
+
+const dealUnitCreateSchema = z.object({
+  unitId: z.string().min(1),
+  status: z.enum(dealUnitStatusValues).optional().default('EN_CONCURSO'),
+  notes: z.string().max(500).optional().default(''),
+})
+
+const dealUnitUpdateSchema = z.object({
+  status: z.enum(dealUnitStatusValues),
+  notes: z.string().max(500).optional().default(''),
 })
 
 const normalizeText = (value: string | undefined): string => (value ?? '').trim()
@@ -99,11 +116,35 @@ const isSchemaMismatchError = (error: unknown): boolean => {
   return message.includes('does not exist in the current database')
 }
 
-const dealInclude = {
+const blockingLinkStatuses = ['EN_CONCURSO', 'ADJUDICADA'] as const
+
+const findBlockingUnitLink = async (unitId: string, dealId: string) =>
+  runWithSchemaFailover(() =>
+    prisma.crmDealUnit.findFirst({
+      where: {
+        unitId,
+        dealId: { not: dealId },
+        status: { in: blockingLinkStatuses as any },
+      },
+      include: {
+        deal: {
+          select: { id: true, title: true, companyName: true, dealKind: true, stage: true },
+        },
+      },
+    }),
+  )
+
+const dealInclude: Prisma.CrmDealInclude = {
   assignedToUser: { select: { id: true, fullName: true, username: true } },
   createdByUser: { select: { id: true, fullName: true, username: true } },
   convertedClient: { select: { id: true, name: true } },
-} as const
+  unitLinks: {
+    orderBy: [{ createdAt: 'desc' }],
+    include: {
+      unit: { select: { id: true, internalCode: true, ownerCompany: true, clientName: true } },
+    },
+  },
+}
 
 router.get('/', requirePermission('CRM', 'view'), async (_req, res) => {
   try {
@@ -149,6 +190,9 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
         data: {
           title: normalizeText(parsed.data.title),
           companyName: normalizeText(parsed.data.companyName),
+          dealKind: parsed.data.dealKind,
+          referenceCode: normalizeText(parsed.data.referenceCode),
+          isHistorical: parsed.data.isHistorical,
           contactName: normalizeText(parsed.data.contactName),
           contactEmail: normalizeText(parsed.data.contactEmail),
           contactPhone: normalizeText(parsed.data.contactPhone),
@@ -214,6 +258,9 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req: any, re
           data: {
             title: parsed.data.title !== undefined ? normalizeText(parsed.data.title) : undefined,
             companyName: parsed.data.companyName !== undefined ? normalizeText(parsed.data.companyName) : undefined,
+            dealKind: parsed.data.dealKind,
+            referenceCode: parsed.data.referenceCode !== undefined ? normalizeText(parsed.data.referenceCode) : undefined,
+            isHistorical: parsed.data.isHistorical,
             contactName: parsed.data.contactName !== undefined ? normalizeText(parsed.data.contactName) : undefined,
             contactEmail: parsed.data.contactEmail !== undefined ? normalizeText(parsed.data.contactEmail) : undefined,
             contactPhone: parsed.data.contactPhone !== undefined ? normalizeText(parsed.data.contactPhone) : undefined,
@@ -395,6 +442,300 @@ router.post('/deals/:id/convert-client', requirePermission('CRM', 'edit'), async
     }
     console.error('CRM convert client error:', error)
     return res.status(500).json({ message: 'No se pudo convertir la oportunidad en cliente.' })
+  }
+})
+
+router.get('/deals/:id/units/search', requirePermission('CRM', 'view'), async (req, res) => {
+  try {
+    const dealId = typeof req.params.id === 'string' ? req.params.id : null
+    if (!dealId) {
+      return res.status(400).json({ message: 'Id de oportunidad invalido.' })
+    }
+    const query = String(req.query.q ?? '').trim()
+    const dealExists = await runWithSchemaFailover(() => prisma.crmDeal.findUnique({ where: { id: dealId }, select: { id: true } }))
+    if (!dealExists) {
+      return res.status(404).json({ message: 'Oportunidad no encontrada.' })
+    }
+
+    const units = await runWithSchemaFailover(() =>
+      prisma.fleetUnit.findMany({
+        where: query
+          ? {
+              OR: [
+                { internalCode: { contains: query, mode: 'insensitive' } },
+                { ownerCompany: { contains: query, mode: 'insensitive' } },
+                { clientName: { contains: query, mode: 'insensitive' } },
+              ],
+            }
+          : undefined,
+        select: {
+          id: true,
+          internalCode: true,
+          ownerCompany: true,
+          clientName: true,
+          operationalStatus: true,
+          logisticsStatus: true,
+        },
+        orderBy: [{ internalCode: 'asc' }],
+        take: 40,
+      }),
+    )
+
+    const unitIds = units.map((unit) => unit.id)
+    const blockingLinks = unitIds.length
+      ? await runWithSchemaFailover(() =>
+          prisma.crmDealUnit.findMany({
+            where: {
+              unitId: { in: unitIds },
+              dealId: { not: dealId },
+              status: { in: blockingLinkStatuses as any },
+            },
+            include: {
+              deal: { select: { id: true, title: true, companyName: true, dealKind: true, stage: true } },
+            },
+            orderBy: [{ createdAt: 'desc' }],
+          }),
+        )
+      : []
+
+    const blockedByUnitId = new Map<string, (typeof blockingLinks)[number]>()
+    blockingLinks.forEach((link) => {
+      if (!blockedByUnitId.has(link.unitId)) {
+        blockedByUnitId.set(link.unitId, link)
+      }
+    })
+
+    const linkedInDeal = unitIds.length
+      ? await runWithSchemaFailover(() =>
+          prisma.crmDealUnit.findMany({
+            where: { dealId, unitId: { in: unitIds } },
+            select: { unitId: true, status: true },
+          }),
+        )
+      : []
+    const linkedMap = new Map(linkedInDeal.map((item) => [item.unitId, item.status]))
+
+    return res.json(
+      units.map((unit) => ({
+        ...unit,
+        linkedStatusInCurrentDeal: linkedMap.get(unit.id) ?? null,
+        blockedBy:
+          blockedByUnitId.get(unit.id)
+            ? {
+                dealId: blockedByUnitId.get(unit.id)?.deal.id,
+                dealTitle: blockedByUnitId.get(unit.id)?.deal.title,
+                dealKind: blockedByUnitId.get(unit.id)?.deal.dealKind,
+                companyName: blockedByUnitId.get(unit.id)?.deal.companyName,
+                stage: blockedByUnitId.get(unit.id)?.deal.stage,
+                status: blockedByUnitId.get(unit.id)?.status,
+              }
+            : null,
+      })),
+    )
+  } catch (error) {
+    console.error('CRM units search error:', error)
+    return res.status(500).json({ message: 'No se pudieron buscar unidades para esta oportunidad.' })
+  }
+})
+
+router.post('/deals/:id/units', requirePermission('CRM', 'edit'), async (req: any, res) => {
+  const parsed = dealUnitCreateSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Datos invalidos.' })
+  }
+  if (!req.userId) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
+  try {
+    const dealId = typeof req.params.id === 'string' ? req.params.id : null
+    if (!dealId) {
+      return res.status(400).json({ message: 'Id de oportunidad invalido.' })
+    }
+
+    const [deal, unit] = await runWithSchemaFailover(() =>
+      Promise.all([
+        prisma.crmDeal.findUnique({ where: { id: dealId }, select: { id: true, title: true } }),
+        prisma.fleetUnit.findUnique({
+          where: { id: parsed.data.unitId },
+          select: { id: true, internalCode: true, ownerCompany: true, clientName: true },
+        }),
+      ]),
+    )
+
+    if (!deal) {
+      return res.status(404).json({ message: 'Oportunidad no encontrada.' })
+    }
+    if (!unit) {
+      return res.status(404).json({ message: 'Unidad no encontrada.' })
+    }
+
+    const existingInDeal = await runWithSchemaFailover(() =>
+      prisma.crmDealUnit.findUnique({
+        where: { dealId_unitId: { dealId, unitId: parsed.data.unitId } },
+      }),
+    )
+    if (existingInDeal) {
+      return res.status(409).json({ message: 'La unidad ya esta vinculada a esta oportunidad.' })
+    }
+
+    const blocking = await findBlockingUnitLink(parsed.data.unitId, dealId)
+    if (blocking) {
+      return res.status(409).json({
+        message: `La unidad ya esta tomada en ${blocking.deal.dealKind === 'CONTRACT' ? 'contrato' : 'concurso'} (${blocking.deal.title}).`,
+      })
+    }
+
+    const created = await runWithSchemaFailover(() =>
+      prisma.$transaction(async (tx) => {
+        const link = await tx.crmDealUnit.create({
+          data: {
+            dealId,
+            unitId: parsed.data.unitId,
+            status: parsed.data.status,
+            notes: normalizeText(parsed.data.notes),
+            createdByUserId: req.userId,
+            releasedAt: parsed.data.status === 'LIBERADA' || parsed.data.status === 'PERDIDA' ? new Date() : null,
+          },
+          include: {
+            unit: { select: { id: true, internalCode: true, ownerCompany: true, clientName: true } },
+          },
+        })
+
+        await tx.crmActivity.create({
+          data: {
+            dealId,
+            type: 'TASK',
+            status: 'DONE',
+            summary: `Unidad ${unit.internalCode} vinculada (${parsed.data.status}).`,
+            completedAt: new Date(),
+            createdByUserId: req.userId,
+          },
+        })
+
+        return link
+      }),
+    )
+
+    return res.status(201).json(created)
+  } catch (error) {
+    console.error('CRM add deal unit error:', error)
+    return res.status(500).json({ message: 'No se pudo vincular la unidad.' })
+  }
+})
+
+router.patch('/deals/:dealId/units/:linkId', requirePermission('CRM', 'edit'), async (req: any, res) => {
+  const parsed = dealUnitUpdateSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Datos invalidos.' })
+  }
+  if (!req.userId) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
+  try {
+    const dealId = typeof req.params.dealId === 'string' ? req.params.dealId : null
+    const linkId = typeof req.params.linkId === 'string' ? req.params.linkId : null
+    if (!dealId || !linkId) {
+      return res.status(400).json({ message: 'Parametros invalidos.' })
+    }
+
+    const existing = await runWithSchemaFailover(() =>
+      prisma.crmDealUnit.findUnique({
+        where: { id: linkId },
+        include: { unit: { select: { internalCode: true } } },
+      }),
+    )
+
+    if (!existing || existing.dealId !== dealId) {
+      return res.status(404).json({ message: 'Vinculo no encontrado.' })
+    }
+
+    if ((parsed.data.status === 'EN_CONCURSO' || parsed.data.status === 'ADJUDICADA') && existing.status !== parsed.data.status) {
+      const blocking = await findBlockingUnitLink(existing.unitId, dealId)
+      if (blocking) {
+        return res.status(409).json({
+          message: `La unidad ya esta tomada en ${blocking.deal.dealKind === 'CONTRACT' ? 'contrato' : 'concurso'} (${blocking.deal.title}).`,
+        })
+      }
+    }
+
+    const updated = await runWithSchemaFailover(() =>
+      prisma.$transaction(async (tx) => {
+        const link = await tx.crmDealUnit.update({
+          where: { id: linkId },
+          data: {
+            status: parsed.data.status,
+            notes: normalizeText(parsed.data.notes),
+            releasedAt: parsed.data.status === 'LIBERADA' || parsed.data.status === 'PERDIDA' ? new Date() : null,
+          },
+          include: {
+            unit: { select: { id: true, internalCode: true, ownerCompany: true, clientName: true } },
+          },
+        })
+
+        await tx.crmActivity.create({
+          data: {
+            dealId,
+            type: 'TASK',
+            status: 'DONE',
+            summary: `Unidad ${existing.unit.internalCode} actualizada a ${parsed.data.status}.`,
+            completedAt: new Date(),
+            createdByUserId: req.userId,
+          },
+        })
+
+        return link
+      }),
+    )
+    return res.json(updated)
+  } catch (error) {
+    console.error('CRM update deal unit error:', error)
+    return res.status(500).json({ message: 'No se pudo actualizar la unidad vinculada.' })
+  }
+})
+
+router.delete('/deals/:dealId/units/:linkId', requirePermission('CRM', 'edit'), async (req: any, res) => {
+  if (!req.userId) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+  try {
+    const dealId = typeof req.params.dealId === 'string' ? req.params.dealId : null
+    const linkId = typeof req.params.linkId === 'string' ? req.params.linkId : null
+    if (!dealId || !linkId) {
+      return res.status(400).json({ message: 'Parametros invalidos.' })
+    }
+
+    const existing = await runWithSchemaFailover(() =>
+      prisma.crmDealUnit.findUnique({
+        where: { id: linkId },
+        include: { unit: { select: { internalCode: true } } },
+      }),
+    )
+    if (!existing || existing.dealId !== dealId) {
+      return res.status(404).json({ message: 'Vinculo no encontrado.' })
+    }
+
+    await runWithSchemaFailover(() =>
+      prisma.$transaction(async (tx) => {
+        await tx.crmDealUnit.delete({ where: { id: linkId } })
+        await tx.crmActivity.create({
+          data: {
+            dealId,
+            type: 'TASK',
+            status: 'DONE',
+            summary: `Unidad ${existing.unit.internalCode} desvinculada de la oportunidad.`,
+            completedAt: new Date(),
+            createdByUserId: req.userId,
+          },
+        })
+      }),
+    )
+
+    return res.status(204).send()
+  } catch (error) {
+    console.error('CRM delete deal unit error:', error)
+    return res.status(500).json({ message: 'No se pudo desvincular la unidad.' })
   }
 })
 

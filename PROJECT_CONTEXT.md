@@ -821,6 +821,27 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - Actividades CRM no tienen aun recordatorios push/email automáticos.
   - No hay panel historico de cambios por campo (solo actividades y cambios de etapa).
+- Fecha: 2026-03-21
+  Cambio: CRM Comercial v3 con concursos/contratos por unidad y carga historica manual uno-a-uno.
+  Archivos:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260322001000_add_crm_deal_units_and_kind/migration.sql`
+  - `backend/src/db.ts`
+  - `backend/src/routes/crm.ts`
+  - `backend/src/routes/fleet.ts`
+  - `src/modules/crm/pages/CrmPage.tsx`
+  - `src/modules/fleet/components/FleetUnitCard.tsx`
+  - `src/types/domain.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se incorpora tipologia de oportunidad (`Concurso`/`Contrato`) con referencia comercial y bandera `Historico` para cargar cartera antigua manualmente sin imports masivos.
+  - Se habilita vinculacion de multiples unidades por oportunidad con estados operativos (`En concurso`, `Adjudicada`, `Perdida`, `Liberada`) y bloqueo de doble asignacion activa de una misma unidad.
+  - El detalle CRM permite buscar dominio, vincular/quitar unidades y actualizar estado por unidad, dejando trazabilidad de actividades del actor.
+  - Se expone visibilidad comercial en Flota (`crmDealLink`) para que operaciones vea unidades comprometidas comercialmente.
+  - Compatibilidad runtime en backend/migracion para evitar 500 por drift al agregar tablas/enums nuevos del CRM.
+  Riesgo residual:
+  - Carga historica sigue siendo manual registro por registro (sin importador por lote).
+  - No existe todavia forecast avanzado por disponibilidad futura ni scoring de conflictos por fechas de contrato.
 
 ## 9) Riesgos abiertos (a seguir)
 

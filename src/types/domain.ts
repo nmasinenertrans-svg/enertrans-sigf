@@ -172,6 +172,14 @@ export interface FleetUnit {
   lubricants: FleetUnitLubricants
   filters: FleetUnitFilters
   documents: FleetUnitDocuments
+  crmDealLink?: {
+    dealId: string
+    dealTitle: string
+    dealKind: CrmDealKind
+    companyName: string
+    stage: CrmDealStage
+    status: CrmDealUnitStatus
+  } | null
 }
 
 export interface FleetUnitLubricants {
@@ -473,6 +481,12 @@ export interface DeliveryOperation {
 export const crmDealStages = ['LEAD', 'CONTACTED', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const
 export type CrmDealStage = (typeof crmDealStages)[number]
 
+export const crmDealKinds = ['TENDER', 'CONTRACT'] as const
+export type CrmDealKind = (typeof crmDealKinds)[number]
+
+export const crmDealUnitStatuses = ['EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA'] as const
+export type CrmDealUnitStatus = (typeof crmDealUnitStatuses)[number]
+
 export const crmActivityTypes = ['CALL', 'WHATSAPP', 'EMAIL', 'MEETING', 'TASK'] as const
 export type CrmActivityType = (typeof crmActivityTypes)[number]
 
@@ -483,6 +497,9 @@ export interface CrmDeal {
   id: string
   title: string
   companyName: string
+  dealKind: CrmDealKind
+  referenceCode: string
+  isHistorical: boolean
   contactName: string
   contactEmail: string
   contactPhone: string
@@ -516,6 +533,7 @@ export interface CrmDeal {
     id: string
     name: string
   } | null
+  unitLinks?: CrmDealUnit[]
 }
 
 export interface CrmActivity {
@@ -533,6 +551,25 @@ export interface CrmActivity {
     id: string
     fullName: string
     username: string
+  }
+}
+
+export interface CrmDealUnit {
+  id: string
+  dealId: string
+  unitId: string
+  status: CrmDealUnitStatus
+  notes: string
+  createdByUserId: string
+  linkedAt?: string
+  releasedAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+  unit?: {
+    id: string
+    internalCode: string
+    ownerCompany: string
+    clientName: string
   }
 }
 
