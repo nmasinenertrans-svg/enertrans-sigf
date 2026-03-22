@@ -99,6 +99,29 @@ enum TaskEventType {
   STATUS_CHANGED
 }
 
+enum CrmDealStage {
+  LEAD
+  CONTACTED
+  QUALIFICATION
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum CrmActivityType {
+  CALL
+  WHATSAPP
+  EMAIL
+  MEETING
+  TASK
+}
+
+enum CrmActivityStatus {
+  PENDING
+  DONE
+}
+
 model User {
   id                  String   @id @default(uuid())
   username            String   @unique
@@ -117,6 +140,9 @@ model User {
   tasksAssignedBy     Task[]      @relation("TaskAssignedBy")
   taskEvents          TaskEvent[] @relation("TaskEventActor")
   deliveryOperationsRequested DeliveryOperation[] @relation("DeliveryRequestedBy")
+  crmDealsCreated     CrmDeal[]      @relation("CrmDealCreatedBy")
+  crmDealsAssigned    CrmDeal[]      @relation("CrmDealAssignedTo")
+  crmActivitiesCreated CrmActivity[] @relation("CrmActivityCreatedBy")
 }
 
 model FleetUnit {
@@ -451,4 +477,55 @@ model DeliveryOperation {
   @@index([unitId, createdAt])
   @@index([clientId, createdAt])
   @@index([operationType, createdAt])
+}
+
+model CrmDeal {
+  id                 String          @id @default(uuid())
+  title              String
+  companyName        String
+  contactName        String          @default("")
+  contactEmail       String          @default("")
+  contactPhone       String          @default("")
+  source             String          @default("")
+  serviceLine        String          @default("")
+  amount             Float           @default(0)
+  currency           CurrencyCode    @default(ARS)
+  probability        Int             @default(10)
+  stage              CrmDealStage    @default(LEAD)
+  expectedCloseDate  DateTime?
+  lastContactAt      DateTime?
+  lostReason         String          @default("")
+  notes              String          @default("")
+  assignedToUserId   String?
+  createdByUserId    String
+  wonAt              DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  assignedToUser     User?           @relation("CrmDealAssignedTo", fields: [assignedToUserId], references: [id])
+  createdByUser      User            @relation("CrmDealCreatedBy", fields: [createdByUserId], references: [id])
+  activities         CrmActivity[]
+
+  @@index([stage, createdAt])
+  @@index([assignedToUserId, stage])
+  @@index([companyName])
+}
+
+model CrmActivity {
+  id              String            @id @default(uuid())
+  dealId          String
+  type            CrmActivityType
+  status          CrmActivityStatus @default(PENDING)
+  summary         String
+  dueAt           DateTime?
+  completedAt     DateTime?
+  createdByUserId String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  deal            CrmDeal           @relation(fields: [dealId], references: [id])
+  createdByUser   User              @relation("CrmActivityCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([dealId, status, dueAt])
+  @@index([createdByUserId, createdAt])
 }

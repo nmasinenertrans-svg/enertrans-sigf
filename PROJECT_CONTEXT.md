@@ -763,6 +763,33 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Si un schema parcial falla, se ignora solo ese schema y no se cae toda la recuperacion.
   Riesgo residual:
   - Si existe un schema extremadamente viejo sin columnas minimas (`id`, `code`, `unitId`, `createdAt`) se omite por seguridad y no entra al listado.
+- Fecha: 2026-03-21
+  Cambio: Alta del modulo CRM Comercial (pipeline + actividades) con permisos y feature flag.
+  Archivos:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260321153000_add_crm_module/migration.sql`
+  - `backend/src/routes/crm.ts`
+  - `backend/src/index.ts`
+  - `backend/src/routes/settings.ts`
+  - `backend/src/auth/permissions.ts`
+  - `backend/src/db.ts`
+  - `src/modules/crm/pages/CrmPage.tsx`
+  - `src/core/routing/AppRouter.tsx`
+  - `src/core/routing/routePaths.ts`
+  - `src/core/layout/Sidebar.tsx`
+  - `src/modules/system/pages/MaintenanceModePage.tsx`
+  - `src/core/auth/permissions.ts`
+  - `src/types/domain.ts`
+  - `src/core/context/appState.ts`
+  - `src/modules/users/pages/UsersPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Nuevo circuito comercial desacoplado del flujo operativo (sin tocar OT/auditorias/reparaciones existentes).
+  - Activacion controlada por flag `showCrmModule` y permisos por modulo `CRM`.
+  - Compatibilidad runtime en backend para crear tipos/tablas CRM en schema activo y evitar 500 por drift en despliegues sin migracion.
+  Riesgo residual:
+  - Primera version no incluye automatizaciones cross-modulo (ej. convertir oportunidad ganada en cliente/unidad de forma automatica).
+  - Pipeline no usa drag-and-drop todavia; el cambio de etapa se realiza por selector.
 
 ## 9) Riesgos abiertos (a seguir)
 

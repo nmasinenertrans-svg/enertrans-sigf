@@ -16,6 +16,7 @@ const navigationItems: Array<{ path: string; label: string; module: PermissionMo
   { path: ROUTE_PATHS.externalRequests, label: 'Notas de pedido externo', module: 'WORK_ORDERS', flagKey: 'showExternalRequestsModule' },
   { path: ROUTE_PATHS.repairs, label: 'Reparaciones', module: 'REPAIRS', flagKey: 'showRepairsModule' },
   { path: ROUTE_PATHS.suppliers, label: 'Proveedores', module: 'REPAIRS', flagKey: 'showSuppliersModule' },
+  { path: ROUTE_PATHS.crm, label: 'CRM Comercial', module: 'CRM', flagKey: 'showCrmModule' },
   { path: ROUTE_PATHS.inventory, label: 'Inventario', module: 'INVENTORY', flagKey: 'showInventoryModule' },
   { path: ROUTE_PATHS.reports, label: 'Reportes', module: 'REPORTS', flagKey: 'showReportsModule' },
   { path: ROUTE_PATHS.users, label: 'Usuarios', module: 'USERS', flagKey: 'showUsersModule' },

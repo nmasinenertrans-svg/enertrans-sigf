@@ -20,6 +20,7 @@
   repairs: '/repairs',
   suppliers: '/suppliers',
   supplierDetail: '/suppliers/:supplierId',
+  crm: '/crm',
   inventory: '/inventory',
   reports: '/reports',
   notifications: '/notifications',

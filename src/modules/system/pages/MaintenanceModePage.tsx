@@ -320,6 +320,15 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+            Mostrar modulo CRM Comercial
+            <input
+              type="checkbox"
+              checked={flags.showCrmModule}
+              onChange={(event) => setFlags((prev) => ({ ...prev, showCrmModule: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
             Mostrar modulo Usuarios
             <input
               type="checkbox"

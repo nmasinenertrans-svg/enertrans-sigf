@@ -16,6 +16,7 @@ const permissionModuleLabelMap: Record<PermissionModule, string> = {
   WORK_ORDERS: 'Ordenes de trabajo',
   TASKS: 'Tareas',
   REPAIRS: 'Reparaciones',
+  CRM: 'CRM Comercial',
   INVENTORY: 'Inventario',
   REPORTS: 'Reportes',
   USERS: 'Usuarios',

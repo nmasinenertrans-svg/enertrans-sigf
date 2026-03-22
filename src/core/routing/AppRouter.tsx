@@ -22,6 +22,7 @@ import { UsersPage } from '../../modules/users/pages/UsersPage'
 import { ReportsPage } from '../../modules/reports/pages/ReportsPage'
 import { SuppliersPage } from '../../modules/suppliers/pages/SuppliersPage'
 import { SupplierDetailPage } from '../../modules/suppliers/pages/SupplierDetailPage'
+import { CrmPage } from '../../modules/crm/pages/CrmPage'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
@@ -214,6 +215,16 @@ export const AppRouter = () => (
             <RequireFeatureFlag flag="showSuppliersModule">
               <RequirePermission module="REPAIRS" action="view">
                 <SupplierDetailPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.crm}
+          element={
+            <RequireFeatureFlag flag="showCrmModule">
+              <RequirePermission module="CRM" action="view">
+                <CrmPage />
               </RequirePermission>
             </RequireFeatureFlag>
           }

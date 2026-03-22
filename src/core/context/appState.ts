@@ -96,6 +96,7 @@ const defaultFeatureFlags: FeatureFlags = {
   showExternalRequestsModule: true,
   showRepairsModule: true,
   showSuppliersModule: true,
+  showCrmModule: true,
   showReportsModule: true,
   showInventoryModule: true,
   showUsersModule: true,

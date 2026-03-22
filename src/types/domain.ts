@@ -11,6 +11,7 @@ export const permissionModules = [
   'WORK_ORDERS',
   'TASKS',
   'REPAIRS',
+  'CRM',
   'INVENTORY',
   'REPORTS',
   'USERS',
@@ -113,6 +114,7 @@ export interface FeatureFlags {
   showExternalRequestsModule: boolean
   showRepairsModule: boolean
   showSuppliersModule: boolean
+  showCrmModule: boolean
   showReportsModule: boolean
   showInventoryModule: boolean
   showUsersModule: boolean
@@ -466,6 +468,67 @@ export interface DeliveryOperation {
     id: string
     name: string
   } | null
+}
+
+export const crmDealStages = ['LEAD', 'CONTACTED', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'] as const
+export type CrmDealStage = (typeof crmDealStages)[number]
+
+export const crmActivityTypes = ['CALL', 'WHATSAPP', 'EMAIL', 'MEETING', 'TASK'] as const
+export type CrmActivityType = (typeof crmActivityTypes)[number]
+
+export const crmActivityStatuses = ['PENDING', 'DONE'] as const
+export type CrmActivityStatus = (typeof crmActivityStatuses)[number]
+
+export interface CrmDeal {
+  id: string
+  title: string
+  companyName: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
+  source: string
+  serviceLine: string
+  amount: number
+  currency: 'ARS' | 'USD'
+  probability: number
+  stage: CrmDealStage
+  expectedCloseDate?: string | null
+  lastContactAt?: string | null
+  lostReason: string
+  notes: string
+  assignedToUserId?: string | null
+  createdByUserId: string
+  wonAt?: string | null
+  createdAt?: string
+  updatedAt?: string
+  assignedToUser?: {
+    id: string
+    fullName: string
+    username: string
+  } | null
+  createdByUser?: {
+    id: string
+    fullName: string
+    username: string
+  }
+}
+
+export interface CrmActivity {
+  id: string
+  dealId: string
+  type: CrmActivityType
+  status: CrmActivityStatus
+  summary: string
+  dueAt?: string | null
+  completedAt?: string | null
+  createdByUserId: string
+  createdAt?: string
+  updatedAt?: string
+  createdByUser?: {
+    id: string
+    fullName: string
+    username: string
+  }
 }
 
 export interface TaskEventRecord {

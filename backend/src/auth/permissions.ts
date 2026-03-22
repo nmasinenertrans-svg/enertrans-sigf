@@ -7,6 +7,7 @@ export type PermissionModule =
   | 'WORK_ORDERS'
   | 'TASKS'
   | 'REPAIRS'
+  | 'CRM'
   | 'INVENTORY'
   | 'REPORTS'
   | 'USERS'
@@ -24,6 +25,7 @@ const permissionModules: PermissionModule[] = [
   'WORK_ORDERS',
   'TASKS',
   'REPAIRS',
+  'CRM',
   'INVENTORY',
   'REPORTS',
   'USERS',
@@ -83,6 +85,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
     allowModule(permissions, 'TASKS', ['view'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'CRM', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view', 'create', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
     return permissions
