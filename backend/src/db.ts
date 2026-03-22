@@ -329,11 +329,12 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       "stage" "CrmDealStage" NOT NULL DEFAULT 'LEAD',
       "expectedCloseDate" TIMESTAMP(3),
       "lastContactAt" TIMESTAMP(3),
-      "lostReason" TEXT NOT NULL DEFAULT '',
-      "notes" TEXT NOT NULL DEFAULT '',
-      "assignedToUserId" TEXT,
-      "createdByUserId" TEXT NOT NULL,
-      "wonAt" TIMESTAMP(3),
+	      "lostReason" TEXT NOT NULL DEFAULT '',
+	      "notes" TEXT NOT NULL DEFAULT '',
+	      "assignedToUserId" TEXT,
+	      "convertedClientId" TEXT,
+	      "createdByUserId" TEXT NOT NULL,
+	      "wonAt" TIMESTAMP(3),
       "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT "CrmDeal_pkey" PRIMARY KEY ("id")
@@ -354,20 +355,22 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       CONSTRAINT "CrmActivity_pkey" PRIMARY KEY ("id")
     );
   `)
-  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_stage_createdAt_idx" ON "CrmDeal"("stage","createdAt");`)
-  await safeExecuteCompatSql(
-    `CREATE INDEX IF NOT EXISTS "CrmDeal_assignedToUserId_stage_idx" ON "CrmDeal"("assignedToUserId","stage");`,
-  )
-  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_companyName_idx" ON "CrmDeal"("companyName");`)
+	  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_stage_createdAt_idx" ON "CrmDeal"("stage","createdAt");`)
+	  await safeExecuteCompatSql(
+	    `CREATE INDEX IF NOT EXISTS "CrmDeal_assignedToUserId_stage_idx" ON "CrmDeal"("assignedToUserId","stage");`,
+	  )
+	  await safeExecuteCompatSql(`ALTER TABLE "CrmDeal" ADD COLUMN IF NOT EXISTS "convertedClientId" TEXT;`)
+	  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_convertedClientId_idx" ON "CrmDeal"("convertedClientId");`)
+	  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "CrmDeal_companyName_idx" ON "CrmDeal"("companyName");`)
   await safeExecuteCompatSql(
     `CREATE INDEX IF NOT EXISTS "CrmActivity_dealId_status_dueAt_idx" ON "CrmActivity"("dealId","status","dueAt");`,
   )
   await safeExecuteCompatSql(
     `CREATE INDEX IF NOT EXISTS "CrmActivity_createdByUserId_createdAt_idx" ON "CrmActivity"("createdByUserId","createdAt");`,
   )
-  await safeExecuteCompatSql(`
-    DO $$
-    BEGIN
+	  await safeExecuteCompatSql(`
+	    DO $$
+	    BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'CrmDeal_assignedToUserId_fkey'
       ) THEN
@@ -377,10 +380,24 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
           ON DELETE SET NULL ON UPDATE CASCADE;
       END IF;
     END
-    $$;
-  `)
-  await safeExecuteCompatSql(`
-    DO $$
+	    $$;
+	  `)
+	  await safeExecuteCompatSql(`
+	    DO $$
+	    BEGIN
+	      IF NOT EXISTS (
+	        SELECT 1 FROM pg_constraint WHERE conname = 'CrmDeal_convertedClientId_fkey'
+	      ) THEN
+	        ALTER TABLE "CrmDeal"
+	          ADD CONSTRAINT "CrmDeal_convertedClientId_fkey"
+	          FOREIGN KEY ("convertedClientId") REFERENCES "ClientAccount"("id")
+	          ON DELETE SET NULL ON UPDATE CASCADE;
+	      END IF;
+	    END
+	    $$;
+	  `)
+	  await safeExecuteCompatSql(`
+	    DO $$
     BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'CrmDeal_createdByUserId_fkey'

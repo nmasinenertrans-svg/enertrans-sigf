@@ -431,6 +431,7 @@ model ClientAccount {
 
   units         FleetUnit[]
   deliveries    DeliveryOperation[]
+  crmDeals      CrmDeal[]
 }
 
 model Supplier {
@@ -497,6 +498,7 @@ model CrmDeal {
   lostReason         String          @default("")
   notes              String          @default("")
   assignedToUserId   String?
+  convertedClientId  String?
   createdByUserId    String
   wonAt              DateTime?
   createdAt          DateTime        @default(now())
@@ -504,10 +506,12 @@ model CrmDeal {
 
   assignedToUser     User?           @relation("CrmDealAssignedTo", fields: [assignedToUserId], references: [id])
   createdByUser      User            @relation("CrmDealCreatedBy", fields: [createdByUserId], references: [id])
+  convertedClient    ClientAccount?  @relation(fields: [convertedClientId], references: [id])
   activities         CrmActivity[]
 
   @@index([stage, createdAt])
   @@index([assignedToUserId, stage])
+  @@index([convertedClientId])
   @@index([companyName])
 }
 

@@ -4,101 +4,38 @@ import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
-import type { CrmActivity, CrmActivityType, CrmDeal, CrmDealStage } from '../../../types/domain'
+import type { CrmActivity, CrmDeal, CrmDealStage } from '../../../types/domain'
 
-const stageOrder: Array<{ key: CrmDealStage; label: string; accent: string; badge: string }> = [
-  { key: 'LEAD', label: 'Leads', accent: 'border-slate-300', badge: 'bg-slate-100 text-slate-700' },
-  { key: 'CONTACTED', label: 'Contactado', accent: 'border-sky-300', badge: 'bg-sky-50 text-sky-700' },
-  { key: 'QUALIFICATION', label: 'Calificado', accent: 'border-blue-300', badge: 'bg-blue-50 text-blue-700' },
-  { key: 'PROPOSAL', label: 'Propuesta', accent: 'border-violet-300', badge: 'bg-violet-50 text-violet-700' },
-  { key: 'NEGOTIATION', label: 'Negociacion', accent: 'border-amber-300', badge: 'bg-amber-50 text-amber-700' },
-  { key: 'WON', label: 'Ganadas', accent: 'border-emerald-300', badge: 'bg-emerald-50 text-emerald-700' },
-  { key: 'LOST', label: 'Perdidas', accent: 'border-rose-300', badge: 'bg-rose-50 text-rose-700' },
+const STAGES: Array<{ key: CrmDealStage; label: string }> = [
+  { key: 'LEAD', label: 'Leads' },
+  { key: 'CONTACTED', label: 'Contactado' },
+  { key: 'QUALIFICATION', label: 'Calificado' },
+  { key: 'PROPOSAL', label: 'Propuesta' },
+  { key: 'NEGOTIATION', label: 'Negociacion' },
+  { key: 'WON', label: 'Ganadas' },
+  { key: 'LOST', label: 'Perdidas' },
 ]
 
-const activityTypeOptions: Array<{ value: CrmActivityType; label: string }> = [
-  { value: 'CALL', label: 'Llamada' },
-  { value: 'WHATSAPP', label: 'WhatsApp' },
-  { value: 'EMAIL', label: 'Email' },
-  { value: 'MEETING', label: 'Reunion' },
-  { value: 'TASK', label: 'Tarea' },
-]
+const EMPTY_FORM = { title: '', companyName: '', amount: '', currency: 'ARS' as 'ARS' | 'USD', assignedToUserId: '' }
+const EMPTY_ACTIVITY = { summary: '' }
 
-type NewDealForm = {
-  title: string
-  companyName: string
-  contactName: string
-  contactEmail: string
-  contactPhone: string
-  source: string
-  serviceLine: string
-  amount: string
-  currency: 'ARS' | 'USD'
-  expectedCloseDate: string
-  assignedToUserId: string
-  notes: string
-}
+const money = (value: number, currency: 'ARS' | 'USD') =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value || 0)
 
-type ActivityDraft = {
-  type: CrmActivityType
-  summary: string
-  dueAt: string
-}
-
-const emptyForm: NewDealForm = {
-  title: '',
-  companyName: '',
-  contactName: '',
-  contactEmail: '',
-  contactPhone: '',
-  source: '',
-  serviceLine: '',
-  amount: '',
-  currency: 'ARS',
-  expectedCloseDate: '',
-  assignedToUserId: '',
-  notes: '',
-}
-
-const emptyActivityDraft: ActivityDraft = {
-  type: 'TASK',
-  summary: '',
-  dueAt: '',
-}
-
-const toDateLabel = (value?: string | null): string => {
-  if (!value) {
-    return 'Sin fecha'
+const stale = (dateValue?: string | null) => {
+  if (!dateValue) {
+    return true
   }
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Sin fecha'
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) {
+    return true
   }
-  return parsed.toLocaleDateString('es-AR')
+  return Date.now() - date.getTime() > 1000 * 60 * 60 * 24 * 14
 }
 
-const toDateTimeLabel = (value?: string | null): string => {
-  if (!value) {
-    return 'Sin actividad'
-  }
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Sin actividad'
-  }
-  return parsed.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-}
-
-const formatMoney = (amount: number, currency: 'ARS' | 'USD') =>
-  new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount || 0)
-
-const getDealLastTouch = (deal: CrmDeal): number => {
-  const fallback = deal.updatedAt ?? deal.createdAt ?? ''
-  const source = deal.lastContactAt ?? fallback
-  const parsed = new Date(source).getTime()
+const getActivitySortTime = (activity: CrmActivity) => {
+  const value = activity.dueAt || activity.updatedAt || activity.createdAt
+  const parsed = value ? new Date(value).getTime() : 0
   return Number.isNaN(parsed) ? 0 : parsed
 }
 
@@ -109,191 +46,151 @@ export const CrmPage = () => {
     actions: { setAppError },
   } = useAppContext()
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSavingDeal, setIsSavingDeal] = useState(false)
-  const [deals, setDeals] = useState<CrmDeal[]>([])
-  const [activities, setActivities] = useState<CrmActivity[]>([])
-  const [form, setForm] = useState<NewDealForm>(emptyForm)
-  const [stageDraftByDeal, setStageDraftByDeal] = useState<Record<string, CrmDealStage>>({})
-  const [activityDraftByDeal, setActivityDraftByDeal] = useState<Record<string, ActivityDraft>>({})
-  const [search, setSearch] = useState('')
-
   const canCreate = can('CRM', 'create')
   const canEdit = can('CRM', 'edit')
   const canDelete = can('CRM', 'delete')
 
-  const salesUsers = useMemo(
-    () => users.filter((user) => ['DEV', 'GERENTE', 'COORDINADOR'].includes(user.role)),
-    [users],
-  )
+  const [deals, setDeals] = useState<CrmDeal[]>([])
+  const [activities, setActivities] = useState<CrmActivity[]>([])
+  const [search, setSearch] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('')
+  const [draggingDealId, setDraggingDealId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [stageDraft, setStageDraft] = useState<Record<string, CrmDealStage>>({})
+  const [activityDraft, setActivityDraft] = useState<Record<string, { summary: string }>>({})
+  const [isConvertingDealId, setIsConvertingDealId] = useState<string | null>(null)
 
-  const loadCrm = async () => {
+  const salesUsers = useMemo(() => users.filter((u) => ['DEV', 'GERENTE', 'COORDINADOR'].includes(u.role)), [users])
+
+  const load = async () => {
     try {
       const response = await apiRequest<{ deals: CrmDeal[]; activities: CrmActivity[] }>('/crm')
-      setDeals(Array.isArray(response.deals) ? response.deals : [])
+      const nextDeals = Array.isArray(response.deals) ? response.deals : []
+      setDeals(nextDeals)
       setActivities(Array.isArray(response.activities) ? response.activities : [])
-      setStageDraftByDeal(
-        (Array.isArray(response.deals) ? response.deals : []).reduce<Record<string, CrmDealStage>>((acc, deal) => {
-          acc[deal.id] = deal.stage
-          return acc
-        }, {}),
-      )
+      setStageDraft(nextDeals.reduce<Record<string, CrmDealStage>>((acc, d) => ({ ...acc, [d.id]: d.stage }), {}))
     } catch {
-      setAppError('No se pudo cargar el CRM comercial.')
+      setAppError('No se pudo cargar CRM.')
     } finally {
       setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    void loadCrm()
+    void load()
   }, [])
 
   const filteredDeals = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) {
-      return deals
-    }
-    return deals.filter((deal) =>
-      [deal.title, deal.companyName, deal.contactName, deal.serviceLine, deal.source].join(' ').toLowerCase().includes(query),
-    )
-  }, [deals, search])
-
-  const activityByDeal = useMemo(() => {
-    return activities.reduce<Record<string, CrmActivity[]>>((acc, activity) => {
-      if (!acc[activity.dealId]) {
-        acc[activity.dealId] = []
+    const q = search.trim().toLowerCase()
+    return deals.filter((deal) => {
+      if (ownerFilter && (deal.assignedToUserId || '') !== ownerFilter) {
+        return false
       }
-      acc[activity.dealId].push(activity)
-      return acc
-    }, {})
-  }, [activities])
+      if (!q) {
+        return true
+      }
+      return [deal.title, deal.companyName, deal.contactName, deal.source, deal.serviceLine].join(' ').toLowerCase().includes(q)
+    })
+  }, [deals, ownerFilter, search])
 
   const kpis = useMemo(() => {
-    const activeDeals = deals.filter((deal) => !['WON', 'LOST'].includes(deal.stage))
-    const pipelineAmount = activeDeals.reduce((sum, deal) => sum + (deal.amount ?? 0), 0)
-    const weightedForecast = activeDeals.reduce((sum, deal) => sum + (deal.amount ?? 0) * ((deal.probability ?? 0) / 100), 0)
-
-    const now = new Date()
-    const wonThisMonth = deals
-      .filter((deal) => deal.stage === 'WON' && deal.wonAt)
-      .filter((deal) => {
-        const won = new Date(deal.wonAt as string)
-        return won.getFullYear() === now.getFullYear() && won.getMonth() === now.getMonth()
-      })
-      .reduce((sum, deal) => sum + (deal.amount ?? 0), 0)
-
-    const staleLimit = Date.now() - 1000 * 60 * 60 * 24 * 14
-    const staleCount = activeDeals.filter((deal) => getDealLastTouch(deal) < staleLimit).length
-
-    return { pipelineAmount, weightedForecast, wonThisMonth, staleCount }
+    const openDeals = deals.filter((d) => d.stage !== 'WON' && d.stage !== 'LOST')
+    const pipeline = openDeals.reduce((sum, d) => sum + (d.amount || 0), 0)
+    const forecast = openDeals.reduce((sum, d) => sum + (d.amount || 0) * ((d.probability || 0) / 100), 0)
+    const won = deals.filter((d) => d.stage === 'WON').length
+    const lost = deals.filter((d) => d.stage === 'LOST').length
+    const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0
+    const staleCount = openDeals.filter((d) => stale(d.lastContactAt ?? d.updatedAt ?? d.createdAt)).length
+    return { pipeline, forecast, winRate, staleCount }
   }, [deals])
 
-  const handleCreateDeal = async () => {
-    if (!canCreate) {
-      return
-    }
+  const createDeal = async () => {
+    if (!canCreate) return
     if (!form.title.trim() || !form.companyName.trim()) {
-      setAppError('Completá al menos titulo y empresa para crear la oportunidad.')
+      setAppError('Completá titulo y empresa.')
       return
     }
-
-    setIsSavingDeal(true)
+    setIsSaving(true)
     try {
       const created = await apiRequest<CrmDeal>('/crm/deals', {
         method: 'POST',
         body: {
-          ...form,
+          title: form.title,
+          companyName: form.companyName,
           amount: Number(form.amount || 0),
-          expectedCloseDate: form.expectedCloseDate || undefined,
+          currency: form.currency,
           assignedToUserId: form.assignedToUserId || null,
         },
       })
       setDeals((prev) => [created, ...prev])
-      setStageDraftByDeal((prev) => ({ ...prev, [created.id]: created.stage }))
-      setForm(emptyForm)
+      setStageDraft((prev) => ({ ...prev, [created.id]: created.stage }))
+      setForm(EMPTY_FORM)
     } catch {
-      setAppError('No se pudo crear la oportunidad comercial.')
+      setAppError('No se pudo crear la oportunidad.')
     } finally {
-      setIsSavingDeal(false)
+      setIsSaving(false)
     }
   }
 
-  const handleStageChange = async (dealId: string) => {
-    if (!canEdit) {
-      return
-    }
-    const nextStage = stageDraftByDeal[dealId]
-    if (!nextStage) {
-      return
-    }
-
+  const moveStage = async (dealId: string, nextStage: CrmDealStage) => {
+    if (!canEdit) return
+    const current = deals.find((d) => d.id === dealId)
+    if (!current || current.stage === nextStage) return
+    const prevDeals = deals
+    setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, stage: nextStage } : d)))
+    setStageDraft((prev) => ({ ...prev, [dealId]: nextStage }))
     try {
-      const updated = await apiRequest<CrmDeal>(`/crm/deals/${dealId}/stage`, {
-        method: 'PATCH',
-        body: { stage: nextStage },
-      })
-      setDeals((prev) => prev.map((deal) => (deal.id === dealId ? { ...deal, ...updated } : deal)))
+      const updated = await apiRequest<CrmDeal>(`/crm/deals/${dealId}/stage`, { method: 'PATCH', body: { stage: nextStage } })
+      setDeals((prev) => prev.map((d) => (d.id === dealId ? { ...d, ...updated } : d)))
     } catch {
-      setAppError('No se pudo mover la oportunidad de etapa.')
+      setDeals(prevDeals)
+      setStageDraft((prev) => ({ ...prev, [dealId]: current.stage }))
+      setAppError('No se pudo mover la etapa.')
     }
   }
 
-  const handleAddActivity = async (dealId: string) => {
-    if (!canEdit) {
-      return
-    }
-    const draft = activityDraftByDeal[dealId] ?? emptyActivityDraft
-    if (!draft.summary.trim()) {
-      setAppError('Escribí un resumen para registrar la actividad.')
-      return
-    }
-
+  const addActivity = async (dealId: string) => {
+    if (!canEdit) return
+    const summary = (activityDraft[dealId] ?? EMPTY_ACTIVITY).summary.trim()
+    if (!summary) return
     try {
       const created = await apiRequest<CrmActivity>(`/crm/deals/${dealId}/activities`, {
         method: 'POST',
-        body: {
-          type: draft.type,
-          summary: draft.summary,
-          dueAt: draft.dueAt || undefined,
-        },
+        body: { type: 'TASK', summary },
       })
       setActivities((prev) => [created, ...prev])
-      setActivityDraftByDeal((prev) => ({ ...prev, [dealId]: emptyActivityDraft }))
+      setActivityDraft((prev) => ({ ...prev, [dealId]: EMPTY_ACTIVITY }))
     } catch {
-      setAppError('No se pudo registrar la actividad comercial.')
+      setAppError('No se pudo agregar la actividad.')
     }
   }
 
-  const handleToggleActivity = async (activity: CrmActivity) => {
-    if (!canEdit) {
-      return
-    }
-    const nextStatus = activity.status === 'DONE' ? 'PENDING' : 'DONE'
+  const convertToClient = async (deal: CrmDeal) => {
+    if (!canEdit) return
+    setIsConvertingDealId(deal.id)
     try {
-      const updated = await apiRequest<CrmActivity>(`/crm/activities/${activity.id}`, {
-        method: 'PATCH',
-        body: { status: nextStatus },
-      })
-      setActivities((prev) => prev.map((item) => (item.id === activity.id ? updated : item)))
+      const response = await apiRequest<{ deal: CrmDeal; client: { id: string; name: string }; createdClient: boolean }>(
+        `/crm/deals/${deal.id}/convert-client`,
+        { method: 'POST' },
+      )
+      setDeals((prev) => prev.map((d) => (d.id === deal.id ? response.deal : d)))
+      setAppError(response.createdClient ? `Cliente creado: ${response.client.name}` : `Cliente vinculado: ${response.client.name}`)
     } catch {
-      setAppError('No se pudo actualizar el estado de la actividad.')
+      setAppError('No se pudo convertir a cliente.')
+    } finally {
+      setIsConvertingDealId(null)
     }
   }
 
-  const handleDeleteDeal = async (deal: CrmDeal) => {
-    if (!canDelete) {
-      return
-    }
-    const confirmed = window.confirm(`¿Eliminar oportunidad "${deal.title}" de ${deal.companyName}?`)
-    if (!confirmed) {
-      return
-    }
-
+  const removeDeal = async (deal: CrmDeal) => {
+    if (!canDelete) return
+    if (!window.confirm(`¿Eliminar oportunidad "${deal.title}"?`)) return
     try {
       await apiRequest(`/crm/deals/${deal.id}`, { method: 'DELETE' })
-      setDeals((prev) => prev.filter((item) => item.id !== deal.id))
-      setActivities((prev) => prev.filter((item) => item.dealId !== deal.id))
+      setDeals((prev) => prev.filter((d) => d.id !== deal.id))
+      setActivities((prev) => prev.filter((a) => a.dealId !== deal.id))
     } catch {
       setAppError('No se pudo eliminar la oportunidad.')
     }
@@ -304,325 +201,93 @@ export const CrmPage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">CRM Comercial</h2>
-        <p className="text-sm text-slate-600">Embudo de ventas, seguimiento de actividades y forecast de cierre.</p>
+        <p className="text-sm text-slate-600">Pipeline con drag & drop, seguimiento y conversión directa a cliente.</p>
       </header>
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Pipeline activo</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{formatMoney(kpis.pipelineAmount, 'ARS')}</p>
-        </article>
-        <article className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-500">Forecast ponderado</p>
-          <p className="mt-2 text-2xl font-bold text-blue-900">{formatMoney(kpis.weightedForecast, 'ARS')}</p>
-        </article>
-        <article className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-500">Ganado este mes</p>
-          <p className="mt-2 text-2xl font-bold text-emerald-900">{formatMoney(kpis.wonThisMonth, 'ARS')}</p>
-        </article>
-        <article className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">Oportunidades estancadas</p>
-          <p className="mt-2 text-2xl font-bold text-amber-900">{kpis.staleCount}</p>
-        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pipeline</p><p className="text-xl font-bold">{money(kpis.pipeline, 'ARS')}</p></article>
+        <article className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm"><p className="text-xs text-blue-600">Forecast</p><p className="text-xl font-bold text-blue-900">{money(kpis.forecast, 'ARS')}</p></article>
+        <article className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm"><p className="text-xs text-violet-600">Win rate</p><p className="text-xl font-bold text-violet-900">{kpis.winRate}%</p></article>
+        <article className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm"><p className="text-xs text-amber-700">Estancadas</p><p className="text-xl font-bold text-amber-900">{kpis.staleCount}</p></article>
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
           <h3 className="text-lg font-bold text-slate-900">Nueva oportunidad</h3>
-          <p className="text-sm text-slate-600">Carga comercial estandar para seguimiento de punta a punta.</p>
-          <form
-            className="mt-4 grid grid-cols-1 gap-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void handleCreateDeal()
-            }}
-          >
-            <input
-              value={form.title}
-              onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Titulo de oportunidad"
-            />
-            <input
-              value={form.companyName}
-              onChange={(event) => setForm((prev) => ({ ...prev, companyName: event.target.value }))}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Empresa"
-            />
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <input
-                value={form.contactName}
-                onChange={(event) => setForm((prev) => ({ ...prev, contactName: event.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Contacto"
-              />
-              <input
-                value={form.contactPhone}
-                onChange={(event) => setForm((prev) => ({ ...prev, contactPhone: event.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Telefono"
-              />
-            </div>
-            <input
-              value={form.contactEmail}
-              onChange={(event) => setForm((prev) => ({ ...prev, contactEmail: event.target.value }))}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Email"
-            />
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <input
-                value={form.source}
-                onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Origen lead"
-              />
-              <input
-                value={form.serviceLine}
-                onChange={(event) => setForm((prev) => ({ ...prev, serviceLine: event.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Servicio"
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <input
-                value={form.amount}
-                type="number"
-                min={0}
-                onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Monto estimado"
-              />
-              <select
-                value={form.currency}
-                onChange={(event) => setForm((prev) => ({ ...prev, currency: event.target.value as 'ARS' | 'USD' }))}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="ARS">ARS</option>
-                <option value="USD">USD</option>
+          <form className="mt-3 grid gap-2" onSubmit={(e) => { e.preventDefault(); void createDeal() }}>
+            <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Titulo" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
+            <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Empresa" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-2">
+              <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" type="number" min={0} placeholder="Monto" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} />
+              <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={form.currency} onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value as 'ARS' | 'USD' }))}>
+                <option value="ARS">ARS</option><option value="USD">USD</option>
               </select>
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <input
-                type="date"
-                value={form.expectedCloseDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, expectedCloseDate: event.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-              <select
-                value={form.assignedToUserId}
-                onChange={(event) => setForm((prev) => ({ ...prev, assignedToUserId: event.target.value }))}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="">Sin asignar</option>
-                {salesUsers.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.fullName}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <textarea
-              value={form.notes}
-              onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-              className="min-h-[90px] rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Contexto comercial"
-            />
-            <button
-              type="submit"
-              disabled={!canCreate || isSavingDeal}
-              className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-60"
-            >
-              {isSavingDeal ? 'Guardando...' : 'Crear oportunidad'}
+            <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={form.assignedToUserId} onChange={(e) => setForm((p) => ({ ...p, assignedToUserId: e.target.value }))}>
+              <option value="">Sin asignar</option>
+              {salesUsers.map((user) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
+            </select>
+            <button type="submit" disabled={isSaving || !canCreate} className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-60">
+              {isSaving ? 'Guardando...' : 'Crear oportunidad'}
             </button>
           </form>
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Pipeline comercial</h3>
-              <p className="text-sm text-slate-600">Gestioná el avance de oportunidades y tareas de seguimiento.</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-lg font-bold text-slate-900">Pipeline</h3>
+            <div className="flex gap-2">
+              <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
+                <option value="">Todos</option>
+                {salesUsers.map((user) => <option key={user.id} value={user.id}>{user.fullName}</option>)}
+              </select>
+              <input className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-              placeholder="Buscar oportunidad..."
-            />
           </div>
 
-          {isLoading ? (
-            <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
-              Cargando CRM...
-            </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-3">
-              {stageOrder.map((stage) => {
+          {isLoading ? <div className="mt-4 text-sm text-slate-500">Cargando...</div> : (
+            <div className="mt-4 grid grid-cols-1 gap-3 2xl:grid-cols-3">
+              {STAGES.map((stage) => {
                 const stageDeals = filteredDeals.filter((deal) => deal.stage === stage.key)
                 return (
-                  <section key={stage.key} className={`rounded-xl border ${stage.accent} bg-slate-50 p-3`}>
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <h4 className="text-sm font-bold text-slate-900">{stage.label}</h4>
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${stage.badge}`}>{stageDeals.length}</span>
-                    </div>
-
-                    <div className="space-y-3">
-                      {stageDeals.length === 0 ? (
-                        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-500">
-                          Sin oportunidades.
-                        </div>
-                      ) : (
-                        stageDeals.map((deal) => {
-                          const dealActivities = (activityByDeal[deal.id] ?? []).slice(0, 3)
-                          const draft = activityDraftByDeal[deal.id] ?? emptyActivityDraft
-                          return (
-                            <article key={deal.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-bold text-slate-900">{deal.title}</p>
-                                  <p className="text-xs font-semibold text-slate-600">{deal.companyName}</p>
-                                  <p className="text-xs text-slate-500">{deal.contactName || 'Sin contacto'}</p>
-                                </div>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700">
-                                  {deal.probability}%
-                                </span>
-                              </div>
-
-                              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                                <span>{formatMoney(deal.amount, deal.currency)}</span>
-                                <span className="text-right">Cierre: {toDateLabel(deal.expectedCloseDate)}</span>
-                                <span className="col-span-2">Ult. contacto: {toDateTimeLabel(deal.lastContactAt)}</span>
-                                <span className="col-span-2">
-                                  Responsable: {deal.assignedToUser?.fullName ?? deal.createdByUser?.fullName ?? 'Sin asignar'}
-                                </span>
-                              </div>
-
-                              <div className="mt-3 flex items-center gap-2">
-                                <select
-                                  value={stageDraftByDeal[deal.id] ?? deal.stage}
-                                  onChange={(event) =>
-                                    setStageDraftByDeal((prev) => ({
-                                      ...prev,
-                                      [deal.id]: event.target.value as CrmDealStage,
-                                    }))
-                                  }
-                                  className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs"
-                                >
-                                  {stageOrder.map((option) => (
-                                    <option key={option.key} value={option.key}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleStageChange(deal.id)}
-                                  disabled={!canEdit}
-                                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                                >
-                                  Mover
-                                </button>
-                              </div>
-
-                              <div className="mt-3 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Actividades</p>
-                                {dealActivities.length === 0 ? (
-                                  <p className="text-xs text-slate-500">Sin actividades registradas.</p>
-                                ) : (
-                                  dealActivities.map((activity) => (
-                                    <button
-                                      key={activity.id}
-                                      type="button"
-                                      onClick={() => void handleToggleActivity(activity)}
-                                      disabled={!canEdit}
-                                      className={[
-                                        'w-full rounded-md border px-2 py-1 text-left text-xs',
-                                        activity.status === 'DONE'
-                                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                          : 'border-amber-200 bg-amber-50 text-amber-800',
-                                      ].join(' ')}
-                                    >
-                                      {activity.summary}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-
-                              <div className="mt-2 space-y-2">
-                                <select
-                                  value={draft.type}
-                                  onChange={(event) =>
-                                    setActivityDraftByDeal((prev) => ({
-                                      ...prev,
-                                      [deal.id]: {
-                                        ...(prev[deal.id] ?? emptyActivityDraft),
-                                        type: event.target.value as CrmActivityType,
-                                      },
-                                    }))
-                                  }
-                                  className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs"
-                                >
-                                  {activityTypeOptions.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <input
-                                  value={draft.summary}
-                                  onChange={(event) =>
-                                    setActivityDraftByDeal((prev) => ({
-                                      ...prev,
-                                      [deal.id]: {
-                                        ...(prev[deal.id] ?? emptyActivityDraft),
-                                        summary: event.target.value,
-                                      },
-                                    }))
-                                  }
-                                  className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs"
-                                  placeholder="Nueva actividad..."
-                                />
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="date"
-                                    value={draft.dueAt}
-                                    onChange={(event) =>
-                                      setActivityDraftByDeal((prev) => ({
-                                        ...prev,
-                                        [deal.id]: {
-                                          ...(prev[deal.id] ?? emptyActivityDraft),
-                                          dueAt: event.target.value,
-                                        },
-                                      }))
-                                    }
-                                    className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleAddActivity(deal.id)}
-                                    disabled={!canEdit}
-                                    className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
-                                  >
-                                    +Act
-                                  </button>
-                                </div>
-                              </div>
-
-                              {canDelete ? (
-                                <div className="mt-2 flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleDeleteDeal(deal)}
-                                    className="rounded-md border border-rose-300 bg-white px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                                  >
-                                    Eliminar
-                                  </button>
-                                </div>
-                              ) : null}
-                            </article>
-                          )
-                        })
-                      )}
+                  <section key={stage.key} className="rounded-xl border border-slate-200 bg-slate-50 p-3" onDragOver={(e) => { if (canEdit) e.preventDefault() }} onDrop={(e) => {
+                    if (!canEdit) return
+                    e.preventDefault()
+                    const dealId = e.dataTransfer.getData('text/plain') || draggingDealId
+                    if (dealId) void moveStage(dealId, stage.key)
+                    setDraggingDealId(null)
+                  }}>
+                    <div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-bold">{stage.label}</h4><span className="rounded-full bg-white px-2 py-1 text-xs">{stageDeals.length}</span></div>
+                    <div className="space-y-2">
+                      {stageDeals.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-white p-2 text-xs text-slate-500">Sin oportunidades</div> : stageDeals.map((deal) => {
+                        const dealActs = (activities.filter((a) => a.dealId === deal.id).slice().sort((a, b) => getActivitySortTime(b) - getActivitySortTime(a))).slice(0, 2)
+                        const canConvert = deal.stage === 'WON' && !deal.convertedClientId
+                        return (
+                          <article key={deal.id} draggable={canEdit} onDragStart={(e) => { if (!canEdit) return; e.dataTransfer.setData('text/plain', deal.id); setDraggingDealId(deal.id) }} onDragEnd={() => setDraggingDealId(null)} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <p className="text-sm font-bold text-slate-900">{deal.title}</p>
+                            <p className="text-xs font-semibold text-slate-600">{deal.companyName}</p>
+                            <p className="mt-1 text-xs text-slate-500">{money(deal.amount, deal.currency)} · {deal.probability}%</p>
+                            <p className="text-xs text-slate-500">Responsable: {deal.assignedToUser?.fullName ?? deal.createdByUser?.fullName ?? 'Sin asignar'}</p>
+                            {stale(deal.lastContactAt ?? deal.updatedAt ?? deal.createdAt) && deal.stage !== 'WON' && deal.stage !== 'LOST' ? <p className="mt-1 text-[11px] font-semibold text-amber-700">Sin contacto reciente</p> : null}
+                            {deal.convertedClient ? <p className="mt-1 text-[11px] font-semibold text-emerald-700">Cliente: {deal.convertedClient.name}</p> : null}
+                            <div className="mt-2 flex gap-2">
+                              <select value={stageDraft[deal.id] ?? deal.stage} onChange={(e) => setStageDraft((p) => ({ ...p, [deal.id]: e.target.value as CrmDealStage }))} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs">
+                                {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                              </select>
+                              <button type="button" className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold" disabled={!canEdit} onClick={() => void moveStage(deal.id, stageDraft[deal.id] ?? deal.stage)}>Mover</button>
+                            </div>
+                            {canConvert ? <button type="button" className="mt-2 w-full rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 disabled:opacity-60" disabled={isConvertingDealId === deal.id} onClick={() => void convertToClient(deal)}>{isConvertingDealId === deal.id ? 'Convirtiendo...' : 'Convertir a cliente'}</button> : null}
+                            <div className="mt-2 space-y-1 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                              {dealActs.length === 0 ? <p className="text-xs text-slate-500">Sin actividades</p> : dealActs.map((act) => <button type="button" key={act.id} className={['w-full rounded-md border px-2 py-1 text-left text-xs', act.status === 'DONE' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'].join(' ')} onClick={() => canEdit && void apiRequest<CrmActivity>(`/crm/activities/${act.id}`, { method: 'PATCH', body: { status: act.status === 'DONE' ? 'PENDING' : 'DONE' } }).then((updated) => setActivities((prev) => prev.map((a) => a.id === updated.id ? updated : a))).catch(() => setAppError('No se pudo actualizar actividad.'))}>{act.summary}</button>)}
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <input value={(activityDraft[deal.id] ?? EMPTY_ACTIVITY).summary} onChange={(e) => setActivityDraft((p) => ({ ...p, [deal.id]: { summary: e.target.value } }))} className="w-full rounded-lg border border-slate-300 px-2 py-1 text-xs" placeholder="Nueva actividad..." />
+                              <button type="button" className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-50" disabled={!canEdit} onClick={() => void addActivity(deal.id)}>+Act</button>
+                            </div>
+                            {canDelete ? <button type="button" className="mt-2 w-full rounded-lg border border-rose-300 bg-white px-2 py-1 text-xs font-semibold text-rose-700" onClick={() => void removeDeal(deal)}>Eliminar</button> : null}
+                          </article>
+                        )
+                      })}
                     </div>
                   </section>
                 )

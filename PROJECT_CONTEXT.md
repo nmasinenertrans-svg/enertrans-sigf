@@ -1,6 +1,6 @@
 ﻿# ENERTRANS SIGF - Contexto Vivo del Proyecto
 
-Ultima actualizacion: 2026-03-19
+Ultima actualizacion: 2026-03-21
 Responsable de actualizacion: Codex (este chat)
 Objetivo: que cualquier dev (o nuevo chat) tenga contexto operativo completo sin depender del historial conversacional.
 
@@ -790,6 +790,24 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - Primera version no incluye automatizaciones cross-modulo (ej. convertir oportunidad ganada en cliente/unidad de forma automatica).
   - Pipeline no usa drag-and-drop todavia; el cambio de etapa se realiza por selector.
+- Fecha: 2026-03-21
+  Cambio: Cierre CRM v2 (pipeline interactivo + conversion de oportunidad a cliente + trazabilidad automatica de etapa).
+  Archivos:
+  - `backend/prisma/schema.prisma`
+  - `backend/prisma/migrations/20260321170000_add_crm_deal_client_conversion/migration.sql`
+  - `backend/src/db.ts`
+  - `backend/src/routes/crm.ts`
+  - `src/modules/crm/pages/CrmPage.tsx`
+  - `src/types/domain.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Pipeline CRM ahora soporta drag-and-drop por etapas y fallback por selector/boton, reduciendo friccion operativa del equipo comercial.
+  - Cada cambio de etapa genera actividad automatica, mejorando auditoria interna del ciclo comercial.
+  - Oportunidades ganadas pueden convertirse y vincularse a `ClientAccount` con endpoint dedicado, evitando doble carga manual en modulo Clientes.
+  - Compatibilidad runtime y migracion agregan `convertedClientId` sin romper registros legacy.
+  Riesgo residual:
+  - KPI monetarios del CRM se muestran en ARS por simplicidad visual; no hay conversion multi-moneda para consolidado global.
+  - Conversion a cliente no genera todavia alta automatica de unidad/contrato ni workflows comerciales avanzados (seguimiento por SLA/recordatorios push).
 
 ## 9) Riesgos abiertos (a seguir)
 

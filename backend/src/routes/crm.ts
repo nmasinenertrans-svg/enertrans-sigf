@@ -98,16 +98,19 @@ const isSchemaMismatchError = (error: unknown): boolean => {
   return message.includes('does not exist in the current database')
 }
 
+const dealInclude = {
+  assignedToUser: { select: { id: true, fullName: true, username: true } },
+  createdByUser: { select: { id: true, fullName: true, username: true } },
+  convertedClient: { select: { id: true, name: true } },
+} as const
+
 router.get('/', requirePermission('CRM', 'view'), async (_req, res) => {
   try {
     const [deals, activities] = await runWithSchemaFailover(() =>
       Promise.all([
         prisma.crmDeal.findMany({
           orderBy: [{ updatedAt: 'desc' }],
-          include: {
-            assignedToUser: { select: { id: true, fullName: true, username: true } },
-            createdByUser: { select: { id: true, fullName: true, username: true } },
-          },
+          include: dealInclude,
         }),
         prisma.crmActivity.findMany({
           orderBy: [{ createdAt: 'desc' }],
@@ -162,10 +165,7 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
           wonAt: stage === 'WON' ? new Date() : null,
           lostReason: stage === 'LOST' ? normalizeText(parsed.data.notes) : '',
         },
-        include: {
-          assignedToUser: { select: { id: true, fullName: true, username: true } },
-          createdByUser: { select: { id: true, fullName: true, username: true } },
-        },
+        include: dealInclude,
       }),
     )
     return res.status(201).json(created)
@@ -217,11 +217,9 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req, res) =>
           notes: parsed.data.notes !== undefined ? normalizeText(parsed.data.notes) : undefined,
           wonAt: nextStage === 'WON' ? existing.wonAt ?? new Date() : null,
           lostReason: nextStage === 'LOST' ? existing.lostReason : '',
+          convertedClientId: nextStage === 'WON' ? existing.convertedClientId : existing.convertedClientId,
         },
-        include: {
-          assignedToUser: { select: { id: true, fullName: true, username: true } },
-          createdByUser: { select: { id: true, fullName: true, username: true } },
-        },
+        include: dealInclude,
       }),
     )
     return res.json(updated)
@@ -250,21 +248,126 @@ router.patch('/deals/:id/stage', requirePermission('CRM', 'edit'), async (req, r
 
     const stage = parsed.data.stage
     const updated = await runWithSchemaFailover(() =>
-      prisma.crmDeal.update({
-        where: { id: dealId },
-        data: {
-          stage,
-          probability: resolveProbability(stage, undefined),
-          wonAt: stage === 'WON' ? existing.wonAt ?? new Date() : null,
-          lostReason: stage === 'LOST' ? normalizeText(parsed.data.lostReason) : '',
-          lastContactAt: new Date(),
-        },
+      prisma.$transaction(async (tx) => {
+        const deal = await tx.crmDeal.update({
+          where: { id: dealId },
+          data: {
+            stage,
+            probability: resolveProbability(stage, undefined),
+            wonAt: stage === 'WON' ? existing.wonAt ?? new Date() : null,
+            lostReason: stage === 'LOST' ? normalizeText(parsed.data.lostReason) : '',
+            lastContactAt: new Date(),
+          },
+          include: dealInclude,
+        })
+
+        await tx.crmActivity.create({
+          data: {
+            dealId,
+            type: 'TASK',
+            status: 'DONE',
+            summary: `Etapa actualizada a ${stage}`,
+            completedAt: new Date(),
+            createdByUserId: deal.createdByUserId,
+          },
+        })
+
+        return deal
       }),
     )
     return res.json(updated)
   } catch (error) {
     console.error('CRM PATCH stage error:', error)
     return res.status(500).json({ message: 'No se pudo actualizar la etapa.' })
+  }
+})
+
+router.post('/deals/:id/convert-client', requirePermission('CRM', 'edit'), async (_req, res) => {
+  try {
+    const dealId = typeof _req.params.id === 'string' ? _req.params.id : null
+    if (!dealId) {
+      return res.status(400).json({ message: 'Id de oportunidad invalido.' })
+    }
+
+    const result = await runWithSchemaFailover(() =>
+      prisma.$transaction(async (tx) => {
+        const deal = await tx.crmDeal.findUnique({ where: { id: dealId } })
+        if (!deal) {
+          const notFoundError = new Error('Deal not found')
+          ;(notFoundError as any).code = 'NOT_FOUND'
+          throw notFoundError
+        }
+
+        const companyName = normalizeText(deal.companyName)
+        if (!companyName) {
+          const invalidError = new Error('Deal company required')
+          ;(invalidError as any).code = 'DEAL_COMPANY_REQUIRED'
+          throw invalidError
+        }
+
+        let client = await tx.clientAccount.findFirst({
+          where: {
+            name: {
+              equals: companyName,
+              mode: 'insensitive',
+            },
+          },
+        })
+
+        const wasCreated = !client
+        if (!client) {
+          client = await tx.clientAccount.create({
+            data: {
+              name: companyName,
+              legalName: companyName,
+              contactName: normalizeText(deal.contactName),
+              contactEmail: normalizeText(deal.contactEmail),
+              contactPhone: normalizeText(deal.contactPhone),
+              notes: `Alta automatica desde CRM (${deal.title}).`,
+              isActive: true,
+            },
+          })
+        }
+
+        const updatedDeal = await tx.crmDeal.update({
+          where: { id: dealId },
+          data: {
+            stage: 'WON',
+            probability: 100,
+            wonAt: deal.wonAt ?? new Date(),
+            convertedClientId: client.id,
+            lastContactAt: new Date(),
+          },
+          include: dealInclude,
+        })
+
+        await tx.crmActivity.create({
+          data: {
+            dealId,
+            type: 'TASK',
+            status: 'DONE',
+            summary: wasCreated
+              ? `Oportunidad convertida a cliente (${client.name}).`
+              : `Oportunidad vinculada a cliente existente (${client.name}).`,
+            completedAt: new Date(),
+            createdByUserId: updatedDeal.createdByUserId,
+          },
+        })
+
+        return { deal: updatedDeal, client, createdClient: wasCreated }
+      }),
+    )
+
+    return res.json(result)
+  } catch (error: any) {
+    if (error?.code === 'NOT_FOUND') {
+      return res.status(404).json({ message: 'Oportunidad no encontrada.' })
+    }
+    if (error?.code === 'DEAL_COMPANY_REQUIRED') {
+      return res.status(400).json({ message: 'La oportunidad no tiene empresa valida para convertir.' })
+    }
+    console.error('CRM convert client error:', error)
+    return res.status(500).json({ message: 'No se pudo convertir la oportunidad en cliente.' })
   }
 })
 

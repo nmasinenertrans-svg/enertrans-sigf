@@ -497,6 +497,7 @@ export interface CrmDeal {
   lostReason: string
   notes: string
   assignedToUserId?: string | null
+  convertedClientId?: string | null
   createdByUserId: string
   wonAt?: string | null
   createdAt?: string
@@ -511,6 +512,10 @@ export interface CrmDeal {
     fullName: string
     username: string
   }
+  convertedClient?: {
+    id: string
+    name: string
+  } | null
 }
 
 export interface CrmActivity {
