@@ -71,6 +71,8 @@ export const CrmPage = () => {
   const [isConvertingId, setIsConvertingId] = useState<string | null>(null)
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null)
   const [isSearchingUnit, setIsSearchingUnit] = useState(false)
+  const [isAutomationRunning, setIsAutomationRunning] = useState(false)
+  const [automationStatus, setAutomationStatus] = useState('')
 
   const loadCrm = useCallback(async (withLoader = false) => {
     if (withLoader) setIsLoading(true)
@@ -226,9 +228,28 @@ export const CrmPage = () => {
     }
   }
 
+  const runAutomations = async () => {
+    if (!canEdit) return
+    setIsAutomationRunning(true)
+    setAutomationStatus('')
+    try {
+      const result = await apiRequest<{ generated: number; scannedDeals: number; scannedActivities: number; skippedBecauseRunning: boolean; }>('/crm/automations/run', { method: 'POST' })
+      if (result.skippedBecauseRunning) {
+        setAutomationStatus('Automatizacion en curso. Reintenta en unos segundos.')
+        return
+      }
+      setAutomationStatus(`Automatizacion ejecutada: ${result.generated} alertas (${result.scannedDeals} oportunidades / ${result.scannedActivities} actividades).`)
+      await loadCrm(false)
+    } catch {
+      setAppError('No se pudo ejecutar automatizaciones CRM.')
+    } finally {
+      setIsAutomationRunning(false)
+    }
+  }
+
   return (
     <section className="space-y-5">
-      <header><BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" /><h2 className="text-2xl font-bold text-slate-900">CRM Comercial</h2><p className="text-sm text-slate-600">Pipeline completo con concursos/contratos, unidades vinculadas, carga historica manual y seguimiento de actividades.</p></header>
+      <header><BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" /><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-2xl font-bold text-slate-900">CRM Comercial</h2><p className="text-sm text-slate-600">Pipeline completo con concursos/contratos, unidades vinculadas, carga historica manual y seguimiento de actividades.</p></div><button type="button" onClick={() => void runAutomations()} disabled={!canEdit || isAutomationRunning} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60">{isAutomationRunning ? 'Ejecutando...' : 'Ejecutar automatizaciones'}</button></div>{automationStatus ? <p className="mt-2 text-xs font-semibold text-emerald-700">{automationStatus}</p> : null}</header>
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pipeline ARS</p><p className="text-xl font-bold">{money(kpis.pipelineArs, 'ARS')}</p></article>
         <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pipeline USD</p><p className="text-xl font-bold">{money(kpis.pipelineUsd, 'USD')}</p></article>

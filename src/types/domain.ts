@@ -120,6 +120,7 @@ export interface FeatureFlags {
   showUsersModule: boolean
   manualAuditMode: boolean
   interactiveDashboard: boolean
+  basicViewMode: boolean
 }
 
 export interface UserInboxNotification {

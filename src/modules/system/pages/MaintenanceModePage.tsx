@@ -355,6 +355,15 @@ export const MaintenanceModePage = () => {
               className="h-4 w-4"
             />
           </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 md:col-span-2">
+            Modo vista basica (solo lectura, sin acciones ni descargas para usuarios no DEV)
+            <input
+              type="checkbox"
+              checked={flags.basicViewMode}
+              onChange={(event) => setFlags((prev) => ({ ...prev, basicViewMode: event.target.checked }))}
+              className="h-4 w-4"
+            />
+          </label>
         </div>
 
         <div className="mt-4 flex justify-end">

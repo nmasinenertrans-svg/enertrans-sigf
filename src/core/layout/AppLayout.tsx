@@ -162,6 +162,7 @@ export const AppLayout = () => {
   const featureFlagsRef = useRef(featureFlags)
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
   const workOrdersRefreshInProgressRef = useRef(false)
+  const basicViewBlockedAtRef = useRef(0)
 
 
   useEffect(() => {
@@ -219,6 +220,8 @@ export const AppLayout = () => {
   useEffect(() => {
     featureFlagsRef.current = featureFlags
   }, [featureFlags])
+
+  const isBasicViewModeEnabled = featureFlags.basicViewMode && currentUser?.role !== 'DEV'
 
   const notifications = useMemo(() => {
     return buildAppNotifications({ fleetUnits, audits, workOrders, userNotifications })
@@ -616,6 +619,85 @@ export const AppLayout = () => {
     return () => window.clearTimeout(timer)
   }, [location.pathname])
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isBasicViewModeEnabled) {
+      return
+    }
+
+    const notifyBlockedAction = () => {
+      const now = Date.now()
+      if (now - basicViewBlockedAtRef.current < 1200) {
+        return
+      }
+      basicViewBlockedAtRef.current = now
+      setAppError('Modo vista basica activo: operacion bloqueada para este usuario.')
+    }
+
+    const isDownloadAnchor = (element: Element): boolean => {
+      if (element.tagName.toLowerCase() !== 'a') {
+        return false
+      }
+      const anchor = element as HTMLAnchorElement
+      if (anchor.hasAttribute('download')) {
+        return true
+      }
+      const href = (anchor.getAttribute('href') ?? '').trim().toLowerCase()
+      if (!href) {
+        return false
+      }
+      return (
+        href.startsWith('blob:') ||
+        href.startsWith('data:') ||
+        href.includes('.pdf') ||
+        href.includes('.csv') ||
+        href.includes('.xlsx') ||
+        href.includes('/storage/v1/object') ||
+        href.includes('supabase.co/storage')
+      )
+    }
+
+    const onClickCapture = (event: MouseEvent) => {
+      const rawTarget = event.target
+      if (!(rawTarget instanceof Element)) {
+        return
+      }
+      if (rawTarget.closest('[data-basic-view-allow="true"]')) {
+        return
+      }
+
+      const interactive = rawTarget.closest('button, input, select, textarea, [role="button"], a, label, [contenteditable="true"]')
+      if (!interactive) {
+        return
+      }
+
+      if (interactive.tagName.toLowerCase() === 'a' && !isDownloadAnchor(interactive)) {
+        const href = (interactive.getAttribute('href') ?? '').trim().toLowerCase()
+        const isRouteNavigation = href.startsWith('/') || href.startsWith('#') || href === ''
+        if (isRouteNavigation) {
+          return
+        }
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      notifyBlockedAction()
+    }
+
+    const onSubmitCapture = (event: Event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      notifyBlockedAction()
+    }
+
+    window.addEventListener('click', onClickCapture, true)
+    window.addEventListener('submit', onSubmitCapture, true)
+
+    return () => {
+      window.removeEventListener('click', onClickCapture, true)
+      window.removeEventListener('submit', onSubmitCapture, true)
+    }
+  }, [isBasicViewModeEnabled, setAppError])
+
   return (
     <div className="flex min-h-screen bg-transparent">
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
@@ -629,6 +711,12 @@ export const AppLayout = () => {
           <div className="mx-6 mt-4 rounded-lg border border-amber-300 bg-amber-100 px-4 py-3 text-sm text-amber-900 md:mx-8">
             <strong className="font-semibold">Sistema en mantenimiento:</strong>{' '}
             {maintenanceStatus.message || 'Actualizaciones en curso. Las operaciones quedan pausadas.'}
+          </div>
+        ) : null}
+        {isBasicViewModeEnabled ? (
+          <div className="mx-6 mt-4 rounded-lg border border-rose-300 bg-rose-100 px-4 py-3 text-sm text-rose-900 md:mx-8">
+            <strong className="font-semibold">Modo vista basica activo:</strong>{' '}
+            solo lectura para este usuario (sin acciones ni descargas).
           </div>
         ) : null}
         <ErrorBanner />

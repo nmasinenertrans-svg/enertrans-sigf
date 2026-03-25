@@ -156,6 +156,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
         <button
           type="button"
           onClick={onToggleSidebar}
+          data-basic-view-allow="true"
           className="rounded-lg border border-slate-900/20 bg-white/60 p-2 text-slate-700 transition hover:bg-white"
           aria-label="Abrir menu"
         >

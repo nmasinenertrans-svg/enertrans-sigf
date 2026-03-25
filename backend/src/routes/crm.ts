@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma, runWithSchemaFailover } from '../db.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { runCrmAutomations } from '../services/crmAutomations.js'
 
 const router = Router()
 
@@ -170,6 +171,16 @@ router.get('/', requirePermission('CRM', 'view'), async (_req, res) => {
     }
     console.error('CRM GET error:', error)
     return res.status(500).json({ message: 'No se pudo cargar el CRM.' })
+  }
+})
+
+router.post('/automations/run', requirePermission('CRM', 'edit'), async (_req, res) => {
+  try {
+    const result = await runCrmAutomations('manual')
+    return res.json(result)
+  } catch (error) {
+    console.error('CRM automations run error:', error)
+    return res.status(500).json({ message: 'No se pudo ejecutar automatizaciones CRM.' })
   }
 })
 

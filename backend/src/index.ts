@@ -26,6 +26,8 @@ import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
 import { maintenanceGuard } from './middleware/maintenance.js'
+import { basicViewModeGuard } from './middleware/basicViewMode.js'
+import { getCrmAutomationIntervalMinutes, isCrmAutomationEnabled, runCrmAutomations } from './services/crmAutomations.js'
 
 const sentryDsn = process.env.SENTRY_DSN || ''
 const sentryEnvironment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development'
@@ -52,6 +54,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }))
 
 app.use('/auth', authRoutes)
 app.use(maintenanceGuard)
+app.use(basicViewModeGuard)
 
 app.use('/settings', requireAuth, settingsRoutes)
 app.use('/notifications', requireAuth, notificationsRoutes)
@@ -93,6 +96,27 @@ const ensureDevUser = async () => {
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4000
 
+const startCrmAutomationScheduler = () => {
+  if (!isCrmAutomationEnabled()) {
+    console.log('[CRM] automatizaciones deshabilitadas por entorno')
+    return
+  }
+
+  const intervalMinutes = getCrmAutomationIntervalMinutes()
+  const intervalMs = Math.max(1, intervalMinutes) * 60 * 1000
+  console.log(`[CRM] automatizaciones activas (intervalo ${intervalMinutes} min)`) 
+
+  void runCrmAutomations('scheduler').catch((error) => {
+    console.error('[CRM] fallo automatizacion inicial:', error)
+  })
+
+  setInterval(() => {
+    void runCrmAutomations('scheduler').catch((error) => {
+      console.error('[CRM] fallo automatizacion programada:', error)
+    })
+  }, intervalMs)
+}
+
 ensureBestPrismaSchema()
   .then(() => {
     console.log(`[DB] runtime schema seleccionado: ${getActiveDbSchema()}`)
@@ -106,6 +130,8 @@ ensureBestPrismaSchema()
     app.listen(port, () => {
       console.log(`Backend listo en http://localhost:${port}`)
     })
+
+    startCrmAutomationScheduler()
 
     setInterval(async () => {
       try {

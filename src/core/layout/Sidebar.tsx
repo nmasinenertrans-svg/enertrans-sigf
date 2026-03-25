@@ -78,6 +78,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             <button
               type="button"
               onClick={onClose}
+              data-basic-view-allow="true"
               className="rounded-lg border border-slate-600 bg-slate-800/70 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700 lg:hidden"
             >
               Cerrar

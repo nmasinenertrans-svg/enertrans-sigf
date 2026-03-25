@@ -853,6 +853,43 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Se mantiene continuidad operativa comercial con edición de oportunidades, cambio de etapa, conversión a cliente y gestión de unidades en un único módulo.
   Riesgo residual:
   - La búsqueda de unidades para vincular sigue siendo por texto/manual; no hay autocompletado incremental en tiempo real.
+- Fecha: 2026-03-23
+  Cambio: Automatizaciones CRM productivas (scheduler backend + alertas automáticas + disparador manual en UI).
+  Archivos:
+  - `backend/src/services/crmAutomations.ts`
+  - `backend/src/index.ts`
+  - `backend/src/routes/crm.ts`
+  - `backend/.env.example`
+  - `src/modules/crm/pages/CrmPage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se automatiza detección de actividades CRM vencidas/por vencer, oportunidades estancadas y cierres próximos sin depender de seguimiento manual constante.
+  - Alertas se publican automáticamente en inbox de usuarios y escalan a circuito operativo cuando hay vencimientos persistentes.
+  - Se evita spam por duplicados con deduplicación diaria por evento (`__crmAutomationState`) y retención controlada.
+  - El equipo puede forzar corrida inmediata desde CRM (`Ejecutar automatizaciones`) sin esperar el intervalo del scheduler.
+  Riesgo residual:
+  - Las automatizaciones actuales notifican en-app; no incluyen envío SMTP/WhatsApp externo.
+  - La deduplicación diaria prioriza no duplicar ruido; no reemplaza un motor full de reglas por SLA complejas.
+- Fecha: 2026-03-25
+  Cambio: Modo vista basica global (solo lectura sin acciones ni descargas para usuarios no DEV), activable desde Mantenimiento app.
+  Archivos:
+  - `backend/src/middleware/basicViewMode.ts`
+  - `backend/src/index.ts`
+  - `backend/src/routes/settings.ts`
+  - `src/types/domain.ts`
+  - `src/core/context/appState.ts`
+  - `src/modules/system/pages/MaintenanceModePage.tsx`
+  - `src/core/layout/AppLayout.tsx`
+  - `src/core/layout/TopHeader.tsx`
+  - `src/core/layout/Sidebar.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se incorpora bloqueo transversal de escritura (POST/PUT/PATCH/DELETE) en backend cuando `basicViewMode=true`, evitando altas/ediciones/eliminaciones por usuarios no DEV incluso desde clientes viejos.
+  - Se bloquean interacciones de formularios/botones y links de descarga en frontend para no DEV, manteniendo navegacion de consulta.
+  - La activacion/desactivacion queda centralizada en panel DEV de Mantenimiento app, sin cambios manuales de entorno.
+  Riesgo residual:
+  - El bloqueo frontend usa guard global por eventos; si se agregan nuevos componentes con interacciones no estandar, se recomienda validarlos en QA visual post-deploy.
+  - DEV queda exceptuado del bloqueo para permitir operacion y reversa del modo en caliente.
 
 ## 9) Riesgos abiertos (a seguir)
 

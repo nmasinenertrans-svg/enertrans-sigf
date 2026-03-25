@@ -102,6 +102,7 @@ const defaultFeatureFlags: FeatureFlags = {
   showUsersModule: true,
   manualAuditMode: false,
   interactiveDashboard: true,
+  basicViewMode: false,
 }
 
 const defaultPersistedState: PersistedAppState = {
