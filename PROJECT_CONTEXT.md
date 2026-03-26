@@ -902,6 +902,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Diagnostico de mantenimiento ahora expone conteo de elementos bloqueados en cola offline.
   Riesgo residual:
   - Los datos cargados durante una ventana de caida solo se recuperan si quedaron en IndexedDB local de ese dispositivo/navegador; si no se encolaron, no existe fuente de recuperacion automatica.
+- Fecha: 2026-03-26
+  Cambio: Hardening de alta NDP para evitar 500 espurio y desbloquear cola offline de `externalRequest.create`.
+  Archivos:
+  - `backend/src/routes/externalRequests.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - El alta de NDP ahora responde `201` una vez persistida la nota, aunque falle el bloque auxiliar de notificaciones.
+  - Las notificaciones pasan a ejecucion asincrona con manejo de error propio, evitando que un fallo secundario bloquee sincronizacion operativa.
+  - Se agrega `console.error` explicito en `ExternalRequest CREATE error` para diagnostico real en logs de Render.
+  Riesgo residual:
+  - Si la notificacion falla por drift de schema o conectividad, la NDP se crea igual pero no dispara alerta hasta estabilizar ese subsistema.
 
 ## 9) Riesgos abiertos (a seguir)
 

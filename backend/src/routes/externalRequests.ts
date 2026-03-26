@@ -410,23 +410,39 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   try {
     const data = toCreateData(parsed.data)
     const item = await runWithSchemaFailover(() => prisma.externalRequest.create({ data }))
-    const [actor, unit] = await Promise.all([
-      req.userId ? prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }) : Promise.resolve(null),
-      prisma.fleetUnit.findUnique({ where: { id: item.unitId }, select: { internalCode: true } }),
-    ])
+    res.status(201).json(item)
 
-    const recipients = await resolveOperationalNotificationRecipients(req.userId)
-    await pushUserNotifications(recipients, {
-      title: 'Nueva nota de pedido',
-      description: `${actor?.fullName ?? 'Un usuario'} creo ${item.code}${unit?.internalCode ? ` para ${unit.internalCode}` : ''}.`,
-      severity: 'info',
-      target: '/work-orders/external-requests',
-      actorUserId: req.userId,
-      eventType: 'EXTERNAL_REQUEST_CREATED',
-    })
+    // Notificaciones asincronas: no deben romper el alta de la NDP si fallan.
+    void (async () => {
+      try {
+        const [actor, unit] = await Promise.all([
+          req.userId
+            ? runWithSchemaFailover(() =>
+                prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }),
+              )
+            : Promise.resolve(null),
+          runWithSchemaFailover(() =>
+            prisma.fleetUnit.findUnique({ where: { id: item.unitId }, select: { internalCode: true } }),
+          ),
+        ])
 
-    return res.status(201).json(item)
+        const recipients = await resolveOperationalNotificationRecipients(req.userId)
+        await pushUserNotifications(recipients, {
+          title: 'Nueva nota de pedido',
+          description: `${actor?.fullName ?? 'Un usuario'} creo ${item.code}${unit?.internalCode ? ` para ${unit.internalCode}` : ''}.`,
+          severity: 'info',
+          target: '/work-orders/external-requests',
+          actorUserId: req.userId,
+          eventType: 'EXTERNAL_REQUEST_CREATED',
+        })
+      } catch (notificationError) {
+        console.error('ExternalRequest notification error:', notificationError)
+      }
+    })()
+
+    return
   } catch (error: any) {
+    console.error('ExternalRequest CREATE error:', error)
     if (error?.code === 'P2002') {
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
