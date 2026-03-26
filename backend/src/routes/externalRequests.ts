@@ -380,7 +380,7 @@ const toLegacyCreateData = (input: ExternalRequestInput) => ({
   companyName: input.companyName.trim(),
   description: input.description.trim(),
   tasks: normalizeTasks(input.tasks),
-  createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
+  createdAt: input.createdAt && !Number.isNaN(new Date(input.createdAt).getTime()) ? new Date(input.createdAt) : undefined,
 })
 
 const scheduleExternalRequestCreatedNotification = (req: AuthenticatedRequest, item: any) => {
@@ -455,8 +455,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   } catch (error: any) {
     console.error('ExternalRequest CREATE error:', error)
 
-    const missingColumn = String(error?.meta?.column ?? '').toLowerCase()
-    const isExternalRequestColumnMismatch = error?.code === 'P2022' && missingColumn.includes('externalrequest.')
+    const isExternalRequestColumnMismatch = error?.code === 'P2022'
     if (isExternalRequestColumnMismatch) {
       try {
         const legacyData = toLegacyCreateData(parsed.data)
@@ -469,6 +468,31 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       } catch (legacyError: any) {
         console.error('ExternalRequest CREATE legacy fallback error:', legacyError)
       }
+    }
+
+    // Ultima red de seguridad: si ya existe por id o code, devolverla y liberar cola.
+    const normalizedCode = parsed.data.code.trim()
+    const normalizedId = parsed.data.id?.trim() ?? ''
+    try {
+      const orConditions: Array<Record<string, string>> = []
+      if (normalizedId) {
+        orConditions.push({ id: normalizedId })
+      }
+      if (normalizedCode) {
+        orConditions.push({ code: normalizedCode })
+      }
+      if (orConditions.length > 0) {
+        const existing = await runWithSchemaFailover(() =>
+          prisma.externalRequest.findFirst({
+            where: { OR: orConditions as any },
+          }),
+        )
+        if (existing) {
+          return res.status(200).json(existing)
+        }
+      }
+    } catch (lookupError) {
+      console.error('ExternalRequest CREATE existing lookup error:', lookupError)
     }
 
     if (error?.code === 'P2002') {

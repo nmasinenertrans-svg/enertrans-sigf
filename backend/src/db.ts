@@ -129,21 +129,53 @@ export let prisma = new PrismaClient({
   datasourceUrl: activeDatasourceUrl,
 })
 
+const COMPAT_TABLE_NAMES = [
+  'User',
+  'FleetUnit',
+  'RepairRecord',
+  'Supplier',
+  'ClientAccount',
+  'DeliveryOperation',
+  'CrmDeal',
+  'CrmActivity',
+  'CrmDealUnit',
+  'ExternalRequest',
+] as const
+
+const getNormalizedActiveSchema = (): string => {
+  const trimmed = activeSchema.trim()
+  return trimmed.length > 0 ? trimmed : 'public'
+}
+
+const quoteIdentifier = (value: string): string => `"${value.replace(/"/g, '""')}"`
+
+const qualifyCompatSql = (sql: string): string => {
+  const schema = quoteIdentifier(getNormalizedActiveSchema())
+  let next = sql
+  for (const tableName of COMPAT_TABLE_NAMES) {
+    const tableIdentifier = quoteIdentifier(tableName)
+    const qualifiedTable = `${schema}.${tableIdentifier}`
+    next = next.replace(new RegExp(tableIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), qualifiedTable)
+  }
+  return next
+}
+
 const safeExecuteCompatSql = async (sql: string): Promise<void> => {
   try {
-    await prisma.$executeRawUnsafe(sql)
+    await prisma.$executeRawUnsafe(qualifyCompatSql(sql))
   } catch (error) {
     console.warn('[DB] compat SQL warning:', error)
   }
 }
 
 const tableExistsInActiveSchema = async (tableName: string): Promise<boolean> => {
+  const schema = getNormalizedActiveSchema()
   try {
     const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
       SELECT EXISTS (
         SELECT 1
         FROM information_schema.tables
-        WHERE table_schema = current_schema()
+        WHERE lower(table_schema) = lower(${schema})
           AND table_name = ${tableName}
       ) AS exists
     `
@@ -154,12 +186,13 @@ const tableExistsInActiveSchema = async (tableName: string): Promise<boolean> =>
 }
 
 const columnExistsInActiveSchema = async (tableName: string, columnName: string): Promise<boolean> => {
+  const schema = getNormalizedActiveSchema()
   try {
     const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
       SELECT EXISTS (
         SELECT 1
         FROM information_schema.columns
-        WHERE table_schema = current_schema()
+        WHERE lower(table_schema) = lower(${schema})
           AND table_name = ${tableName}
           AND column_name = ${columnName}
       ) AS exists

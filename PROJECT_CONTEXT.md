@@ -933,6 +933,18 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - El alta NDP mantiene notificacion asincrona no bloqueante en ambos caminos (normal + fallback).
   Riesgo residual:
   - El fallback legacy no persiste campos nuevos (`currency`, `partsItems`, `partsTotal`, etc.) en schemas viejos hasta regularizar migraciones.
+- Fecha: 2026-03-26
+  Cambio: Compatibilidad de schema fijada al schema activo real para evitar drift en Render y destrabar `externalRequest.create`.
+  Archivos:
+  - `backend/src/db.ts`
+  - `backend/src/routes/externalRequests.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Las rutinas de compatibilidad (`ALTER/CREATE`) ya no corren sobre `public` por error de contexto: ahora operan explícitamente sobre el schema activo (`enertrans_prod`), evitando que falten columnas como `ExternalRequest.currency`.
+  - Se elimina la causa principal de 500 recurrentes en NDP por columnas ausentes al sincronizar desde cola offline.
+  - Se endurece el fallback de alta NDP para reconocer cualquier `P2022` y evitar bloqueo de cola por formato de `meta.column`.
+  Riesgo residual:
+  - Hasta el próximo deploy de backend en Render, los reintentos pendientes seguirán fallando con el binario anterior.
 
 ## 9) Riesgos abiertos (a seguir)
 
