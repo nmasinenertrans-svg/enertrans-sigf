@@ -1,5 +1,6 @@
 ﻿import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 
@@ -118,7 +119,11 @@ const OccupancyChart = ({
   segments: Segment[]
   onSegmentClick?: (segment: Segment) => void
 }) => {
-  const visibleSegments = toSegments(segments)
+  const [showAllClients, setShowAllClients] = useState(false)
+  const hasMoreThanTop = segments.length > 5
+  const listedSegments = showAllClients || !hasMoreThanTop ? segments : segments.slice(0, 5)
+  const hiddenClientsCount = hasMoreThanTop ? segments.length - 5 : 0
+  const visibleSegments = toSegments(listedSegments)
   const paths = buildDonutPaths(visibleSegments)
   const total = segments.reduce((acc, item) => acc + item.value, 0)
 
@@ -126,7 +131,18 @@ const OccupancyChart = ({
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-800">Ocupacion de flota por cliente</h3>
-        <span className="text-xs text-slate-500">Distribucion por unidades asignadas</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Distribucion por unidades asignadas</span>
+          {hasMoreThanTop ? (
+            <button
+              type="button"
+              onClick={() => setShowAllClients((current) => !current)}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              {showAllClients ? 'Ver top 5' : `Ver todos (${segments.length})`}
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="mt-4 grid gap-6 lg:grid-cols-[220px_1fr]">
         <div className="flex items-center justify-center">
@@ -151,7 +167,7 @@ const OccupancyChart = ({
         </div>
 
         <div className="grid gap-2">
-          {segments.map((item) => {
+          {listedSegments.map((item) => {
             const percent = total > 0 ? Math.round((item.value / total) * 100) : 0
             return (
               <button
@@ -171,6 +187,11 @@ const OccupancyChart = ({
               </button>
             )
           })}
+          {!showAllClients && hiddenClientsCount > 0 ? (
+            <p className="px-1 text-xs text-slate-500">
+              +{hiddenClientsCount} clientes ocultos. Usa &quot;Ver todos&quot; para ver la lista completa.
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
