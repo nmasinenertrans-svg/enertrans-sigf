@@ -85,6 +85,27 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback
 }
 
+const sanitizeFleetUpdateData = (rawData: Record<string, unknown>): Record<string, unknown> => {
+  const data = { ...rawData }
+  delete data.id
+  delete data.crmDealLink
+
+  const rawLogisticsUpdatedAt = data.logisticsUpdatedAt
+  if (rawLogisticsUpdatedAt === null || rawLogisticsUpdatedAt === undefined || rawLogisticsUpdatedAt === '') {
+    delete data.logisticsUpdatedAt
+  } else if (rawLogisticsUpdatedAt instanceof Date) {
+    data.logisticsUpdatedAt = Number.isNaN(rawLogisticsUpdatedAt.getTime()) ? undefined : rawLogisticsUpdatedAt.toISOString()
+  } else if (typeof rawLogisticsUpdatedAt !== 'string') {
+    delete data.logisticsUpdatedAt
+  }
+
+  if (typeof data.clientId === 'string' && !data.clientId.trim()) {
+    data.clientId = null
+  }
+
+  return data
+}
+
 const syncAudit = async (payload: AuditPayload) => {
   const photoUrls: string[] = Array.isArray(payload.photoUrls) ? [...payload.photoUrls] : []
   const photoList: string[] = payload.photoBase64List || []
@@ -164,7 +185,10 @@ const syncItem = async (item: OfflineQueueItem) => {
               delete legacy.id
               return legacy
             })()
-      await apiRequest(`/fleet/${id}`, { method: 'PATCH', body: dataFromPayload })
+      await apiRequest(`/fleet/${id}`, {
+        method: 'PATCH',
+        body: sanitizeFleetUpdateData(dataFromPayload as Record<string, unknown>),
+      })
       return
     }
     case 'maintenance.create':
