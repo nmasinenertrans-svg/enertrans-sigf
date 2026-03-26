@@ -958,6 +958,17 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - La carga global contempla `fleet.update` en cola para mantener consistencia visual local hasta que sincronice.
   Riesgo residual:
   - Si backend devuelve 500 persistente, la cola mantendra pendientes hasta estabilizar servidor o reintentar manualmente.
+- Fecha: 2026-03-26
+  Cambio: Sincronizacion automatica de clientes desde unidades de flota (alta de faltantes + linkeo de clientId).
+  Archivos:
+  - `backend/src/routes/clients.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Al consultar `GET /clients`, el backend detecta `clientName` existentes en `FleetUnit` y crea automaticamente clientes faltantes en `ClientAccount` con datos minimos (nombre + campos vacios).
+  - Se normaliza y vincula `clientId` en unidades ya cargadas para que el modulo Clientes refleje correctamente cantidades y asignaciones.
+  - Se agrega endpoint manual `POST /clients/sync-from-fleet` para forzar sincronizacion bajo demanda.
+  Riesgo residual:
+  - La coincidencia se basa en nombre normalizado (trim/espacios/case-insensitive); variantes semanticas muy distintas del mismo cliente pueden requerir consolidacion manual posterior.
 
 ## 9) Riesgos abiertos (a seguir)
 

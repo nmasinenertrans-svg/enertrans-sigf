@@ -19,6 +19,7 @@ const clientSchema = z.object({
 const updateSchema = clientSchema.partial()
 
 const normalize = (value: string | undefined) => (value ?? '').trim()
+const normalizeClientKey = (value: string | undefined) => normalize(value).replace(/\s+/g, ' ').toLowerCase()
 
 const isSchemaMismatchError = (error: unknown): boolean => {
   if (!error || typeof error !== 'object') {
@@ -32,8 +33,128 @@ const isSchemaMismatchError = (error: unknown): boolean => {
   return message.includes('does not exist in the current database')
 }
 
+const syncClientsFromFleet = async (): Promise<{ created: number; linkedUnits: number }> => {
+  return runWithSchemaFailover(async () => {
+    const units = await prisma.fleetUnit.findMany({
+      select: { id: true, clientId: true, clientName: true },
+    })
+
+    const nameByKey = new Map<string, string>()
+    units.forEach((unit) => {
+      const nextName = normalize(unit.clientName)
+      if (!nextName) {
+        return
+      }
+      const key = normalizeClientKey(nextName)
+      if (!key) {
+        return
+      }
+      if (!nameByKey.has(key)) {
+        nameByKey.set(key, nextName)
+      }
+    })
+
+    if (nameByKey.size === 0) {
+      return { created: 0, linkedUnits: 0 }
+    }
+
+    const existingClients = await prisma.clientAccount.findMany({
+      select: { id: true, name: true },
+    })
+    const clientByKey = new Map<string, { id: string; name: string }>()
+    existingClients.forEach((client) => {
+      const key = normalizeClientKey(client.name)
+      if (key) {
+        clientByKey.set(key, { id: client.id, name: client.name })
+      }
+    })
+
+    const missingClients: { name: string }[] = []
+    nameByKey.forEach((name, key) => {
+      if (!clientByKey.has(key)) {
+        missingClients.push({ name })
+      }
+    })
+
+    let created = 0
+    if (missingClients.length > 0) {
+      const result = await prisma.clientAccount.createMany({
+        data: missingClients.map((item) => ({
+          name: item.name,
+          legalName: '',
+          taxId: '',
+          contactName: '',
+          contactPhone: '',
+          contactEmail: '',
+          notes: '',
+          isActive: true,
+        })),
+        skipDuplicates: true,
+      })
+      created = result.count
+    }
+
+    const refreshedClients = await prisma.clientAccount.findMany({
+      select: { id: true, name: true },
+    })
+    refreshedClients.forEach((client) => {
+      const key = normalizeClientKey(client.name)
+      if (key) {
+        clientByKey.set(key, { id: client.id, name: client.name })
+      }
+    })
+
+    const clientById = new Map<string, { id: string; name: string }>()
+    refreshedClients.forEach((client) => clientById.set(client.id, { id: client.id, name: client.name }))
+
+    const unitIdsByClient = new Map<string, string[]>()
+    units.forEach((unit) => {
+      const key = normalizeClientKey(unit.clientName)
+      if (!key) {
+        return
+      }
+      const client = clientByKey.get(key)
+      if (!client) {
+        return
+      }
+
+      const currentName = normalize(unit.clientName)
+      const needsLink = unit.clientId !== client.id
+      const needsNameNormalize = currentName !== client.name
+      if (!needsLink && !needsNameNormalize) {
+        return
+      }
+
+      const list = unitIdsByClient.get(client.id) ?? []
+      list.push(unit.id)
+      unitIdsByClient.set(client.id, list)
+    })
+
+    let linkedUnits = 0
+    for (const [clientId, unitIds] of unitIdsByClient.entries()) {
+      const client = clientById.get(clientId)
+      if (!client) {
+        continue
+      }
+      const result = await prisma.fleetUnit.updateMany({
+        where: { id: { in: unitIds } },
+        data: { clientId: client.id, clientName: client.name },
+      })
+      linkedUnits += result.count
+    }
+
+    return { created, linkedUnits }
+  })
+}
+
 router.get('/', async (_req, res) => {
   try {
+    try {
+      await syncClientsFromFleet()
+    } catch (syncError) {
+      console.error('Clients sync from fleet error:', syncError)
+    }
+
     const items = await runWithSchemaFailover(() =>
       prisma.clientAccount.findMany({
         orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
@@ -54,6 +175,19 @@ router.get('/', async (_req, res) => {
     }
     console.error('Clients GET error:', error)
     return res.status(500).json({ message: 'No se pudieron cargar los clientes.' })
+  }
+})
+
+router.post('/sync-from-fleet', async (_req, res) => {
+  try {
+    const result = await syncClientsFromFleet()
+    return res.json({
+      message: 'Sincronizacion de clientes desde flota completada.',
+      ...result,
+    })
+  } catch (error) {
+    console.error('Clients manual sync from fleet error:', error)
+    return res.status(500).json({ message: 'No se pudo sincronizar clientes desde flota.' })
   }
 })
 
