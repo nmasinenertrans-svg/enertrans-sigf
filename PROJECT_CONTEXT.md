@@ -913,6 +913,16 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Se agrega `console.error` explicito en `ExternalRequest CREATE error` para diagnostico real en logs de Render.
   Riesgo residual:
   - Si la notificacion falla por drift de schema o conectividad, la NDP se crea igual pero no dispara alerta hasta estabilizar ese subsistema.
+- Fecha: 2026-03-26
+  Cambio: Autocuracion de cola offline para `externalRequest.create` cuando la NDP ya existe en backend.
+  Archivos:
+  - `src/services/offline/sync.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Evita pendientes fantasma de NDP en cola cuando una creacion quedo persistida en servidor pero el cliente recibio error en el flujo.
+  - Antes de marcar fallo definitivo, el sync valida existencia por `id`/`code` en `/external-requests`; si existe, limpia la cola y marca exito.
+  Riesgo residual:
+  - Si backend no responde en la verificacion de existencia, el item se mantiene en cola para reintento posterior (comportamiento conservador).
 
 ## 9) Riesgos abiertos (a seguir)
 

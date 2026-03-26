@@ -17,6 +17,7 @@ type RepairPayload = {
 
 type ExternalRequestPayload = {
   id: string
+  code?: string
   providerFileUrl?: string
   providerFileBase64?: string
   providerFileName?: string
@@ -290,6 +291,30 @@ const getQueueItemById = async (id: string) => {
   return items.find((entry) => entry.id === id)
 }
 
+const wasExternalRequestPersisted = async (item: OfflineQueueItem): Promise<boolean> => {
+  if (item.type !== 'externalRequest.create') {
+    return false
+  }
+
+  const payload = item.payload as ExternalRequestPayload
+  const targetId = typeof payload?.id === 'string' ? payload.id : ''
+  const targetCode = typeof payload?.code === 'string' ? payload.code.trim() : ''
+  if (!targetId && !targetCode) {
+    return false
+  }
+
+  try {
+    const list = await apiRequest<Array<{ id?: string; code?: string }>>('/external-requests', { timeoutMs: 20000 })
+    return list.some((entry) => {
+      const entryId = typeof entry?.id === 'string' ? entry.id : ''
+      const entryCode = typeof entry?.code === 'string' ? entry.code.trim() : ''
+      return (targetId && entryId === targetId) || (targetCode && entryCode === targetCode)
+    })
+  } catch {
+    return false
+  }
+}
+
 export const enqueueAndSync = async (item: OfflineQueueItem) => {
   await enqueueItem(item)
   recordSyncTelemetry({
@@ -331,6 +356,17 @@ export const syncQueueItem = async (id: string) => {
       itemId: item.id,
     })
   } catch (error: unknown) {
+    if (await wasExternalRequestPersisted(item)) {
+      await removeQueueItem(item.id)
+      recordSyncTelemetry({
+        name: 'sync.success',
+        itemType: item.type,
+        itemId: item.id,
+        reason: 'Autocuracion: NDP ya existente en servidor.',
+      })
+      return
+    }
+
     const { shouldDrop, message } = classifySyncError(item, error)
     const statusCode = extractStatusCode(error)
     if (shouldDrop) {
@@ -411,6 +447,17 @@ export const syncQueue = async () => {
           itemId: item.id,
         })
       } catch (error: unknown) {
+        if (await wasExternalRequestPersisted(item)) {
+          await removeQueueItem(item.id)
+          recordSyncTelemetry({
+            name: 'sync.success',
+            itemType: item.type,
+            itemId: item.id,
+            reason: 'Autocuracion: NDP ya existente en servidor.',
+          })
+          continue
+        }
+
         const { shouldDrop, message } = classifySyncError(item, error)
         const statusCode = extractStatusCode(error)
         if (shouldDrop) {
