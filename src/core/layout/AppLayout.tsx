@@ -388,12 +388,18 @@ export const AppLayout = () => {
         if (fleetResponse) {
           const mergedFleet =
             mergeByIdWithLocal(fleetResponse, fleetUnitsRef.current, getQueuedPayloads('fleet.create')) ?? fleetResponse
-          const queuedFleetUpdates = getQueuedPayloads<FleetUnit>('fleet.update')
-          const queuedById = new Map<string, FleetUnit>()
-          queuedFleetUpdates.forEach((unit) => {
-            if (unit?.id) {
-              queuedById.set(unit.id, unit)
+          const queuedFleetUpdates = getQueuedPayloads<any>('fleet.update')
+          const queuedById = new Map<string, Partial<FleetUnit>>()
+          queuedFleetUpdates.forEach((entry) => {
+            const unitId = typeof entry?.id === 'string' ? entry.id : ''
+            if (!unitId) {
+              return
             }
+            const data =
+              entry?.data && typeof entry.data === 'object'
+                ? (entry.data as Partial<FleetUnit>)
+                : (entry as Partial<FleetUnit>)
+            queuedById.set(unitId, data)
           })
           setFleetUnits(
             mergedFleet.map((unit) => {

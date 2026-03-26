@@ -18,6 +18,13 @@ import { enqueueAndSync } from '../../../services/offline/sync'
 import { apiRequest } from '../../../services/api/apiClient'
 import { BackLink } from '../../../components/shared/BackLink'
 
+const buildFleetPatchBody = (unitPayload: Record<string, unknown>) => {
+  const patchBody = { ...unitPayload }
+  delete patchBody.id
+  delete patchBody.crmDealLink
+  return patchBody
+}
+
 export const FleetEditPage = () => {
   const navigate = useNavigate()
   const { unitId } = useParams()
@@ -97,7 +104,10 @@ export const FleetEditPage = () => {
       await enqueueAndSync({
         id: `fleet.update.${unitPayload.id}`,
         type: 'fleet.update',
-        payload: unitPayload,
+        payload: {
+          id: unitPayload.id,
+          data: buildFleetPatchBody(unitPayload as unknown as Record<string, unknown>),
+        },
         createdAt: new Date().toISOString(),
       })
       setAppError(`No se pudo guardar ${label} en servidor. Quedo en cola para sincronizar.`)
@@ -109,7 +119,10 @@ export const FleetEditPage = () => {
         return
       }
       try {
-        await apiRequest(`/fleet/${unitPayload.id}`, { method: 'PATCH', body: unitPayload })
+        await apiRequest(`/fleet/${unitPayload.id}`, {
+          method: 'PATCH',
+          body: buildFleetPatchBody(unitPayload as unknown as Record<string, unknown>),
+        })
       } catch {
         await queueFleetUpdate(unitPayload, label)
       }

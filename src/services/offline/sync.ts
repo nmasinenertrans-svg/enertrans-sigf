@@ -23,6 +23,13 @@ type ExternalRequestPayload = {
   providerFileName?: string
 } & Record<string, unknown>
 
+type FleetUpdatePayload =
+  | {
+      id: string
+      data?: Record<string, unknown>
+    }
+  | ({ id: string } & Record<string, unknown>)
+
 type AuditPayload = {
   id: string
   auditKind: string
@@ -144,11 +151,20 @@ const syncItem = async (item: OfflineQueueItem) => {
       await apiRequest('/fleet', { method: 'POST', body: item.payload })
       return
     case 'fleet.update': {
-      const payload = item.payload as { id?: string } & Record<string, unknown>
+      const payload = item.payload as FleetUpdatePayload
       if (!payload?.id || typeof payload.id !== 'string') {
         return
       }
-      await apiRequest(`/fleet/${payload.id}`, { method: 'PATCH', body: payload })
+      const { id } = payload
+      const dataFromPayload =
+        'data' in payload && payload.data && typeof payload.data === 'object'
+          ? payload.data
+          : (() => {
+              const legacy = { ...(payload as Record<string, unknown>) }
+              delete legacy.id
+              return legacy
+            })()
+      await apiRequest(`/fleet/${id}`, { method: 'PATCH', body: dataFromPayload })
       return
     }
     case 'maintenance.create':
@@ -251,6 +267,13 @@ const classifySyncError = (item: OfflineQueueItem, error: unknown) => {
     return {
       shouldDrop: false,
       message: `${statusCode} error en inspeccion. Se conserva en cola para revision y reintento manual.`,
+    }
+  }
+
+  if (item.type === 'fleet.update' && statusCode === 400) {
+    return {
+      shouldDrop: false,
+      message: '400 en fleet.update. Se conserva en cola para reintento manual.',
     }
   }
 
