@@ -386,8 +386,20 @@ export const AppLayout = () => {
           setUsers(mergeUsersByUsername(usersResponse, usersRef.current) ?? usersResponse)
         }
         if (fleetResponse) {
+          const mergedFleet =
+            mergeByIdWithLocal(fleetResponse, fleetUnitsRef.current, getQueuedPayloads('fleet.create')) ?? fleetResponse
+          const queuedFleetUpdates = getQueuedPayloads<FleetUnit>('fleet.update')
+          const queuedById = new Map<string, FleetUnit>()
+          queuedFleetUpdates.forEach((unit) => {
+            if (unit?.id) {
+              queuedById.set(unit.id, unit)
+            }
+          })
           setFleetUnits(
-            mergeByIdWithLocal(fleetResponse, fleetUnitsRef.current, getQueuedPayloads('fleet.create')) ?? fleetResponse,
+            mergedFleet.map((unit) => {
+              const queued = queuedById.get(unit.id)
+              return queued ? { ...unit, ...queued } : unit
+            }),
           )
         }
         if (maintenanceResponse) {

@@ -24,7 +24,7 @@ export const FleetEditPage = () => {
 
   const {
     state: { fleetUnits },
-    actions: { setFleetUnits },
+    actions: { setFleetUnits, setAppError },
   } = useAppContext()
 
   const selectedUnit = useMemo(() => {
@@ -93,6 +93,28 @@ export const FleetEditPage = () => {
     let nextUnit = mergeFleetUnitFromForm(selectedUnit, resolvedFormData)
     let nextUnitList = [...fleetUnits]
 
+    const queueFleetUpdate = async (unitPayload: typeof nextUnit, label: string) => {
+      await enqueueAndSync({
+        id: `fleet.update.${unitPayload.id}`,
+        type: 'fleet.update',
+        payload: unitPayload,
+        createdAt: new Date().toISOString(),
+      })
+      setAppError(`No se pudo guardar ${label} en servidor. Quedo en cola para sincronizar.`)
+    }
+
+    const persistFleetUpdate = async (unitPayload: typeof nextUnit, label: string) => {
+      if (typeof navigator === 'undefined' || !navigator.onLine) {
+        await queueFleetUpdate(unitPayload, label)
+        return
+      }
+      try {
+        await apiRequest(`/fleet/${unitPayload.id}`, { method: 'PATCH', body: unitPayload })
+      } catch {
+        await queueFleetUpdate(unitPayload, label)
+      }
+    }
+
     if (resolvedFormData.hasSemiTrailer) {
       if (resolvedFormData.semiTrailerUnitId) {
         const matchedSemiTrailer = fleetUnits.find((unit) => unit.id === resolvedFormData.semiTrailerUnitId)
@@ -106,10 +128,7 @@ export const FleetEditPage = () => {
             ...nextUnit,
             semiTrailerUnitId: updatedSemiTrailer.id,
           }
-
-          if (typeof navigator !== 'undefined' && navigator.onLine) {
-            apiRequest(`/fleet/${updatedSemiTrailer.id}`, { method: 'PATCH', body: updatedSemiTrailer }).catch(() => null)
-          }
+          await persistFleetUpdate(updatedSemiTrailer, `el semirremolque ${updatedSemiTrailer.internalCode}`)
         } else {
           nextUnit = {
             ...nextUnit,
@@ -139,10 +158,7 @@ export const FleetEditPage = () => {
 
     nextUnitList = nextUnitList.map((unit) => (unit.id === selectedUnit.id ? nextUnit : unit))
     setFleetUnits(nextUnitList)
-
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest(`/fleet/${selectedUnit.id}`, { method: 'PATCH', body: nextUnit }).catch(() => null)
-    }
+    await persistFleetUpdate(nextUnit, `la unidad ${nextUnit.internalCode}`)
 
     navigate(buildFleetDetailPath(selectedUnit.id))
   }

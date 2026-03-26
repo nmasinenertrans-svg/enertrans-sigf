@@ -143,6 +143,14 @@ const syncItem = async (item: OfflineQueueItem) => {
     case 'fleet.create':
       await apiRequest('/fleet', { method: 'POST', body: item.payload })
       return
+    case 'fleet.update': {
+      const payload = item.payload as { id?: string } & Record<string, unknown>
+      if (!payload?.id || typeof payload.id !== 'string') {
+        return
+      }
+      await apiRequest(`/fleet/${payload.id}`, { method: 'PATCH', body: payload })
+      return
+    }
     case 'maintenance.create':
       await apiRequest('/maintenance', { method: 'POST', body: item.payload })
       return
