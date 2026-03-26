@@ -69,9 +69,9 @@ export const MaintenanceModePage = () => {
       })
       setFeatureFlags({ ...featureFlags, ...response })
       setFlags({ ...featureFlags, ...response })
-      setAppError('ConfiguraciÃ³n de mÃ³dulos actualizada.')
+      setAppError('Configuracion de modulos actualizada.')
     } catch {
-      setAppError('No se pudo actualizar la configuraciÃ³n de mÃ³dulos.')
+      setAppError('No se pudo actualizar la configuracion de modulos.')
     } finally {
       setIsSavingFlags(false)
     }
@@ -79,7 +79,7 @@ export const MaintenanceModePage = () => {
 
   const runDiagnostics = async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setAppError('Sin conexiÃ³n. El diagnÃ³stico completo requiere internet.')
+      setAppError('Sin conexion. El diagnostico completo requiere internet.')
       return
     }
 
@@ -119,7 +119,8 @@ export const MaintenanceModePage = () => {
 
     try {
       const queueItems = await getQueueItems()
-      pushResult('Cola offline', 'ok', `Pendientes: ${queueItems.length}`)
+      const blockedCount = queueItems.filter((item) => item.blocked).length
+      pushResult('Cola offline', 'ok', `Pendientes: ${queueItems.length} | Bloqueados: ${blockedCount}`)
     } catch (error) {
       pushResult('Cola offline', 'error', String((error as Error)?.message ?? 'Error'))
     }
@@ -150,7 +151,7 @@ export const MaintenanceModePage = () => {
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-500">Mantenimiento</p>
-          <h2 className="mt-2 text-2xl font-bold text-slate-900">Estado de la aplicaciÃ³n</h2>
+          <h2 className="mt-2 text-2xl font-bold text-slate-900">Estado de la aplicacion</h2>
           <p className="mt-1 text-sm text-slate-600">
             Solo los usuarios DEV pueden activar o desactivar el mantenimiento global.
           </p>
@@ -183,14 +184,14 @@ export const MaintenanceModePage = () => {
             className="min-h-[110px] rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder="Ej: La aplicaciÃ³n se encuentra en mantenimiento, contacte con el Ã¡rea de soporte."
+            placeholder="Ej: La aplicacion se encuentra en mantenimiento, contacte con el area de soporte."
           />
         </label>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-800">Panel DEV - MÃ³dulos y botones</h3>
-        <p className="mt-1 text-xs text-slate-500">Oculta mÃ³dulos y acciones en producciÃ³n.</p>
+        <h3 className="text-sm font-semibold text-slate-800">Panel DEV - Modulos y botones</h3>
+        <p className="mt-1 text-xs text-slate-500">Oculta modulos y acciones en produccion.</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
@@ -266,7 +267,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar botÃ³n â€œCargar unidad demoâ€
+            Mostrar boton "Cargar unidad demo"
             <input
               type="checkbox"
               checked={flags.showDemoUnitButton}
@@ -275,7 +276,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar mÃ³dulo Inventario
+            Mostrar modulo Inventario
             <input
               type="checkbox"
               checked={flags.showInventoryModule}
@@ -284,7 +285,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar mÃ³dulo Reportes
+            Mostrar modulo Reportes
             <input
               type="checkbox"
               checked={flags.showReportsModule}
@@ -293,7 +294,7 @@ export const MaintenanceModePage = () => {
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-            Mostrar mÃ³dulo Notas de pedido externo
+            Mostrar modulo Notas de pedido externo
             <input
               type="checkbox"
               checked={flags.showExternalRequestsModule}
@@ -373,13 +374,13 @@ export const MaintenanceModePage = () => {
             className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
             disabled={isSavingFlags}
           >
-            {isSavingFlags ? 'Guardando...' : 'Guardar configuraciÃ³n'}
+            {isSavingFlags ? 'Guardando...' : 'Guardar configuracion'}
           </button>
         </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-800">DiagnÃ³stico completo</h3>
+        <h3 className="text-sm font-semibold text-slate-800">Diagnostico completo</h3>
         <p className="mt-1 text-xs text-slate-500">Prueba backend, auth, base, storage y cola offline.</p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -389,7 +390,7 @@ export const MaintenanceModePage = () => {
             className="rounded-lg bg-amber-400 px-4 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
             disabled={diagnosticRunning}
           >
-            {diagnosticRunning ? 'Ejecutando...' : 'Ejecutar diagnÃ³stico'}
+            {diagnosticRunning ? 'Ejecutando...' : 'Ejecutar diagnostico'}
           </button>
         </div>
 

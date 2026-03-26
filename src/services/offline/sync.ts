@@ -5,6 +5,7 @@ import { recordSyncTelemetry } from './telemetry'
 let syncing = false
 
 const MAX_RETRY_ATTEMPTS = 5
+const AUTO_UNBLOCK_COOLDOWN_MS = 2 * 60 * 1000
 const NON_RETRYABLE_STATUS_CODES = new Set([400, 404, 409, 422])
 
 type RepairPayload = {
@@ -266,6 +267,24 @@ const markSyncFailure = async (item: OfflineQueueItem, message: string) => {
   })
 }
 
+const shouldAutoUnblock = (item: OfflineQueueItem) => {
+  if (!item.blocked) {
+    return false
+  }
+
+  const lastError = (item.lastError ?? '').trim()
+  if (!lastError.startsWith('PAUSADO_AUTOMATICO')) {
+    return false
+  }
+
+  const lastAttemptAt = item.lastAttemptAt ? Date.parse(item.lastAttemptAt) : Number.NaN
+  if (!Number.isFinite(lastAttemptAt)) {
+    return true
+  }
+
+  return Date.now() - lastAttemptAt >= AUTO_UNBLOCK_COOLDOWN_MS
+}
+
 const getQueueItemById = async (id: string) => {
   const items = await getQueueItems()
   return items.find((entry) => entry.id === id)
@@ -349,16 +368,38 @@ export const syncQueue = async () => {
   syncing = true
   try {
     const items = await getQueueItems()
-    for (const item of items) {
+    for (const originalItem of items) {
+      let item = originalItem
       if (item.blocked) {
+        if (!shouldAutoUnblock(item)) {
+          recordSyncTelemetry({
+            name: 'sync.skipped.blocked',
+            itemType: item.type,
+            itemId: item.id,
+            retryable: false,
+            reason: 'Item bloqueado por reintentos previos.',
+          })
+          continue
+        }
+
+        await updateQueueItem(item.id, {
+          blocked: false,
+          attemptCount: 0,
+          lastError: '',
+        })
         recordSyncTelemetry({
-          name: 'sync.skipped.blocked',
+          name: 'sync.unblocked.manual',
           itemType: item.type,
           itemId: item.id,
-          retryable: false,
-          reason: 'Item bloqueado por reintentos previos.',
+          retryable: true,
+          reason: 'Desbloqueado automaticamente tras cooldown.',
         })
-        continue
+        item = {
+          ...item,
+          blocked: false,
+          attemptCount: 0,
+          lastError: '',
+        }
       }
 
       try {

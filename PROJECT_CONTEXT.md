@@ -890,6 +890,18 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   Riesgo residual:
   - El bloqueo frontend usa guard global por eventos; si se agregan nuevos componentes con interacciones no estandar, se recomienda validarlos en QA visual post-deploy.
   - DEV queda exceptuado del bloqueo para permitir operacion y reversa del modo en caliente.
+- Fecha: 2026-03-26
+  Cambio: Correccion critica de sincronizacion post-caida de DB y limpieza de textos corruptos en Mantenimiento app.
+  Archivos:
+  - `src/services/offline/sync.ts`
+  - `src/modules/system/pages/MaintenanceModePage.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Los items offline bloqueados por `PAUSADO_AUTOMATICO` ya no quedan congelados indefinidamente: se desbloquean automaticamente tras cooldown y vuelven a intentar sync al normalizar backend/DB.
+  - Se corrigen textos mojibake en el modulo Mantenimiento app para eliminar caracteres rotos en produccion.
+  - Diagnostico de mantenimiento ahora expone conteo de elementos bloqueados en cola offline.
+  Riesgo residual:
+  - Los datos cargados durante una ventana de caida solo se recuperan si quedaron en IndexedDB local de ese dispositivo/navegador; si no se encolaron, no existe fuente de recuperacion automatica.
 
 ## 9) Riesgos abiertos (a seguir)
 
