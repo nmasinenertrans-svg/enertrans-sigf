@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { buildFleetDetailPath, ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { FleetUnitForm } from '../components/FleetUnitForm'
+import type { FleetUnit } from '../../../types/domain'
 import {
   addTractorHistoryToSemiTrailer,
   createEmptyFleetFormData,
@@ -23,6 +24,16 @@ const buildFleetPatchBody = (unitPayload: Record<string, unknown>) => {
   delete patchBody.id
   delete patchBody.crmDealLink
   return patchBody
+}
+
+const buildFleetChangedPatchBody = (previousUnit: FleetUnit, nextUnit: FleetUnit) => {
+  const nextBody = buildFleetPatchBody(nextUnit as unknown as Record<string, unknown>)
+  const previousBody = buildFleetPatchBody(previousUnit as unknown as Record<string, unknown>)
+  const changedEntries = Object.entries(nextBody).filter(([key, value]) => {
+    const previousValue = (previousBody as Record<string, unknown>)[key]
+    return JSON.stringify(previousValue) !== JSON.stringify(value)
+  })
+  return Object.fromEntries(changedEntries)
 }
 
 export const FleetEditPage = () => {
@@ -100,31 +111,40 @@ export const FleetEditPage = () => {
     let nextUnit = mergeFleetUnitFromForm(selectedUnit, resolvedFormData)
     let nextUnitList = [...fleetUnits]
 
-    const queueFleetUpdate = async (unitPayload: typeof nextUnit, label: string) => {
+    const queueFleetUpdate = async (unitPayload: typeof nextUnit, patchBody: Record<string, unknown>, label: string) => {
       await enqueueAndSync({
         id: `fleet.update.${unitPayload.id}`,
         type: 'fleet.update',
         payload: {
           id: unitPayload.id,
-          data: buildFleetPatchBody(unitPayload as unknown as Record<string, unknown>),
+          data: patchBody,
         },
         createdAt: new Date().toISOString(),
       })
       setAppError(`No se pudo guardar ${label} en servidor. Quedo en cola para sincronizar.`)
     }
 
-    const persistFleetUpdate = async (unitPayload: typeof nextUnit, label: string) => {
+    const persistFleetUpdate = async (
+      previousUnit: FleetUnit,
+      unitPayload: typeof nextUnit,
+      label: string,
+    ) => {
+      const patchBody = buildFleetChangedPatchBody(previousUnit, unitPayload)
+      if (Object.keys(patchBody).length === 0) {
+        return
+      }
+
       if (typeof navigator === 'undefined' || !navigator.onLine) {
-        await queueFleetUpdate(unitPayload, label)
+        await queueFleetUpdate(unitPayload, patchBody, label)
         return
       }
       try {
         await apiRequest(`/fleet/${unitPayload.id}`, {
           method: 'PATCH',
-          body: buildFleetPatchBody(unitPayload as unknown as Record<string, unknown>),
+          body: patchBody,
         })
       } catch {
-        await queueFleetUpdate(unitPayload, label)
+        await queueFleetUpdate(unitPayload, patchBody, label)
       }
     }
 
@@ -141,7 +161,11 @@ export const FleetEditPage = () => {
             ...nextUnit,
             semiTrailerUnitId: updatedSemiTrailer.id,
           }
-          await persistFleetUpdate(updatedSemiTrailer, `el semirremolque ${updatedSemiTrailer.internalCode}`)
+          await persistFleetUpdate(
+            matchedSemiTrailer,
+            updatedSemiTrailer,
+            `el semirremolque ${updatedSemiTrailer.internalCode}`,
+          )
         } else {
           nextUnit = {
             ...nextUnit,
@@ -171,7 +195,7 @@ export const FleetEditPage = () => {
 
     nextUnitList = nextUnitList.map((unit) => (unit.id === selectedUnit.id ? nextUnit : unit))
     setFleetUnits(nextUnitList)
-    await persistFleetUpdate(nextUnit, `la unidad ${nextUnit.internalCode}`)
+    await persistFleetUpdate(selectedUnit, nextUnit, `la unidad ${nextUnit.internalCode}`)
 
     navigate(buildFleetDetailPath(selectedUnit.id))
   }
