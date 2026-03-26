@@ -253,19 +253,11 @@ export const DashboardPage = () => {
     })
 
     const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
-    const limited = sorted.slice(0, 6)
-    const remaining = sorted.slice(6)
-    const othersCount = remaining.reduce((acc, item) => acc + item[1], 0)
-
-    const segments = limited.map(([label, value], index) => ({
+    const segments = sorted.map(([label, value], index) => ({
       label,
       value,
       color: palette[index % palette.length],
     }))
-
-    if (othersCount > 0) {
-      segments.push({ label: 'Otros', value: othersCount, color: palette[segments.length % palette.length] })
-    }
 
     if (segments.length === 0) {
       segments.push({ label: 'Sin asignar', value: 0, color: palette[0] })
@@ -309,15 +301,6 @@ export const DashboardPage = () => {
 
   const handleOccupancySegmentClick = (segment: Segment) => {
     if (!segment.label) {
-      return
-    }
-    if (segment.label === 'Otros') {
-      const params = new URLSearchParams()
-      params.set('clientGroup', 'OTHERS')
-      occupancySegments
-        .filter((item) => item.label !== 'Otros')
-        .forEach((item) => params.append('excludeClient', item.label))
-      navigate(`${ROUTE_PATHS.fleet.list}?${params.toString()}`)
       return
     }
     if (segment.label === 'Sin asignar') {
