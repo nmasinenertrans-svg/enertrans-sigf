@@ -269,6 +269,183 @@ const fleetSchema = z.object({
   documents: z.any().optional().default({}),
 })
 
+const toTrimmedString = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  if (value === null || value === undefined) {
+    return ''
+  }
+  return String(value).trim()
+}
+
+const toOptionalIsoDate = (value: unknown): string | '' | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+  if (value === null) {
+    return ''
+  }
+  const text = toTrimmedString(value)
+  if (!text) {
+    return ''
+  }
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) {
+    return undefined
+  }
+  return date.toISOString()
+}
+
+const toOptionalBoolean = (value: unknown): boolean | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+  if (typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'number') {
+    if (value === 1) return true
+    if (value === 0) return false
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (['true', '1', 'si', 'yes'].includes(normalized)) return true
+    if (['false', '0', 'no'].includes(normalized)) return false
+  }
+  return undefined
+}
+
+const toOptionalInt = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined
+  }
+  return Math.trunc(parsed)
+}
+
+const sanitizeFleetPatchData = (rawBody: Record<string, unknown>): Partial<z.infer<typeof fleetSchema>> => {
+  const patchData: Partial<z.infer<typeof fleetSchema>> = {}
+
+  const setString = (key: keyof z.infer<typeof fleetSchema>) => {
+    if (Object.prototype.hasOwnProperty.call(rawBody, key)) {
+      ;(patchData as any)[key] = toTrimmedString(rawBody[key as string])
+    }
+  }
+
+  const setNullableString = (key: keyof z.infer<typeof fleetSchema>) => {
+    if (Object.prototype.hasOwnProperty.call(rawBody, key)) {
+      const text = toTrimmedString(rawBody[key as string])
+      ;(patchData as any)[key] = text ? text : null
+    }
+  }
+
+  const setInt = (key: keyof z.infer<typeof fleetSchema>) => {
+    if (Object.prototype.hasOwnProperty.call(rawBody, key)) {
+      const next = toOptionalInt(rawBody[key as string])
+      if (next !== undefined) {
+        ;(patchData as any)[key] = next
+      }
+    }
+  }
+
+  const setBoolean = (key: keyof z.infer<typeof fleetSchema>) => {
+    if (Object.prototype.hasOwnProperty.call(rawBody, key)) {
+      const next = toOptionalBoolean(rawBody[key as string])
+      if (next !== undefined) {
+        ;(patchData as any)[key] = next
+      }
+    }
+  }
+
+  setString('qrId')
+  setString('internalCode')
+  setString('brand')
+  setString('model')
+  setNullableString('clientId')
+  setString('clientName')
+  setString('location')
+  setString('ownerCompany')
+  setString('configurationNotes')
+  setString('chassisNumber')
+  setString('engineNumber')
+  setString('hydroCraneBrand')
+  setString('hydroCraneModel')
+  setString('hydroCraneSerialNumber')
+  setNullableString('semiTrailerUnitId')
+  setString('semiTrailerLicensePlate')
+  setString('semiTrailerBrand')
+  setString('semiTrailerModel')
+  setString('logisticsStatusNote')
+
+  setInt('year')
+  setInt('tareWeightKg')
+  setInt('maxLoadKg')
+  setInt('semiTrailerYear')
+  setInt('currentKilometers')
+  setInt('currentEngineHours')
+  setInt('currentHydroHours')
+
+  setBoolean('hasHydroCrane')
+  setBoolean('hasSemiTrailer')
+
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'operationalStatus')) {
+    const next = toTrimmedString(rawBody.operationalStatus)
+    if (next === 'OPERATIONAL' || next === 'MAINTENANCE' || next === 'OUT_OF_SERVICE') {
+      patchData.operationalStatus = next
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'logisticsStatus')) {
+    const next = toTrimmedString(rawBody.logisticsStatus)
+    if (next === 'AVAILABLE' || next === 'PENDING_DELIVERY' || next === 'DELIVERED' || next === 'PENDING_RETURN' || next === 'RETURNED') {
+      patchData.logisticsStatus = next as any
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'unitType')) {
+    const next = toTrimmedString(rawBody.unitType)
+    if (
+      next === 'CHASSIS' ||
+      next === 'CHASSIS_WITH_HYDROCRANE' ||
+      next === 'TRACTOR' ||
+      next === 'TRACTOR_WITH_HYDROCRANE' ||
+      next === 'SEMI_TRAILER' ||
+      next === 'AUTOMOBILE' ||
+      next === 'VAN' ||
+      next === 'PICKUP'
+    ) {
+      patchData.unitType = next as any
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'tractorHistoryIds') && Array.isArray(rawBody.tractorHistoryIds)) {
+    patchData.tractorHistoryIds = rawBody.tractorHistoryIds.map((item) => String(item ?? '').trim()).filter(Boolean)
+  }
+
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'lubricants') && rawBody.lubricants && typeof rawBody.lubricants === 'object') {
+    patchData.lubricants = rawBody.lubricants
+  }
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'filters') && rawBody.filters && typeof rawBody.filters === 'object') {
+    patchData.filters = rawBody.filters
+  }
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'documents') && rawBody.documents && typeof rawBody.documents === 'object') {
+    patchData.documents = rawBody.documents
+  }
+
+  if (Object.prototype.hasOwnProperty.call(rawBody, 'logisticsUpdatedAt')) {
+    const next = toOptionalIsoDate(rawBody.logisticsUpdatedAt)
+    if (next !== undefined) {
+      patchData.logisticsUpdatedAt = next
+    }
+  }
+
+  return patchData
+}
+
 router.get('/', async (_req, res) => {
   try {
     const hasClientIdColumn = await hasFleetColumn('clientId')
@@ -385,15 +562,11 @@ router.post('/', async (req, res) => {
 })
 
 router.patch('/:id', async (req, res) => {
-  const parsed = fleetSchema.partial().safeParse(req.body)
-  if (!parsed.success) {
-    return res.status(400).json({ message: 'Datos invalidos.' })
-  }
-
   const rawBody = (req.body ?? {}) as Record<string, unknown>
-  const patchData = Object.fromEntries(
-    Object.entries(parsed.data).filter(([key]) => Object.prototype.hasOwnProperty.call(rawBody, key)),
-  ) as Partial<z.infer<typeof fleetSchema>>
+  const patchData = sanitizeFleetPatchData(rawBody)
+  if (Object.keys(patchData).length === 0) {
+    return res.status(400).json({ message: 'No hay campos validos para actualizar.' })
+  }
 
   try {
     const current = await prisma.fleetUnit.findUnique({ where: { id: req.params.id } })
