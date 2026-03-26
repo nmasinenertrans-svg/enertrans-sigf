@@ -945,6 +945,19 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Se endurece el fallback de alta NDP para reconocer cualquier `P2022` y evitar bloqueo de cola por formato de `meta.column`.
   Riesgo residual:
   - Hasta el próximo deploy de backend en Render, los reintentos pendientes seguirán fallando con el binario anterior.
+- Fecha: 2026-03-26
+  Cambio: Correccion de sincronizacion multiusuario en edicion de Flota (evita guardado local falso sin persistencia).
+  Archivos:
+  - `src/modules/fleet/pages/FleetEditPage.tsx`
+  - `src/services/offline/sync.ts`
+  - `src/core/layout/AppLayout.tsx`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Se elimina el `catch(() => null)` silencioso en `PATCH /fleet/:id`: si falla servidor, ahora se encola `fleet.update` y se informa error operativo.
+  - Se agrega soporte de reintento offline para `fleet.update`, evitando que cambios de ubicacion/cliente queden solo en el navegador del editor.
+  - La carga global contempla `fleet.update` en cola para mantener consistencia visual local hasta que sincronice.
+  Riesgo residual:
+  - Si backend devuelve 500 persistente, la cola mantendra pendientes hasta estabilizar servidor o reintentar manualmente.
 
 ## 9) Riesgos abiertos (a seguir)
 
