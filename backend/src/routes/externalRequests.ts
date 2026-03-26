@@ -373,6 +373,45 @@ const toUpdateData = (input: ExternalRequestUpdateInput, existing: any) => {
   return data
 }
 
+const toLegacyCreateData = (input: ExternalRequestInput) => ({
+  id: input.id,
+  code: input.code.trim(),
+  unitId: input.unitId,
+  companyName: input.companyName.trim(),
+  description: input.description.trim(),
+  tasks: normalizeTasks(input.tasks),
+  createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
+})
+
+const scheduleExternalRequestCreatedNotification = (req: AuthenticatedRequest, item: any) => {
+  void (async () => {
+    try {
+      const [actor, unit] = await Promise.all([
+        req.userId
+          ? runWithSchemaFailover(() =>
+              prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }),
+            )
+          : Promise.resolve(null),
+        runWithSchemaFailover(() =>
+          prisma.fleetUnit.findUnique({ where: { id: item.unitId }, select: { internalCode: true } }),
+        ),
+      ])
+
+      const recipients = await resolveOperationalNotificationRecipients(req.userId)
+      await pushUserNotifications(recipients, {
+        title: 'Nueva nota de pedido',
+        description: `${actor?.fullName ?? 'Un usuario'} creo ${item.code}${unit?.internalCode ? ` para ${unit.internalCode}` : ''}.`,
+        severity: 'info',
+        target: '/work-orders/external-requests',
+        actorUserId: req.userId,
+        eventType: 'EXTERNAL_REQUEST_CREATED',
+      })
+    } catch (notificationError) {
+      console.error('ExternalRequest notification error:', notificationError)
+    }
+  })()
+}
+
 router.get('/', async (_req, res) => {
   const recoveryPromise = listExternalRequestsFromRecoverySchemas().catch((error) => {
     console.error('ExternalRequest recovery GET error:', error)
@@ -411,38 +450,27 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     const data = toCreateData(parsed.data)
     const item = await runWithSchemaFailover(() => prisma.externalRequest.create({ data }))
     res.status(201).json(item)
-
-    // Notificaciones asincronas: no deben romper el alta de la NDP si fallan.
-    void (async () => {
-      try {
-        const [actor, unit] = await Promise.all([
-          req.userId
-            ? runWithSchemaFailover(() =>
-                prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } }),
-              )
-            : Promise.resolve(null),
-          runWithSchemaFailover(() =>
-            prisma.fleetUnit.findUnique({ where: { id: item.unitId }, select: { internalCode: true } }),
-          ),
-        ])
-
-        const recipients = await resolveOperationalNotificationRecipients(req.userId)
-        await pushUserNotifications(recipients, {
-          title: 'Nueva nota de pedido',
-          description: `${actor?.fullName ?? 'Un usuario'} creo ${item.code}${unit?.internalCode ? ` para ${unit.internalCode}` : ''}.`,
-          severity: 'info',
-          target: '/work-orders/external-requests',
-          actorUserId: req.userId,
-          eventType: 'EXTERNAL_REQUEST_CREATED',
-        })
-      } catch (notificationError) {
-        console.error('ExternalRequest notification error:', notificationError)
-      }
-    })()
-
+    scheduleExternalRequestCreatedNotification(req, item)
     return
   } catch (error: any) {
     console.error('ExternalRequest CREATE error:', error)
+
+    const missingColumn = String(error?.meta?.column ?? '').toLowerCase()
+    const isExternalRequestColumnMismatch = error?.code === 'P2022' && missingColumn.includes('externalrequest.')
+    if (isExternalRequestColumnMismatch) {
+      try {
+        const legacyData = toLegacyCreateData(parsed.data)
+        const legacyItem = await runWithSchemaFailover(() =>
+          prisma.externalRequest.create({ data: legacyData as any }),
+        )
+        res.status(201).json(legacyItem)
+        scheduleExternalRequestCreatedNotification(req, legacyItem)
+        return
+      } catch (legacyError: any) {
+        console.error('ExternalRequest CREATE legacy fallback error:', legacyError)
+      }
+    }
+
     if (error?.code === 'P2002') {
       return res.status(409).json({ message: 'Registro duplicado.' })
     }

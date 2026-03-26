@@ -923,6 +923,16 @@ Fuente: historial git (ultimos commits visibles en este entorno).
   - Antes de marcar fallo definitivo, el sync valida existencia por `id`/`code` en `/external-requests`; si existe, limpia la cola y marca exito.
   Riesgo residual:
   - Si backend no responde en la verificacion de existencia, el item se mantiene en cola para reintento posterior (comportamiento conservador).
+- Fecha: 2026-03-26
+  Cambio: Fallback legacy en backend para creacion de NDP ante drift de columnas (ej. falta `ExternalRequest.currency`).
+  Archivos:
+  - `backend/src/routes/externalRequests.ts`
+  - `PROJECT_CONTEXT.md`
+  Riesgo mitigado:
+  - Si `externalRequest.create` falla por `P2022` en columnas nuevas, reintenta automaticamente con payload legacy compatible y evita bloquear cola offline.
+  - El alta NDP mantiene notificacion asincrona no bloqueante en ambos caminos (normal + fallback).
+  Riesgo residual:
+  - El fallback legacy no persiste campos nuevos (`currency`, `partsItems`, `partsTotal`, etc.) en schemas viejos hasta regularizar migraciones.
 
 ## 9) Riesgos abiertos (a seguir)
 
