@@ -47,27 +47,33 @@ export const ClientsPage = () => {
   const [selectedClientId, setSelectedClientId] = useState<string>('')
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([])
   const [unitSearch, setUnitSearch] = useState('')
+  const [isEditingAssignments, setIsEditingAssignments] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
+
+  const getAssignedUnitIds = (clientId: string) => {
+    const selectedClient = clients.find((item) => item.id === clientId)
+    if (!selectedClient) {
+      return []
+    }
+    return fleetUnits
+      .filter(
+        (unit) =>
+          unit.clientId === clientId ||
+          (normalize(unit.clientName || '') && normalize(unit.clientName || '') === normalize(selectedClient.name)),
+      )
+      .map((unit) => unit.id)
+  }
 
   useEffect(() => {
     if (!selectedClientId) {
       setSelectedUnitIds([])
+      setIsEditingAssignments(false)
       return
     }
-    const selectedClient = clients.find((item) => item.id === selectedClientId)
-    if (!selectedClient) {
-      setSelectedUnitIds([])
-      return
-    }
-    const assigned = fleetUnits
-      .filter(
-        (unit) =>
-          unit.clientId === selectedClientId ||
-          (normalize(unit.clientName || '') && normalize(unit.clientName || '') === normalize(selectedClient.name)),
-      )
-      .map((unit) => unit.id)
-    setSelectedUnitIds(assigned)
+    setSelectedUnitIds(getAssignedUnitIds(selectedClientId))
+    setIsEditingAssignments(false)
+    setUnitSearch('')
   }, [selectedClientId, clients, fleetUnits])
 
   const filteredClients = useMemo(() => {
@@ -103,8 +109,13 @@ export const ClientsPage = () => {
         return text.includes(query)
       })
 
-    return base
-  }, [fleetUnits, unitSearch])
+    if (isEditingAssignments) {
+      return base
+    }
+
+    const selectedIds = new Set(selectedUnitIds)
+    return base.filter((unit) => selectedIds.has(unit.id))
+  }, [fleetUnits, isEditingAssignments, selectedUnitIds, unitSearch])
 
   if (!featureFlags.showClientsModule) {
     return (
@@ -214,6 +225,8 @@ export const ClientsPage = () => {
       ])
       setClients(updatedClients)
       setFleetUnits(updatedFleet)
+      setIsEditingAssignments(false)
+      setUnitSearch('')
       setAppError('Asignacion de unidades actualizada.')
     } catch {
       setAppError('No se pudo guardar la asignacion de unidades.')
@@ -341,10 +354,53 @@ export const ClientsPage = () => {
                 value={unitSearch}
                 onChange={(event) => setUnitSearch(event.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Buscar unidad por dominio, cliente o empresa..."
+                placeholder={
+                  isEditingAssignments
+                    ? 'Buscar unidad por dominio, cliente o empresa...'
+                    : 'Buscar entre las unidades asociadas...'
+                }
               />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-600">
+                  {isEditingAssignments
+                    ? 'Modo edicion activo: puedes modificar la cartera.'
+                    : `Unidades asociadas: ${selectableUnits.length}`}
+                </p>
+                {canEdit ? (
+                  <div className="flex flex-wrap gap-2">
+                    {isEditingAssignments ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        onClick={() => {
+                          setSelectedUnitIds(getAssignedUnitIds(selectedClientId))
+                          setIsEditingAssignments(false)
+                          setUnitSearch('')
+                        }}
+                      >
+                        Cancelar edicion
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        onClick={() => setIsEditingAssignments(true)}
+                      >
+                        Editar asignacion
+                      </button>
+                    )}
+                  </div>
+                ) : null}
+              </div>
               <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {selectableUnits.length === 0 ? (
+                    <p className="col-span-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-6 text-center text-xs text-slate-500">
+                      {isEditingAssignments
+                        ? 'No hay unidades para este filtro.'
+                        : 'Este cliente no tiene unidades asociadas en el filtro actual.'}
+                    </p>
+                  ) : null}
                   {selectableUnits.map((unit) => {
                     const checked = selectedUnitIds.includes(unit.id)
                     return (
@@ -352,15 +408,22 @@ export const ClientsPage = () => {
                         key={unit.id}
                         className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) =>
-                            setSelectedUnitIds((prev) =>
-                              event.target.checked ? [...prev, unit.id] : prev.filter((id) => id !== unit.id),
-                            )
-                          }
-                        />
+                        {isEditingAssignments ? (
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) =>
+                              setSelectedUnitIds((prev) => {
+                                if (event.target.checked) {
+                                  return prev.includes(unit.id) ? prev : [...prev, unit.id]
+                                }
+                                return prev.filter((id) => id !== unit.id)
+                              })
+                            }
+                          />
+                        ) : (
+                          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                        )}
                         <span className="font-semibold text-slate-800">{unit.internalCode}</span>
                         <span className="text-slate-600">{unit.ownerCompany}</span>
                       </label>
@@ -368,16 +431,18 @@ export const ClientsPage = () => {
                   })}
                 </div>
               </div>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleSaveAssignments()}
-                  disabled={isAssigning || !canEdit}
-                  className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
-                >
-                  {isAssigning ? 'Guardando...' : 'Guardar asignacion'}
-                </button>
-              </div>
+              {isEditingAssignments ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveAssignments()}
+                    disabled={isAssigning || !canEdit}
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-60"
+                  >
+                    {isAssigning ? 'Guardando...' : 'Guardar asignacion'}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="mt-4 text-sm text-slate-600">Elige un cliente para asignarle unidades.</p>
