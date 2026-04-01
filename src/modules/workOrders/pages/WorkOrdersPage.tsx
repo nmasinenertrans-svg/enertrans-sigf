@@ -600,13 +600,8 @@ export const WorkOrdersPage = () => {
       if (unitPayload) {
         apiRequest(`/fleet/${updatedWorkOrder.unitId}`, {
           method: 'PATCH',
-          body: { ...unitPayload, operationalStatus: 'MAINTENANCE' },
-        }).catch((error) => {
-          const message = String((error as Error)?.message ?? '')
-          if (message.startsWith('404')) {
-            apiRequest('/fleet', { method: 'POST', body: { ...unitPayload, operationalStatus: 'MAINTENANCE' } }).catch(() => null)
-          }
-        })
+          body: { operationalStatus: 'MAINTENANCE' },
+        }).catch(() => null)
       }
     }
 

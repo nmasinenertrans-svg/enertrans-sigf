@@ -580,14 +580,14 @@ export const AuditsPage = () => {
       try {
         await apiRequest(`/fleet/${createdAudit.unitId}`, {
           method: 'PATCH',
-          body: unitPayload,
+          body: {
+            currentKilometers: unitPayload.currentKilometers,
+            currentEngineHours: unitPayload.currentEngineHours,
+            currentHydroHours: unitPayload.currentHydroHours,
+          },
         })
-      } catch (error) {
-        const message = String((error as Error)?.message ?? '')
-        if (message.startsWith('404')) {
-          await apiRequest('/fleet', { method: 'POST', body: unitPayload })
-          return
-        }
+      } catch {
+        return
       }
     }
 

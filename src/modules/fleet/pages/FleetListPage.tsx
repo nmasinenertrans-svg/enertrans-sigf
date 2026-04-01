@@ -10,6 +10,7 @@ import { createEmptyFleetFormData, getOperationalStatusLabel, normalizeFleetUnit
 import type { FleetUnit } from '../../../types/domain'
 import { apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
+import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
 
 interface BarcodeDetectorInstance {
   detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>>
@@ -339,7 +340,31 @@ export const FleetListPage = () => {
 
     const targetUnit = unitPendingDelete
 
+    const purgeConflictingFleetQueueItems = async (unitId: string) => {
+      const queueItems = await getQueueItems().catch(() => [])
+      const conflicts = queueItems.filter((item) => {
+        if (!(item.type === 'fleet.create' || item.type === 'fleet.update' || item.type === 'fleet.delete')) {
+          return false
+        }
+
+        if (
+          item.id === `fleet.create.${unitId}` ||
+          item.id === `fleet.update.${unitId}` ||
+          item.id === `fleet.delete.${unitId}`
+        ) {
+          return true
+        }
+
+        const payload = item.payload as { id?: string } | undefined
+        return typeof payload?.id === 'string' && payload.id === unitId
+      })
+
+      await Promise.all(conflicts.map((item) => removeQueueItem(item.id)))
+    }
+
     try {
+      await purgeConflictingFleetQueueItems(targetUnit.id)
+
       if (typeof navigator !== 'undefined' && navigator.onLine) {
         await apiRequest(`/fleet/${targetUnit.id}`, { method: 'DELETE' })
       } else {
