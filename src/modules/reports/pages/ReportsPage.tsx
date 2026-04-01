@@ -6,7 +6,7 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
 import { getFleetUnitTypeLabel } from '../../fleet/services/fleetService'
-import type { ExternalRequest, RepairRecord, TaskRecord, WorkOrder } from '../../../types/domain'
+import type { ExternalRequest, FleetUnit, RepairRecord, TaskRecord, WorkOrder } from '../../../types/domain'
 
 type ProviderMetrics = {
   providerName: string
@@ -25,6 +25,26 @@ type AssigneeCompliance = {
   total: number
   done: number
   completionRate: number
+}
+
+type OccupancyPdfSegment = {
+  label: string
+  value: number
+  share: number
+  color: string
+}
+
+type OccupancyPdfSection = {
+  key: string
+  title: string
+  totalUnits: number
+  hydroCount: number | null
+  rows: Array<{
+    label: string
+    count: number
+    share: number
+  }>
+  segments: OccupancyPdfSegment[]
 }
 
 const formatDateTime = (value?: string) => {
@@ -185,6 +205,123 @@ const percentage = (part: number, total: number) => (total > 0 ? (part / total) 
 
 const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
 
+const drawWrappedText = (doc: jsPDF, text: string, x: number, y: number, maxWidth: number, lineHeight = 12) => {
+  const lines = doc.splitTextToSize(text, maxWidth)
+  doc.text(lines, x, y)
+  return lines.length * lineHeight
+}
+
+const buildOccupancyPieChart = (segments: OccupancyPdfSegment[]) => {
+  const canvas = document.createElement('canvas')
+  canvas.width = 360
+  canvas.height = 360
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return null
+  }
+
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0) || 1
+  const centerX = canvas.width / 2
+  const centerY = canvas.height / 2
+  const radius = 130
+  let angle = -Math.PI / 2
+
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+
+  segments.forEach((segment) => {
+    const slice = (segment.value / total) * Math.PI * 2
+    context.beginPath()
+    context.moveTo(centerX, centerY)
+    context.arc(centerX, centerY, radius, angle, angle + slice)
+    context.closePath()
+    context.fillStyle = segment.color
+    context.fill()
+
+    if (segment.share >= 6) {
+      const mid = angle + slice / 2
+      const labelX = centerX + Math.cos(mid) * (radius * 0.65)
+      const labelY = centerY + Math.sin(mid) * (radius * 0.65)
+      context.fillStyle = '#0f172a'
+      context.font = 'bold 18px Arial'
+      context.textAlign = 'center'
+      context.textBaseline = 'middle'
+      context.fillText(`${segment.share.toFixed(1)}%`, labelX, labelY)
+    }
+
+    angle += slice
+  })
+
+  context.beginPath()
+  context.arc(centerX, centerY, radius * 0.45, 0, Math.PI * 2)
+  context.fillStyle = '#ffffff'
+  context.fill()
+
+  context.fillStyle = '#111827'
+  context.font = 'bold 22px Arial'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText(`${total}`, centerX, centerY - 10)
+  context.font = '14px Arial'
+  context.fillStyle = '#475569'
+  context.fillText('unidades', centerX, centerY + 18)
+
+  return canvas.toDataURL('image/png')
+}
+
+const normalizeOccupancyClientLabel = (value: string) => {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    return 'Sin asignar'
+  }
+  return normalized.toUpperCase()
+}
+
+const createOccupancySection = (
+  key: string,
+  title: string,
+  units: FleetUnit[],
+  includeHydroCount = false,
+): OccupancyPdfSection | null => {
+  if (!units.length) {
+    return null
+  }
+
+  const clientMap = new Map<string, { label: string; count: number }>()
+  units.forEach((unit) => {
+    const label = normalizeOccupancyClientLabel(unit.clientName ?? '')
+    const current = clientMap.get(label) ?? { label, count: 0 }
+    current.count += 1
+    clientMap.set(label, current)
+  })
+
+  const totalUnits = units.length
+  const rows = Array.from(clientMap.values())
+    .map((entry) => ({
+      label: entry.label,
+      count: entry.count,
+      share: percentage(entry.count, totalUnits),
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+
+  const segments = rows.map((entry, index) => ({
+    label: entry.label,
+    value: entry.count,
+    share: entry.share,
+    color: palette[index % palette.length],
+  }))
+
+  return {
+    key,
+    title,
+    totalUnits,
+    hydroCount: includeHydroCount ? units.filter((unit) => unit.hasHydroCrane).length : null,
+    rows,
+    segments,
+  }
+}
+
 export const ReportsPage = () => {
   const {
     state: { audits, workOrders, repairs, fleetUnits, externalRequests, featureFlags },
@@ -332,6 +469,60 @@ export const ReportsPage = () => {
     () => (showAllClients ? occupancyByClient.detail : occupancyByClient.detail.slice(0, 10)),
     [occupancyByClient.detail, showAllClients],
   )
+
+  const occupancyPdfSections = useMemo(() => {
+    const sections = [
+      createOccupancySection(
+        'pickup',
+        'CAMIONETAS - PICKUP',
+        fleetUnits.filter((unit) => unit.unitType === 'PICKUP'),
+      ),
+      createOccupancySection(
+        'chassis',
+        'CAMIONES - CHASIS',
+        fleetUnits.filter((unit) => unit.unitType === 'CHASSIS' || unit.unitType === 'CHASSIS_WITH_HYDROCRANE'),
+        true,
+      ),
+      createOccupancySection(
+        'tractors',
+        'CAMIONES - TRACTORES',
+        fleetUnits.filter((unit) => unit.unitType === 'TRACTOR' || unit.unitType === 'TRACTOR_WITH_HYDROCRANE'),
+        true,
+      ),
+      createOccupancySection(
+        'semi-trailers',
+        'SEMIRREMOLQUES',
+        fleetUnits.filter((unit) => unit.unitType === 'SEMI_TRAILER'),
+      ),
+    ].filter(Boolean) as OccupancyPdfSection[]
+
+    const coveredTypes = new Set<FleetUnit['unitType']>([
+      'PICKUP',
+      'CHASSIS',
+      'CHASSIS_WITH_HYDROCRANE',
+      'TRACTOR',
+      'TRACTOR_WITH_HYDROCRANE',
+      'SEMI_TRAILER',
+    ])
+
+    const remainingTypes = Array.from(new Set(fleetUnits.map((unit) => unit.unitType))).filter(
+      (unitType) => !coveredTypes.has(unitType),
+    )
+
+    remainingTypes.forEach((unitType) => {
+      const title = getFleetUnitTypeLabel(unitType).toUpperCase()
+      const section = createOccupancySection(
+        unitType.toLowerCase(),
+        title,
+        fleetUnits.filter((unit) => unit.unitType === unitType),
+      )
+      if (section) {
+        sections.push(section)
+      }
+    })
+
+    return sections
+  }, [fleetUnits])
 
   const taskMetrics = useMemo(() => {
     const operational = filteredTasks.filter((task) => !task.isInTaskBank)
@@ -656,6 +847,119 @@ export const ReportsPage = () => {
     downloadXlsx('reparaciones.xlsx', headers, rows)
   }
 
+  const exportOccupancyPdf = () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 32
+    const blockGap = 18
+    let cursorY = 36
+
+    const ensureSpace = (neededHeight: number) => {
+      if (cursorY + neededHeight <= pageHeight - 36) {
+        return
+      }
+      doc.addPage()
+      cursorY = 36
+    }
+
+    doc.setFillColor('#000000')
+    doc.rect(margin, cursorY, pageWidth - margin * 2, 26, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.setTextColor('#facc15')
+    doc.text('REPORTE DE OCUPACION DE FLOTA', pageWidth / 2, cursorY + 17, { align: 'center' })
+    cursorY += 40
+
+    doc.setTextColor('#475569')
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(`Emitido: ${new Date().toLocaleString('es-AR')}`, margin, cursorY)
+    cursorY += 14
+    doc.text(`Total de unidades: ${occupancyByClient.totalUnits} | Clientes: ${occupancyByClient.totalClients}`, margin, cursorY)
+    cursorY += 20
+
+    occupancyPdfSections.forEach((section) => {
+      const chartImage = buildOccupancyPieChart(section.segments)
+      const tableX = margin
+      const tableWidth = 290
+      const chartX = tableX + tableWidth + 16
+      const chartSize = 180
+      const headerHeight = 22
+      const rowHeight = 18
+      const tableBodyRows = Math.max(section.rows.length, 1)
+      const tableHeight = headerHeight + rowHeight * (tableBodyRows + 2)
+      const blockHeight = Math.max(tableHeight, chartSize) + 42
+
+      ensureSpace(blockHeight)
+
+      doc.setFillColor('#000000')
+      doc.rect(margin, cursorY, pageWidth - margin * 2, 24, 'F')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(13)
+      doc.setTextColor('#facc15')
+      doc.text(section.title, pageWidth / 2, cursorY + 16, { align: 'center' })
+      cursorY += 34
+
+      if (section.hydroCount !== null) {
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.setTextColor('#166534')
+        doc.text(`CON HIDROGRUA: ${section.hydroCount}`, tableX, cursorY)
+        cursorY += 14
+      }
+
+      const tableTop = cursorY
+      doc.setDrawColor('#1f2937')
+      doc.setFillColor('#000000')
+      doc.rect(tableX, tableTop, tableWidth, headerHeight, 'FD')
+      doc.setTextColor('#22c55e')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8)
+      doc.text('Etiquetas de fila', tableX + 8, tableTop + 14)
+      doc.text('Cantidad', tableX + 170, tableTop + 14)
+      doc.text('Porcentaje', tableX + 230, tableTop + 14)
+
+      let rowY = tableTop + headerHeight
+      doc.setTextColor('#111827')
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+
+      section.rows.forEach((row) => {
+        doc.setFillColor('#ffffff')
+        doc.rect(tableX, rowY, tableWidth, rowHeight, 'FD')
+        doc.text(row.label, tableX + 8, rowY + 12)
+        doc.text(String(row.count), tableX + 185, rowY + 12, { align: 'right' })
+        doc.text(`${row.share.toFixed(1)}%`, tableX + 280, rowY + 12, { align: 'right' })
+        rowY += rowHeight
+      })
+
+      doc.setFillColor('#22c55e')
+      doc.rect(tableX, rowY, tableWidth, rowHeight, 'FD')
+      doc.setTextColor('#ffffff')
+      doc.setFont('helvetica', 'bold')
+      doc.text('Total general', tableX + 8, rowY + 12)
+      doc.text(String(section.totalUnits), tableX + 185, rowY + 12, { align: 'right' })
+      doc.text('100%', tableX + 280, rowY + 12, { align: 'right' })
+
+      if (chartImage) {
+        doc.setDrawColor('#cbd5e1')
+        doc.setFillColor('#ffffff')
+        doc.roundedRect(chartX, tableTop, chartSize, chartSize, 8, 8, 'FD')
+        doc.addImage(chartImage, 'PNG', chartX + 8, tableTop + 8, chartSize - 16, chartSize - 16)
+      } else {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(9)
+        doc.setTextColor('#64748b')
+        drawWrappedText(doc, 'No se pudo generar el grafico.', chartX + 12, tableTop + 20, chartSize - 24)
+      }
+
+      cursorY = Math.max(rowY + rowHeight, tableTop + chartSize) + blockGap
+    })
+
+    doc.save('ocupacion-flota-por-cliente.pdf')
+  }
+
   return (
     <section className="space-y-5">
       <header>
@@ -678,7 +982,14 @@ export const ReportsPage = () => {
               <h3 className="text-lg font-semibold text-slate-900">Ocupacion por cliente</h3>
               <p className="text-xs text-slate-500">Distribucion de unidades activas (top 8 + otros)</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={exportOccupancyPdf}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Descargar PDF
+              </button>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700">
                 Clientes: {occupancyByClient.totalClients}
               </span>
