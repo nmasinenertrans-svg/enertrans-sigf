@@ -191,6 +191,16 @@ const syncItem = async (item: OfflineQueueItem) => {
       })
       return
     }
+    case 'fleet.delete': {
+      const payload = item.payload as { id?: string }
+      if (!payload?.id || typeof payload.id !== 'string') {
+        return
+      }
+      await apiRequest(`/fleet/${payload.id}`, {
+        method: 'DELETE',
+      })
+      return
+    }
     case 'maintenance.create':
       await apiRequest('/maintenance', { method: 'POST', body: item.payload })
       return

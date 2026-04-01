@@ -386,13 +386,24 @@ export const AppLayout = () => {
           setUsers(mergeUsersByUsername(usersResponse, usersRef.current) ?? usersResponse)
         }
         if (fleetResponse) {
-          const mergedFleet =
-            mergeByIdWithLocal(fleetResponse, fleetUnitsRef.current, getQueuedPayloads('fleet.create')) ?? fleetResponse
+          const queuedFleetCreates = getQueuedPayloads<FleetUnit>('fleet.create')
           const queuedFleetUpdates = getQueuedPayloads<any>('fleet.update')
+          const queuedFleetDeletes = getQueuedPayloads<{ id: string }>('fleet.delete')
+          const deletedFleetIds = new Set(
+            queuedFleetDeletes
+              .map((entry) => (typeof entry?.id === 'string' ? entry.id : ''))
+              .filter(Boolean),
+          )
+          const mergedFleet =
+            mergeByIdWithLocal(
+              fleetResponse.filter((unit) => !deletedFleetIds.has(unit.id)),
+              [],
+              queuedFleetCreates.filter((unit) => unit?.id && !deletedFleetIds.has(unit.id)),
+            ) ?? fleetResponse
           const queuedById = new Map<string, Partial<FleetUnit>>()
           queuedFleetUpdates.forEach((entry) => {
             const unitId = typeof entry?.id === 'string' ? entry.id : ''
-            if (!unitId) {
+            if (!unitId || deletedFleetIds.has(unitId)) {
               return
             }
             const data =

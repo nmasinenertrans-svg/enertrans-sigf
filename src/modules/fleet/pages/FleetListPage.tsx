@@ -9,6 +9,7 @@ import { FleetUnitCard } from '../components/FleetUnitCard'
 import { createEmptyFleetFormData, getOperationalStatusLabel, normalizeFleetUnits, toFleetUnit } from '../services/fleetService'
 import type { FleetUnit } from '../../../types/domain'
 import { apiRequest } from '../../../services/api/apiClient'
+import { enqueueAndSync } from '../../../services/offline/sync'
 
 interface BarcodeDetectorInstance {
   detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>>
@@ -70,7 +71,7 @@ export const FleetListPage = () => {
   const [searchParams] = useSearchParams()
   const {
     state: { fleetUnits, featureFlags },
-    actions: { setFleetUnits },
+    actions: { setFleetUnits, setAppError },
   } = useAppContext()
   const {
     state: { currentUser },
@@ -327,7 +328,7 @@ export const FleetListPage = () => {
     setIsQrScanning(true)
   }
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!canDelete) {
       return
     }
@@ -336,12 +337,30 @@ export const FleetListPage = () => {
       return
     }
 
-    const nextUnitList = normalizedUnits.filter((unit) => unit.id !== unitPendingDelete.id)
-    setFleetUnits(nextUnitList)
-    setUnitPendingDelete(null)
+    const targetUnit = unitPendingDelete
 
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest(`/fleet/${unitPendingDelete.id}`, { method: 'DELETE' }).catch(() => null)
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        await apiRequest(`/fleet/${targetUnit.id}`, { method: 'DELETE' })
+      } else {
+        await enqueueAndSync({
+          id: `fleet.delete.${targetUnit.id}`,
+          type: 'fleet.delete',
+          payload: { id: targetUnit.id },
+          createdAt: new Date().toISOString(),
+        })
+      }
+
+      const nextUnitList = normalizedUnits.filter((unit) => unit.id !== targetUnit.id)
+      setFleetUnits(nextUnitList)
+      setUnitPendingDelete(null)
+    } catch {
+      setUnitPendingDelete(null)
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setAppError(`No se pudo encolar la eliminacion de ${targetUnit.internalCode}.`)
+        return
+      }
+      setAppError(`No se pudo eliminar la unidad ${targetUnit.internalCode} en servidor.`)
     }
   }
 
