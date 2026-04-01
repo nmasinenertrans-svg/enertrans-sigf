@@ -5,7 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
-import { getFleetUnitTypeLabel } from '../../fleet/services/fleetService'
+import { getFleetUnitTypeLabel, normalizeFleetUnits } from '../../fleet/services/fleetService'
 import type { ExternalRequest, FleetUnit, RepairRecord, TaskRecord, WorkOrder } from '../../../types/domain'
 
 type ProviderMetrics = {
@@ -337,6 +337,23 @@ export const ReportsPage = () => {
   const [showAllClients, setShowAllClients] = useState(false)
   const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({})
 
+  const reportFleetUnits = useMemo<FleetUnit[]>(() => {
+    const normalized = normalizeFleetUnits(fleetUnits)
+    const seen = new Set<string>()
+
+    return normalized.filter((unit) => {
+      const key = (unit.internalCode || unit.id || '').trim().toUpperCase()
+      if (!key) {
+        return true
+      }
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+  }, [fleetUnits])
+
   useEffect(() => {
     let isMounted = true
     void apiRequest<TaskRecord[]>('/tasks')
@@ -363,7 +380,7 @@ export const ReportsPage = () => {
 
   const unitMap = useMemo(() => {
     const map = new Map<string, { domain: string; client: string; typeLabel: string }>()
-    fleetUnits.forEach((unit) => {
+    reportFleetUnits.forEach((unit) => {
       map.set(unit.id, {
         domain: unit.internalCode,
         client: unit.ownerCompany,
@@ -371,7 +388,7 @@ export const ReportsPage = () => {
       })
     })
     return map
-  }, [fleetUnits])
+  }, [reportFleetUnits])
 
   const workOrderMap = useMemo(() => new Map(workOrders.map((order) => [order.id, order])), [workOrders])
   const externalRequestMap = useMemo(
@@ -405,7 +422,7 @@ export const ReportsPage = () => {
     const normalizeClient = (value: string) => value.replace(/\s+/g, ' ').trim().toUpperCase()
     const map = new Map<string, { label: string; count: number; unitCodes: string[] }>()
 
-    fleetUnits.forEach((unit) => {
+    reportFleetUnits.forEach((unit) => {
       const rawClient = unit.clientName?.trim() || 'Sin asignar'
       const normalized = normalizeClient(rawClient)
       const key = normalized || 'SIN ASIGNAR'
@@ -475,24 +492,24 @@ export const ReportsPage = () => {
       createOccupancySection(
         'pickup',
         'CAMIONETAS - PICKUP',
-        fleetUnits.filter((unit) => unit.unitType === 'PICKUP'),
+        reportFleetUnits.filter((unit) => unit.unitType === 'PICKUP'),
       ),
       createOccupancySection(
         'chassis',
         'CAMIONES - CHASIS',
-        fleetUnits.filter((unit) => unit.unitType === 'CHASSIS' || unit.unitType === 'CHASSIS_WITH_HYDROCRANE'),
+        reportFleetUnits.filter((unit) => unit.unitType === 'CHASSIS' || unit.unitType === 'CHASSIS_WITH_HYDROCRANE'),
         true,
       ),
       createOccupancySection(
         'tractors',
         'CAMIONES - TRACTORES',
-        fleetUnits.filter((unit) => unit.unitType === 'TRACTOR' || unit.unitType === 'TRACTOR_WITH_HYDROCRANE'),
+        reportFleetUnits.filter((unit) => unit.unitType === 'TRACTOR' || unit.unitType === 'TRACTOR_WITH_HYDROCRANE'),
         true,
       ),
       createOccupancySection(
         'semi-trailers',
         'SEMIRREMOLQUES',
-        fleetUnits.filter((unit) => unit.unitType === 'SEMI_TRAILER'),
+        reportFleetUnits.filter((unit) => unit.unitType === 'SEMI_TRAILER'),
       ),
     ].filter(Boolean) as OccupancyPdfSection[]
 
@@ -505,7 +522,7 @@ export const ReportsPage = () => {
       'SEMI_TRAILER',
     ])
 
-    const remainingTypes = Array.from(new Set(fleetUnits.map((unit) => unit.unitType))).filter(
+    const remainingTypes = Array.from(new Set<FleetUnit['unitType']>(reportFleetUnits.map((unit) => unit.unitType))).filter(
       (unitType) => !coveredTypes.has(unitType),
     )
 
@@ -514,7 +531,7 @@ export const ReportsPage = () => {
       const section = createOccupancySection(
         unitType.toLowerCase(),
         title,
-        fleetUnits.filter((unit) => unit.unitType === unitType),
+        reportFleetUnits.filter((unit) => unit.unitType === unitType),
       )
       if (section) {
         sections.push(section)
@@ -522,7 +539,7 @@ export const ReportsPage = () => {
     })
 
     return sections
-  }, [fleetUnits])
+  }, [reportFleetUnits])
 
   const taskMetrics = useMemo(() => {
     const operational = filteredTasks.filter((task) => !task.isInTaskBank)
