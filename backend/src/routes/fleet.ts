@@ -4,6 +4,27 @@ import { getActiveDbSchema, prisma, runWithSchemaFailover } from '../db.js'
 
 const router = Router()
 
+const formatFleetDeleteBlockersMessage = (blockers: Record<string, number>): string => {
+  const labelMap: Record<string, string> = {
+    maintenancePlans: 'planes de mantenimiento',
+    audits: 'inspecciones',
+    workOrders: 'ordenes de trabajo',
+    repairs: 'reparaciones',
+    externalRequests: 'notas de pedido',
+    movements: 'movimientos/remitos',
+    deliveries: 'entregas/devoluciones',
+    linkedTractors: 'tractores vinculados a ese semirremolque',
+  }
+
+  const parts = Object.entries(blockers)
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => `${count} ${labelMap[key] ?? key}`)
+
+  return parts.length > 0
+    ? `No se puede eliminar la unidad porque tiene ${parts.join(', ')} asociadas.`
+    : 'No se puede eliminar la unidad porque tiene registros asociados.'
+}
+
 const isMissingOrExpired = (expiresAt?: string): boolean => {
   if (!expiresAt) {
     return true
@@ -624,8 +645,59 @@ router.patch('/:id', async (req, res) => {
 })
 
 router.delete('/:id', async (req, res) => {
-  await prisma.fleetUnit.delete({ where: { id: req.params.id } })
-  return res.status(204).send()
+  try {
+    const unitId = req.params.id
+    const existing = await prisma.fleetUnit.findUnique({ where: { id: unitId }, select: { id: true } })
+
+    if (!existing) {
+      return res.status(404).json({ message: 'Unidad no encontrada.' })
+    }
+
+    const [
+      maintenancePlans,
+      audits,
+      workOrders,
+      repairs,
+      externalRequests,
+      movements,
+      deliveries,
+      linkedTractors,
+    ] = await prisma.$transaction([
+      prisma.maintenancePlan.count({ where: { unitId } }),
+      prisma.auditRecord.count({ where: { unitId } }),
+      prisma.workOrder.count({ where: { unitId } }),
+      prisma.repairRecord.count({ where: { unitId } }),
+      prisma.externalRequest.count({ where: { unitId } }),
+      prisma.fleetMovementUnit.count({ where: { unitId } }),
+      prisma.deliveryOperation.count({ where: { unitId } }),
+      prisma.fleetUnit.count({ where: { semiTrailerUnitId: unitId } }),
+    ])
+
+    const blockers = {
+      maintenancePlans,
+      audits,
+      workOrders,
+      repairs,
+      externalRequests,
+      movements,
+      deliveries,
+      linkedTractors,
+    }
+
+    const hasBlockers = Object.values(blockers).some((count) => count > 0)
+    if (hasBlockers) {
+      return res.status(409).json({
+        message: formatFleetDeleteBlockersMessage(blockers),
+        blockers,
+      })
+    }
+
+    await prisma.fleetUnit.delete({ where: { id: unitId } })
+    return res.status(204).send()
+  } catch (error) {
+    console.error('Fleet DELETE error:', error)
+    return res.status(500).json({ message: 'No se pudo eliminar la unidad.' })
+  }
 })
 
 export default router

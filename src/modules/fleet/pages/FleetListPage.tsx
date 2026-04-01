@@ -8,7 +8,7 @@ import { usePermissions } from '../../../core/auth/usePermissions'
 import { FleetUnitCard } from '../components/FleetUnitCard'
 import { createEmptyFleetFormData, getOperationalStatusLabel, normalizeFleetUnits, toFleetUnit } from '../services/fleetService'
 import type { FleetUnit } from '../../../types/domain'
-import { apiRequest } from '../../../services/api/apiClient'
+import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
 
@@ -26,6 +26,27 @@ interface WindowWithBarcodeDetector extends Window {
 
 const qrFormats = ['qr_code']
 const UNASSIGNED_CLIENT_FILTER = '__UNASSIGNED__'
+
+const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof ApiRequestError) {
+    try {
+      const parsed = JSON.parse(error.responseBody) as { message?: string }
+      if (typeof parsed?.message === 'string' && parsed.message.trim()) {
+        return parsed.message
+      }
+    } catch {
+      if (typeof error.responseBody === 'string' && error.responseBody.trim()) {
+        return error.responseBody
+      }
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return fallback
+}
 
 const parseStatusFilter = (
   raw: string | null,
@@ -379,13 +400,13 @@ export const FleetListPage = () => {
       const nextUnitList = normalizedUnits.filter((unit) => unit.id !== targetUnit.id)
       setFleetUnits(nextUnitList)
       setUnitPendingDelete(null)
-    } catch {
+    } catch (error) {
       setUnitPendingDelete(null)
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setAppError(`No se pudo encolar la eliminacion de ${targetUnit.internalCode}.`)
         return
       }
-      setAppError(`No se pudo eliminar la unidad ${targetUnit.internalCode} en servidor.`)
+      setAppError(getApiErrorMessage(error, `No se pudo eliminar la unidad ${targetUnit.internalCode} en servidor.`))
     }
   }
 
