@@ -5,8 +5,17 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
-import { getFleetUnitTypeLabel, normalizeFleetUnits } from '../../fleet/services/fleetService'
-import type { ExternalRequest, FleetUnit, RepairRecord, TaskRecord, WorkOrder } from '../../../types/domain'
+import { getFleetUnitTypeLabel, getOperationalStatusLabel, normalizeFleetUnits } from '../../fleet/services/fleetService'
+import {
+  fleetOperationalStatuses,
+  fleetUnitTypes,
+  type ExternalRequest,
+  type FleetOperationalStatus,
+  type FleetUnit,
+  type RepairRecord,
+  type TaskRecord,
+  type WorkOrder,
+} from '../../../types/domain'
 
 type ProviderMetrics = {
   providerName: string
@@ -34,17 +43,14 @@ type OccupancyPdfSegment = {
   color: string
 }
 
-type OccupancyPdfSection = {
-  key: string
-  title: string
-  totalUnits: number
-  hydroCount: number | null
-  rows: Array<{
-    label: string
-    count: number
-    share: number
-  }>
-  segments: OccupancyPdfSegment[]
+type OccupancyDimension = 'CLIENT' | 'TYPE' | 'STATUS' | 'OWNER' | 'LOCATION'
+
+type OccupancyPivotRow = {
+  label: string
+  total: number
+  share: number
+  breakdownCounts: Record<string, number>
+  unitCodes: string[]
 }
 
 const formatDateTime = (value?: string) => {
@@ -205,12 +211,6 @@ const percentage = (part: number, total: number) => (total > 0 ? (part / total) 
 
 const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
 
-const drawWrappedText = (doc: jsPDF, text: string, x: number, y: number, maxWidth: number, lineHeight = 12) => {
-  const lines = doc.splitTextToSize(text, maxWidth)
-  doc.text(lines, x, y)
-  return lines.length * lineHeight
-}
-
 const buildOccupancyPieChart = (segments: OccupancyPdfSegment[]) => {
   const canvas = document.createElement('canvas')
   canvas.width = 360
@@ -270,55 +270,33 @@ const buildOccupancyPieChart = (segments: OccupancyPdfSegment[]) => {
   return canvas.toDataURL('image/png')
 }
 
-const normalizeOccupancyClientLabel = (value: string) => {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (!normalized) {
-    return 'Sin asignar'
-  }
-  return normalized.toUpperCase()
+const occupancyDimensionLabelMap: Record<OccupancyDimension, string> = {
+  CLIENT: 'Cliente',
+  TYPE: 'Tipo de vehículo',
+  STATUS: 'Estado operativo',
+  OWNER: 'Empresa propietaria',
+  LOCATION: 'Ubicación',
 }
 
-const createOccupancySection = (
-  key: string,
-  title: string,
-  units: FleetUnit[],
-  includeHydroCount = false,
-): OccupancyPdfSection | null => {
-  if (!units.length) {
-    return null
-  }
+const normalizeOccupancyValue = (value: string, emptyLabel: string) => {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized || emptyLabel
+}
 
-  const clientMap = new Map<string, { label: string; count: number }>()
-  units.forEach((unit) => {
-    const label = normalizeOccupancyClientLabel(unit.clientName ?? '')
-    const current = clientMap.get(label) ?? { label, count: 0 }
-    current.count += 1
-    clientMap.set(label, current)
-  })
-
-  const totalUnits = units.length
-  const rows = Array.from(clientMap.values())
-    .map((entry) => ({
-      label: entry.label,
-      count: entry.count,
-      share: percentage(entry.count, totalUnits),
-    }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-
-  const segments = rows.map((entry, index) => ({
-    label: entry.label,
-    value: entry.count,
-    share: entry.share,
-    color: palette[index % palette.length],
-  }))
-
-  return {
-    key,
-    title,
-    totalUnits,
-    hydroCount: includeHydroCount ? units.filter((unit) => unit.hasHydroCrane).length : null,
-    rows,
-    segments,
+const getOccupancyDimensionValue = (unit: FleetUnit, dimension: OccupancyDimension) => {
+  switch (dimension) {
+    case 'CLIENT':
+      return normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar')
+    case 'TYPE':
+      return getFleetUnitTypeLabel(unit.unitType)
+    case 'STATUS':
+      return getOperationalStatusLabel(unit.operationalStatus)
+    case 'OWNER':
+      return normalizeOccupancyValue(unit.ownerCompany ?? '', 'Sin empresa')
+    case 'LOCATION':
+      return normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación')
+    default:
+      return 'Sin dato'
   }
 }
 
@@ -334,8 +312,13 @@ export const ReportsPage = () => {
   const [isTasksLoading, setIsTasksLoading] = useState(true)
   const [leftProvider, setLeftProvider] = useState('')
   const [rightProvider, setRightProvider] = useState('')
-  const [showAllClients, setShowAllClients] = useState(false)
-  const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({})
+  const [occupancyGroupBy, setOccupancyGroupBy] = useState<OccupancyDimension>('CLIENT')
+  const [occupancyBreakdownBy, setOccupancyBreakdownBy] = useState<OccupancyDimension>('TYPE')
+  const [occupancyClientFilter, setOccupancyClientFilter] = useState('ALL')
+  const [occupancyTypeFilter, setOccupancyTypeFilter] = useState<'ALL' | FleetUnit['unitType']>('ALL')
+  const [occupancyStatusFilter, setOccupancyStatusFilter] = useState<'ALL' | FleetOperationalStatus>('ALL')
+  const [showAllOccupancyRows, setShowAllOccupancyRows] = useState(false)
+  const [activeOccupancyRowLabel, setActiveOccupancyRowLabel] = useState<string | null>(null)
 
   const reportFleetUnits = useMemo<FleetUnit[]>(() => {
     const normalized = normalizeFleetUnits(fleetUnits)
@@ -418,128 +401,144 @@ export const ReportsPage = () => {
 
   const rangeLabel = startDate || endDate ? `Periodo: ${startDate || 'Inicio'} -> ${endDate || 'Hoy'}` : 'Periodo completo'
 
-  const occupancyByClient = useMemo(() => {
-    const normalizeClient = (value: string) => value.replace(/\s+/g, ' ').trim().toUpperCase()
-    const map = new Map<string, { label: string; count: number; unitCodes: string[] }>()
+  const occupancyClientOptions = useMemo(
+    () =>
+      Array.from(new Set(reportFleetUnits.map((unit) => getOccupancyDimensionValue(unit, 'CLIENT')))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [reportFleetUnits],
+  )
 
-    reportFleetUnits.forEach((unit) => {
-      const rawClient = unit.clientName?.trim() || 'Sin asignar'
-      const normalized = normalizeClient(rawClient)
-      const key = normalized || 'SIN ASIGNAR'
-      const current = map.get(key) ?? {
-        label: key === 'SIN ASIGNAR' ? 'Sin asignar' : normalized,
-        count: 0,
-        unitCodes: [],
+  const availableBreakdownDimensions = useMemo(
+    () =>
+      (Object.keys(occupancyDimensionLabelMap) as OccupancyDimension[]).filter((dimension) => dimension !== occupancyGroupBy),
+    [occupancyGroupBy],
+  )
+
+  const effectiveOccupancyBreakdownBy = availableBreakdownDimensions.includes(occupancyBreakdownBy)
+    ? occupancyBreakdownBy
+    : availableBreakdownDimensions[0]
+
+  useEffect(() => {
+    if (occupancyBreakdownBy !== effectiveOccupancyBreakdownBy) {
+      setOccupancyBreakdownBy(effectiveOccupancyBreakdownBy)
+    }
+  }, [effectiveOccupancyBreakdownBy, occupancyBreakdownBy])
+
+  const filteredOccupancyUnits = useMemo(
+    () =>
+      reportFleetUnits.filter((unit) => {
+        if (occupancyClientFilter !== 'ALL' && getOccupancyDimensionValue(unit, 'CLIENT') !== occupancyClientFilter) {
+          return false
+        }
+        if (occupancyTypeFilter !== 'ALL' && unit.unitType !== occupancyTypeFilter) {
+          return false
+        }
+        if (occupancyStatusFilter !== 'ALL' && unit.operationalStatus !== occupancyStatusFilter) {
+          return false
+        }
+        return true
+      }),
+    [reportFleetUnits, occupancyClientFilter, occupancyStatusFilter, occupancyTypeFilter],
+  )
+
+  const occupancyPivot = useMemo(() => {
+    const rowMap = new Map<
+      string,
+      {
+        label: string
+        total: number
+        unitCodes: Set<string>
+        breakdownCounts: Map<string, number>
       }
-      current.count += 1
-      current.unitCodes.push(unit.internalCode)
-      map.set(key, current)
+    >()
+    const breakdownTotals = new Map<string, number>()
+
+    filteredOccupancyUnits.forEach((unit) => {
+      const rowLabel = getOccupancyDimensionValue(unit, occupancyGroupBy)
+      const breakdownLabel = getOccupancyDimensionValue(unit, effectiveOccupancyBreakdownBy)
+      const currentRow = rowMap.get(rowLabel) ?? {
+        label: rowLabel,
+        total: 0,
+        unitCodes: new Set<string>(),
+        breakdownCounts: new Map<string, number>(),
+      }
+
+      currentRow.total += 1
+      currentRow.unitCodes.add(unit.internalCode)
+      currentRow.breakdownCounts.set(breakdownLabel, (currentRow.breakdownCounts.get(breakdownLabel) ?? 0) + 1)
+      rowMap.set(rowLabel, currentRow)
+      breakdownTotals.set(breakdownLabel, (breakdownTotals.get(breakdownLabel) ?? 0) + 1)
     })
 
-    const detail = Array.from(map.values())
-      .map((entry) => ({
-        ...entry,
-        unitCodes: Array.from(new Set(entry.unitCodes)).sort((a, b) => a.localeCompare(b)),
+    const totalUnits = filteredOccupancyUnits.length
+    const breakdownLabels = Array.from(breakdownTotals.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([label]) => label)
+
+    const rows: OccupancyPivotRow[] = Array.from(rowMap.values())
+      .map((row) => ({
+        label: row.label,
+        total: row.total,
+        share: percentage(row.total, totalUnits),
+        unitCodes: Array.from(row.unitCodes).sort((a, b) => a.localeCompare(b)),
+        breakdownCounts: breakdownLabels.reduce<Record<string, number>>((accumulator, label) => {
+          accumulator[label] = row.breakdownCounts.get(label) ?? 0
+          return accumulator
+        }, {}),
       }))
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label))
 
     const topLimit = 8
-    const top = detail.slice(0, topLimit)
-    const remainder = detail.slice(topLimit)
-    const remainderCount = remainder.reduce((accumulator, item) => accumulator + item.count, 0)
-    const totalUnits = detail.reduce((accumulator, item) => accumulator + item.count, 0)
+    const topRows = rows.slice(0, topLimit)
+    const remainderRows = rows.slice(topLimit)
+    const remainderCount = remainderRows.reduce((accumulator, row) => accumulator + row.total, 0)
 
-    const segments = top.map((entry, index) => ({
-      label: entry.label,
-      value: entry.count,
+    const segments = topRows.map((row, index) => ({
+      label: row.label,
+      value: row.total,
+      share: row.share,
       color: palette[index % palette.length],
     }))
 
     if (remainderCount > 0) {
       segments.push({
-        label: `Otros (${remainder.length})`,
+        label: `Otros (${remainderRows.length})`,
         value: remainderCount,
+        share: percentage(remainderCount, totalUnits),
         color: '#64748b',
       })
     }
 
-    const segmentsWithShare = segments.map((segment) => ({
-      ...segment,
-      share: percentage(segment.value, totalUnits),
-    }))
-
-    const detailWithShare = detail.map((entry) => ({
-      ...entry,
-      share: percentage(entry.count, totalUnits),
-    }))
-
     return {
-      segments: segmentsWithShare,
-      detail: detailWithShare,
+      rows,
+      breakdownLabels,
       totalUnits,
-      totalClients: detail.length,
-      unassignedUnits: detail.find((item) => item.label === 'Sin asignar')?.count ?? 0,
+      totalGroups: rows.length,
+      segments,
+      unassignedUnits: filteredOccupancyUnits.filter((unit) => !unit.clientName.trim()).length,
     }
-  }, [fleetUnits])
+  }, [filteredOccupancyUnits, occupancyGroupBy, effectiveOccupancyBreakdownBy])
 
-  const visibleClientRows = useMemo(
-    () => (showAllClients ? occupancyByClient.detail : occupancyByClient.detail.slice(0, 10)),
-    [occupancyByClient.detail, showAllClients],
+  const visibleOccupancyRows = useMemo(
+    () => (showAllOccupancyRows ? occupancyPivot.rows : occupancyPivot.rows.slice(0, 8)),
+    [occupancyPivot.rows, showAllOccupancyRows],
   )
 
-  const occupancyPdfSections = useMemo(() => {
-    const sections = [
-      createOccupancySection(
-        'pickup',
-        'CAMIONETAS - PICKUP',
-        reportFleetUnits.filter((unit) => unit.unitType === 'PICKUP'),
-      ),
-      createOccupancySection(
-        'chassis',
-        'CAMIONES - CHASIS',
-        reportFleetUnits.filter((unit) => unit.unitType === 'CHASSIS' || unit.unitType === 'CHASSIS_WITH_HYDROCRANE'),
-        true,
-      ),
-      createOccupancySection(
-        'tractors',
-        'CAMIONES - TRACTORES',
-        reportFleetUnits.filter((unit) => unit.unitType === 'TRACTOR' || unit.unitType === 'TRACTOR_WITH_HYDROCRANE'),
-        true,
-      ),
-      createOccupancySection(
-        'semi-trailers',
-        'SEMIRREMOLQUES',
-        reportFleetUnits.filter((unit) => unit.unitType === 'SEMI_TRAILER'),
-      ),
-    ].filter(Boolean) as OccupancyPdfSection[]
+  useEffect(() => {
+    if (!activeOccupancyRowLabel) {
+      return
+    }
+    const stillExists = occupancyPivot.rows.some((row) => row.label === activeOccupancyRowLabel)
+    if (!stillExists) {
+      setActiveOccupancyRowLabel(null)
+    }
+  }, [activeOccupancyRowLabel, occupancyPivot.rows])
 
-    const coveredTypes = new Set<FleetUnit['unitType']>([
-      'PICKUP',
-      'CHASSIS',
-      'CHASSIS_WITH_HYDROCRANE',
-      'TRACTOR',
-      'TRACTOR_WITH_HYDROCRANE',
-      'SEMI_TRAILER',
-    ])
-
-    const remainingTypes = Array.from(new Set<FleetUnit['unitType']>(reportFleetUnits.map((unit) => unit.unitType))).filter(
-      (unitType) => !coveredTypes.has(unitType),
-    )
-
-    remainingTypes.forEach((unitType) => {
-      const title = getFleetUnitTypeLabel(unitType).toUpperCase()
-      const section = createOccupancySection(
-        unitType.toLowerCase(),
-        title,
-        reportFleetUnits.filter((unit) => unit.unitType === unitType),
-      )
-      if (section) {
-        sections.push(section)
-      }
-    })
-
-    return sections
-  }, [reportFleetUnits])
+  const activeOccupancyRow = useMemo(
+    () => occupancyPivot.rows.find((row) => row.label === activeOccupancyRowLabel) ?? null,
+    [activeOccupancyRowLabel, occupancyPivot.rows],
+  )
 
   const taskMetrics = useMemo(() => {
     const operational = filteredTasks.filter((task) => !task.isInTaskBank)
@@ -869,23 +868,14 @@ export const ReportsPage = () => {
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
     const margin = 32
-    const blockGap = 18
     let cursorY = 36
-
-    const ensureSpace = (neededHeight: number) => {
-      if (cursorY + neededHeight <= pageHeight - 36) {
-        return
-      }
-      doc.addPage()
-      cursorY = 36
-    }
 
     doc.setFillColor('#000000')
     doc.rect(margin, cursorY, pageWidth - margin * 2, 26, 'F')
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(15)
     doc.setTextColor('#facc15')
-    doc.text('REPORTE DE OCUPACION DE FLOTA', pageWidth / 2, cursorY + 17, { align: 'center' })
+    doc.text('REPORTE DINAMICO DE FLOTA', pageWidth / 2, cursorY + 17, { align: 'center' })
     cursorY += 40
 
     doc.setTextColor('#475569')
@@ -893,85 +883,72 @@ export const ReportsPage = () => {
     doc.setFontSize(10)
     doc.text(`Emitido: ${new Date().toLocaleString('es-AR')}`, margin, cursorY)
     cursorY += 14
-    doc.text(`Total de unidades: ${occupancyByClient.totalUnits} | Clientes: ${occupancyByClient.totalClients}`, margin, cursorY)
-    cursorY += 20
+    doc.text(
+      `Agrupar por: ${occupancyDimensionLabelMap[occupancyGroupBy]} | Desglosar por: ${occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy]}`,
+      margin,
+      cursorY,
+    )
+    cursorY += 14
+    doc.text(
+      `Filtros -> Cliente: ${occupancyClientFilter === 'ALL' ? 'Todos' : occupancyClientFilter} | Tipo: ${
+        occupancyTypeFilter === 'ALL' ? 'Todos' : getFleetUnitTypeLabel(occupancyTypeFilter)
+      } | Estado: ${occupancyStatusFilter === 'ALL' ? 'Todos' : getOperationalStatusLabel(occupancyStatusFilter)}`,
+      margin,
+      cursorY,
+    )
+    cursorY += 14
+    doc.text(`Total de unidades: ${occupancyPivot.totalUnits} | Grupos: ${occupancyPivot.totalGroups}`, margin, cursorY)
+    cursorY += 22
 
-    occupancyPdfSections.forEach((section) => {
-      const chartImage = buildOccupancyPieChart(section.segments)
-      const tableX = margin
-      const tableWidth = 290
-      const chartX = tableX + tableWidth + 16
-      const chartSize = 180
-      const headerHeight = 22
-      const rowHeight = 18
-      const tableBodyRows = Math.max(section.rows.length, 1)
-      const tableHeight = headerHeight + rowHeight * (tableBodyRows + 2)
-      const blockHeight = Math.max(tableHeight, chartSize) + 42
+    const chartImage = buildOccupancyPieChart(occupancyPivot.segments)
+    if (chartImage) {
+      doc.setDrawColor('#cbd5e1')
+      doc.setFillColor('#ffffff')
+      doc.roundedRect(margin, cursorY, 220, 220, 8, 8, 'FD')
+      doc.addImage(chartImage, 'PNG', margin + 10, cursorY + 10, 200, 200)
+    }
 
-      ensureSpace(blockHeight)
+    const tableStartX = margin + 240
+    let tableY = cursorY
+    const visibleColumns = occupancyPivot.breakdownLabels.slice(0, 4)
+    const headers = [occupancyDimensionLabelMap[occupancyGroupBy], ...visibleColumns, 'Total']
+    const colWidths = [120, ...visibleColumns.map(() => 50), 46]
+    const rowHeight = 18
 
-      doc.setFillColor('#000000')
-      doc.rect(margin, cursorY, pageWidth - margin * 2, 24, 'F')
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(13)
-      doc.setTextColor('#facc15')
-      doc.text(section.title, pageWidth / 2, cursorY + 16, { align: 'center' })
-      cursorY += 34
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor('#ffffff')
+    doc.setFillColor('#0f172a')
+    let currentX = tableStartX
+    headers.forEach((header, index) => {
+      const width = colWidths[index] ?? 50
+      doc.rect(currentX, tableY, width, rowHeight, 'F')
+      doc.text(header, currentX + 4, tableY + 12)
+      currentX += width
+    })
+    tableY += rowHeight
 
-      if (section.hydroCount !== null) {
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(9)
-        doc.setTextColor('#166534')
-        doc.text(`CON HIDROGRUA: ${section.hydroCount}`, tableX, cursorY)
-        cursorY += 14
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor('#111827')
+    occupancyPivot.rows.slice(0, 10).forEach((row) => {
+      if (tableY > pageHeight - 40) {
+        doc.addPage()
+        tableY = 40
       }
-
-      const tableTop = cursorY
-      doc.setDrawColor('#1f2937')
-      doc.setFillColor('#000000')
-      doc.rect(tableX, tableTop, tableWidth, headerHeight, 'FD')
-      doc.setTextColor('#22c55e')
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(8)
-      doc.text('Etiquetas de fila', tableX + 8, tableTop + 14)
-      doc.text('Cantidad', tableX + 170, tableTop + 14)
-      doc.text('Porcentaje', tableX + 230, tableTop + 14)
-
-      let rowY = tableTop + headerHeight
-      doc.setTextColor('#111827')
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
-
-      section.rows.forEach((row) => {
-        doc.setFillColor('#ffffff')
-        doc.rect(tableX, rowY, tableWidth, rowHeight, 'FD')
-        doc.text(row.label, tableX + 8, rowY + 12)
-        doc.text(String(row.count), tableX + 185, rowY + 12, { align: 'right' })
-        doc.text(`${row.share.toFixed(1)}%`, tableX + 280, rowY + 12, { align: 'right' })
-        rowY += rowHeight
-      })
-
-      doc.setFillColor('#22c55e')
-      doc.rect(tableX, rowY, tableWidth, rowHeight, 'FD')
-      doc.setTextColor('#ffffff')
-      doc.setFont('helvetica', 'bold')
-      doc.text('Total general', tableX + 8, rowY + 12)
-      doc.text(String(section.totalUnits), tableX + 185, rowY + 12, { align: 'right' })
-      doc.text('100%', tableX + 280, rowY + 12, { align: 'right' })
-
-      if (chartImage) {
+      currentX = tableStartX
+      const cells = [
+        row.label,
+        ...visibleColumns.map((label) => String(row.breakdownCounts[label] ?? 0)),
+        String(row.total),
+      ]
+      cells.forEach((cell, index) => {
+        const width = colWidths[index] ?? 50
         doc.setDrawColor('#cbd5e1')
-        doc.setFillColor('#ffffff')
-        doc.roundedRect(chartX, tableTop, chartSize, chartSize, 8, 8, 'FD')
-        doc.addImage(chartImage, 'PNG', chartX + 8, tableTop + 8, chartSize - 16, chartSize - 16)
-      } else {
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(9)
-        doc.setTextColor('#64748b')
-        drawWrappedText(doc, 'No se pudo generar el grafico.', chartX + 12, tableTop + 20, chartSize - 24)
-      }
-
-      cursorY = Math.max(rowY + rowHeight, tableTop + chartSize) + blockGap
+        doc.rect(currentX, tableY, width, rowHeight)
+        doc.text(cell, currentX + 4, tableY + 12)
+        currentX += width
+      })
+      tableY += rowHeight
     })
 
     doc.save('ocupacion-flota-por-cliente.pdf')
@@ -991,8 +968,8 @@ export const ReportsPage = () => {
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Ocupacion por cliente</h3>
-              <p className="text-xs text-slate-500">Distribucion de unidades activas (top 8 + otros)</p>
+              <h3 className="text-lg font-semibold text-slate-900">Reporte dinámico de flota</h3>
+              <p className="text-xs text-slate-500">Elegí criterios y armá una vista tipo tabla dinámica sobre la flota activa.</p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <button
@@ -1003,12 +980,88 @@ export const ReportsPage = () => {
                 Descargar PDF
               </button>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700">
-                Clientes: {occupancyByClient.totalClients}
+                Grupos: {occupancyPivot.totalGroups}
               </span>
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
-                Sin asignar: {occupancyByClient.unassignedUnits}
+                Sin asignar: {occupancyPivot.unassignedUnits}
               </span>
             </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Agrupar por
+              <select
+                value={occupancyGroupBy}
+                onChange={(event) => setOccupancyGroupBy(event.target.value as OccupancyDimension)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              >
+                {(Object.keys(occupancyDimensionLabelMap) as OccupancyDimension[]).map((dimension) => (
+                  <option key={dimension} value={dimension}>
+                    {occupancyDimensionLabelMap[dimension]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Desglosar por
+              <select
+                value={effectiveOccupancyBreakdownBy}
+                onChange={(event) => setOccupancyBreakdownBy(event.target.value as OccupancyDimension)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              >
+                {availableBreakdownDimensions.map((dimension) => (
+                  <option key={dimension} value={dimension}>
+                    {occupancyDimensionLabelMap[dimension]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Cliente
+              <select
+                value={occupancyClientFilter}
+                onChange={(event) => setOccupancyClientFilter(event.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              >
+                <option value="ALL">Todos</option>
+                {occupancyClientOptions.map((client) => (
+                  <option key={client} value={client}>
+                    {client}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Tipo
+              <select
+                value={occupancyTypeFilter}
+                onChange={(event) => setOccupancyTypeFilter(event.target.value as 'ALL' | FleetUnit['unitType'])}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              >
+                <option value="ALL">Todos</option>
+                {fleetUnitTypes.map((unitType) => (
+                  <option key={unitType} value={unitType}>
+                    {getFleetUnitTypeLabel(unitType)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Estado
+              <select
+                value={occupancyStatusFilter}
+                onChange={(event) => setOccupancyStatusFilter(event.target.value as 'ALL' | FleetOperationalStatus)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              >
+                <option value="ALL">Todos</option>
+                {fleetOperationalStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {getOperationalStatusLabel(status)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div className="mt-4 grid gap-5 lg:grid-cols-[220px_1fr]">
@@ -1016,9 +1069,9 @@ export const ReportsPage = () => {
               <svg width={200} height={200} viewBox="0 0 200 200">
                 <g transform="translate(100,100)">
                   <circle r={70} fill="transparent" stroke="#e2e8f0" strokeWidth={18} />
-                  {occupancyByClient.segments.reduce<{ dashOffset: number; elements: ReactNode[] }>(
+                  {occupancyPivot.segments.reduce<{ dashOffset: number; elements: ReactNode[] }>(
                     (acc, segment, index) => {
-                      const total = occupancyByClient.segments.reduce((sum, item) => sum + item.value, 0) || 1
+                      const total = occupancyPivot.segments.reduce((sum, item) => sum + item.value, 0) || 1
                       const circumference = 2 * Math.PI * 70
                       const length = (segment.value / total) * circumference
                       const dashArray = `${length} ${circumference - length}`
@@ -1042,11 +1095,11 @@ export const ReportsPage = () => {
               </svg>
               <div className="pointer-events-none absolute text-center">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Unidades</p>
-                <p className="text-2xl font-bold text-slate-900">{occupancyByClient.totalUnits}</p>
+                <p className="text-2xl font-bold text-slate-900">{occupancyPivot.totalUnits}</p>
               </div>
             </div>
             <div className="space-y-2">
-              {occupancyByClient.segments.map((segment) => (
+              {occupancyPivot.segments.map((segment) => (
                 <div key={segment.label} className="rounded-lg border border-slate-200 px-3 py-2">
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <div className="flex items-center gap-2 font-semibold text-slate-800">
@@ -1056,65 +1109,190 @@ export const ReportsPage = () => {
                     <span className="text-xs font-semibold text-slate-600">{segment.value} ({segment.share.toFixed(1)}%)</span>
                   </div>
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                    <div className="h-full rounded-full" style={{ width: `${Math.max(4, Math.min(100, segment.share))}%`, backgroundColor: segment.color }} />
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.max(4, Math.min(100, segment.share))}%`, backgroundColor: segment.color }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
           </div>
+
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900">Gráfico interactivo por grupo</h4>
+                <p className="text-xs text-slate-500">
+                  Tocá una barra para inspeccionar cómo se compone cada {occupancyDimensionLabelMap[occupancyGroupBy].toLowerCase()}.
+                </p>
+              </div>
+              {activeOccupancyRow ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveOccupancyRowLabel(null)}
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Limpiar selección
+                </button>
+              ) : null}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {visibleOccupancyRows.map((row) => {
+                const isActive = row.label === activeOccupancyRowLabel
+                return (
+                  <button
+                    key={`chart-${row.label}`}
+                    type="button"
+                    onClick={() => setActiveOccupancyRowLabel((current) => (current === row.label ? null : row.label))}
+                    className={[
+                      'w-full rounded-xl border px-3 py-3 text-left transition',
+                      isActive ? 'border-amber-300 bg-amber-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{row.label}</p>
+                        <p className="text-[11px] text-slate-500">
+                          {row.total} unidades · {row.share.toFixed(1)}%
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                        {row.total}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex h-4 w-full overflow-hidden rounded-full bg-slate-200">
+                      {occupancyPivot.breakdownLabels.map((label, index) => {
+                        const value = row.breakdownCounts[label] ?? 0
+                        if (value <= 0) {
+                          return null
+                        }
+                        const width = (value / row.total) * 100
+                        return (
+                          <div
+                            key={`${row.label}-${label}`}
+                            title={`${label}: ${value} unidad(es)`}
+                            className="h-full"
+                            style={{
+                              width: `${width}%`,
+                              backgroundColor: palette[index % palette.length],
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
+            {activeOccupancyRow ? (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h5 className="text-sm font-bold text-slate-900">{activeOccupancyRow.label}</h5>
+                    <p className="text-xs text-slate-500">
+                      Desglose por {occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy].toLowerCase()}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
+                    {activeOccupancyRow.total} unidades
+                  </span>
+                </div>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {occupancyPivot.breakdownLabels.map((label, index) => {
+                    const value = activeOccupancyRow.breakdownCounts[label] ?? 0
+                    const share = activeOccupancyRow.total > 0 ? (value / activeOccupancyRow.total) * 100 : 0
+                    return (
+                      <div key={`detail-${label}`} className="rounded-lg border border-slate-200 p-3">
+                        <div className="flex items-center justify-between gap-2 text-sm">
+                          <div className="flex items-center gap-2 font-semibold text-slate-800">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: palette[index % palette.length] }} />
+                            {label}
+                          </div>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {value} ({share.toFixed(1)}%)
+                          </span>
+                        </div>
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(value > 0 ? 6 : 0, Math.min(100, share))}%`,
+                              backgroundColor: palette[index % palette.length],
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </article>
 
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-lg font-semibold text-slate-900">Unidades por cliente</h3>
-            {occupancyByClient.detail.length > 10 ? (
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Tabla dinámica</h3>
+              <p className="text-xs text-slate-500">
+                Filas: {occupancyDimensionLabelMap[occupancyGroupBy]} · Columnas: {occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy]}
+              </p>
+            </div>
+            {occupancyPivot.rows.length > 8 ? (
               <button
                 type="button"
-                onClick={() => setShowAllClients((previous) => !previous)}
+                onClick={() => setShowAllOccupancyRows((previous) => !previous)}
                 className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
               >
-                {showAllClients ? 'Ver menos' : 'Ver todos'}
+                {showAllOccupancyRows ? 'Ver menos' : 'Ver todos'}
               </button>
             ) : null}
           </div>
-          <div className="mt-4 space-y-3">
-            {visibleClientRows.length === 0 ? (
-              <p className="text-sm text-slate-500">No hay unidades activas.</p>
+          <div className="mt-4 overflow-x-auto">
+            {visibleOccupancyRows.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay unidades que coincidan con los criterios elegidos.</p>
             ) : (
-              visibleClientRows.map((entry) => {
-                const isExpanded = Boolean(expandedClients[entry.label])
-                const visibleCodes = isExpanded ? entry.unitCodes : entry.unitCodes.slice(0, 6)
-                const hiddenCount = Math.max(0, entry.unitCodes.length - visibleCodes.length)
-                return (
-                  <div key={entry.label} className="rounded-lg border border-slate-200 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-800">{entry.label}</p>
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                        {entry.count} ({entry.share.toFixed(1)}%)
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {visibleCodes.map((code) => (
-                        <span key={`${entry.label}-${code}`} className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                          {code}
-                        </span>
+              <table className="min-w-full border-separate border-spacing-0 overflow-hidden rounded-lg border border-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-700">
+                      {occupancyDimensionLabelMap[occupancyGroupBy]}
+                    </th>
+                    {occupancyPivot.breakdownLabels.map((label) => (
+                      <th key={label} className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">
+                        {label}
+                      </th>
+                    ))}
+                    <th className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">Total</th>
+                    <th className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleOccupancyRows.map((row) => (
+                    <tr key={row.label} className="odd:bg-white even:bg-slate-50/60">
+                      <td className="border-b border-slate-200 px-3 py-2 align-top">
+                        <div className="font-semibold text-slate-800">{row.label}</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          {row.unitCodes.slice(0, 6).join(' · ')}
+                          {row.unitCodes.length > 6 ? ` · +${row.unitCodes.length - 6} más` : ''}
+                        </div>
+                      </td>
+                      {occupancyPivot.breakdownLabels.map((label) => (
+                        <td key={`${row.label}-${label}`} className="border-b border-slate-200 px-3 py-2 text-center text-slate-700">
+                          {row.breakdownCounts[label] ?? 0}
+                        </td>
                       ))}
-                      {hiddenCount > 0 ? (
-                        <span className="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">+{hiddenCount} mas</span>
-                      ) : null}
-                    </div>
-                    {entry.unitCodes.length > 6 ? (
-                      <button
-                        type="button"
-                        onClick={() => setExpandedClients((previous) => ({ ...previous, [entry.label]: !isExpanded }))}
-                        className="mt-2 text-[11px] font-semibold text-amber-700 hover:text-amber-800"
-                      >
-                        {isExpanded ? 'Ocultar patentes' : 'Ver todas las patentes'}
-                      </button>
-                    ) : null}
-                  </div>
-                )
-              })
+                      <td className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{row.total}</td>
+                      <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-600">{row.share.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </article>
