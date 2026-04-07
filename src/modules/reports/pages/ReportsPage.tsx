@@ -1253,46 +1253,109 @@ export const ReportsPage = () => {
               </button>
             ) : null}
           </div>
-          <div className="mt-4 overflow-x-auto">
+
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vista</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {occupancyDimensionLabelMap[occupancyGroupBy]} por {occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy].toLowerCase()}
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cobertura</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {visibleOccupancyRows.length} de {occupancyPivot.totalGroups} grupos visibles
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Filtros activos</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {occupancyClientFilter === 'ALL' && occupancyTypeFilter === 'ALL' && occupancyStatusFilter === 'ALL'
+                  ? 'Sin filtros'
+                  : 'Vista acotada'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
             {visibleOccupancyRows.length === 0 ? (
               <p className="text-sm text-slate-500">No hay unidades que coincidan con los criterios elegidos.</p>
             ) : (
-              <table className="min-w-full border-separate border-spacing-0 overflow-hidden rounded-lg border border-slate-200 text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="border-b border-slate-200 px-3 py-2 text-left font-semibold text-slate-700">
-                      {occupancyDimensionLabelMap[occupancyGroupBy]}
-                    </th>
-                    {occupancyPivot.breakdownLabels.map((label) => (
-                      <th key={label} className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">
-                        {label}
-                      </th>
-                    ))}
-                    <th className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">Total</th>
-                    <th className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-700">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleOccupancyRows.map((row) => (
-                    <tr key={row.label} className="odd:bg-white even:bg-slate-50/60">
-                      <td className="border-b border-slate-200 px-3 py-2 align-top">
-                        <div className="font-semibold text-slate-800">{row.label}</div>
-                        <div className="mt-1 text-[11px] text-slate-500">
-                          {row.unitCodes.slice(0, 6).join(' · ')}
-                          {row.unitCodes.length > 6 ? ` · +${row.unitCodes.length - 6} más` : ''}
+              visibleOccupancyRows.map((row) => (
+                <article key={row.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-base font-bold text-slate-900">{row.label}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {row.unitCodes.slice(0, 6).join(' · ')}
+                        {row.unitCodes.length > 6 ? ` · +${row.unitCodes.length - 6} más` : ''}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        {row.total} unidades
+                      </span>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        {row.share.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(6, Math.min(100, row.share))}%` }} />
+                  </div>
+
+                  <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {occupancyPivot.breakdownLabels.map((label, index) => {
+                      const value = row.breakdownCounts[label] ?? 0
+                      const localShare = row.total > 0 ? (value / row.total) * 100 : 0
+                      return (
+                        <div
+                          key={`${row.label}-${label}`}
+                          className={[
+                            'rounded-lg border px-3 py-2',
+                            value > 0 ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/40 opacity-60',
+                          ].join(' ')}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: palette[index % palette.length] }} />
+                              <span className="text-xs font-semibold text-slate-700">{label}</span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-900">{value}</span>
+                          </div>
+                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${Math.max(value > 0 ? 6 : 0, Math.min(100, localShare))}%`,
+                                backgroundColor: palette[index % palette.length],
+                              }}
+                            />
+                          </div>
+                          <p className="mt-1 text-[11px] text-slate-500">{localShare.toFixed(1)}% del grupo</p>
                         </div>
-                      </td>
-                      {occupancyPivot.breakdownLabels.map((label) => (
-                        <td key={`${row.label}-${label}`} className="border-b border-slate-200 px-3 py-2 text-center text-slate-700">
-                          {row.breakdownCounts[label] ?? 0}
-                        </td>
+                      )
+                    })}
+                  </div>
+
+                  <details className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                      Ver todas las patentes ({row.unitCodes.length})
+                    </summary>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {row.unitCodes.map((code) => (
+                        <span
+                          key={`${row.label}-${code}`}
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-600"
+                        >
+                          {code}
+                        </span>
                       ))}
-                      <td className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-900">{row.total}</td>
-                      <td className="border-b border-slate-200 px-3 py-2 text-center text-slate-600">{row.share.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                    </div>
+                  </details>
+                </article>
+              ))
             )}
           </div>
         </article>
