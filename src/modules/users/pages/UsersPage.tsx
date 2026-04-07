@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
@@ -142,7 +142,7 @@ export const UsersPage = () => {
       username: user.username,
       fullName: user.fullName,
       role: user.role,
-      password: user.password,
+      password: '',
       permissions: normalizePermissions(user.permissions, user.role),
       permissionOverrides:
         user.permissionOverrides?.map((override) => ({
@@ -155,44 +155,81 @@ export const UsersPage = () => {
   }
 
   const handleSaveUser = async () => {
-    if (!formData.username.trim() || !formData.fullName.trim() || !formData.password.trim()) {
+    if (!formData.username.trim() || !formData.fullName.trim()) {
       return
     }
 
     if (editingUserId) {
-      const nextUsers = users.map((user) =>
-        user.id === editingUserId
-          ? {
-              ...user,
-              username: formData.username.trim(),
-              fullName: formData.fullName.trim(),
-              role: formData.role,
-              password: formData.password,
-              permissions: formData.permissions,
-              permissionOverrides: formData.permissionOverrides.map((override) => ({
-                ...override,
-                expiresAt: override.expiresAt ? override.expiresAt : undefined,
-              })),
-            }
-          : user,
-      )
-      setUsers(nextUsers)
-      if (typeof navigator !== 'undefined' && navigator.onLine) {
-        apiRequest(`/users/${editingUserId}`, {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setAppError('No pod?s editar usuarios sin conexi?n.')
+        return
+      }
+
+      const trimmedPassword = formData.password.trim()
+      if (trimmedPassword && trimmedPassword.length < 6) {
+        setAppError('La contrase?a debe tener al menos 6 caracteres.')
+        return
+      }
+
+      const permissionOverrides = formData.permissionOverrides.map((override) => ({
+        ...override,
+        expiresAt: override.expiresAt ? override.expiresAt : undefined,
+      }))
+
+      try {
+        const response = await apiRequest<{
+          id: string
+          username: string
+          fullName: string
+          role: UserRole
+          avatarUrl?: string
+          permissions?: UserPermissions
+          permissionOverrides?: Array<{
+            module: PermissionModule
+            action: PermissionAction
+            allow: boolean
+            expiresAt?: string
+          }>
+        }>(`/users/${editingUserId}`, {
           method: 'PATCH',
           body: {
             fullName: formData.fullName.trim(),
             role: formData.role,
-            password: formData.password,
+            ...(trimmedPassword ? { password: trimmedPassword } : {}),
             permissions: formData.permissions,
-            permissionOverrides: formData.permissionOverrides.map((override) => ({
-              ...override,
-              expiresAt: override.expiresAt ? override.expiresAt : undefined,
-            })),
+            permissionOverrides,
           },
-        }).catch(() => null)
+        })
+
+        setUsers(
+          users.map((user) =>
+            user.id === editingUserId
+              ? {
+                  ...user,
+                  username: response.username,
+                  fullName: response.fullName,
+                  role: response.role,
+                  avatarUrl: response.avatarUrl,
+                  permissions: normalizePermissions(response.permissions, response.role),
+                  permissionOverrides: response.permissionOverrides,
+                  ...(trimmedPassword ? { password: trimmedPassword } : {}),
+                }
+              : user,
+          ),
+        )
+        resetForm()
+      } catch (error) {
+        setAppError(getApiErrorMessage(error, 'No se pudo guardar la edici?n del usuario.'))
       }
-      resetForm()
+      return
+    }
+
+    if (!formData.password.trim()) {
+      return
+    }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setAppError('No pod?s crear usuarios sin conexi?n.')
       return
     }
 
@@ -208,9 +245,21 @@ export const UsersPage = () => {
         expiresAt: override.expiresAt ? override.expiresAt : undefined,
       })),
     }
-    setUsers([newUser, ...users])
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest('/users', {
+    try {
+      const response = await apiRequest<{
+        id: string
+        username: string
+        fullName: string
+        role: UserRole
+        avatarUrl?: string
+        permissions?: UserPermissions
+        permissionOverrides?: Array<{
+          module: PermissionModule
+          action: PermissionAction
+          allow: boolean
+          expiresAt?: string
+        }>
+      }>('/users', {
         method: 'POST',
         body: {
           username: newUser.username,
@@ -220,9 +269,25 @@ export const UsersPage = () => {
           permissions: newUser.permissions,
           permissionOverrides: newUser.permissionOverrides,
         },
-      }).catch(() => null)
+      })
+
+      setUsers([
+        {
+          ...newUser,
+          id: response.id,
+          username: response.username,
+          fullName: response.fullName,
+          role: response.role,
+          avatarUrl: response.avatarUrl,
+          permissions: normalizePermissions(response.permissions, response.role),
+          permissionOverrides: response.permissionOverrides,
+        },
+        ...users,
+      ])
+      resetForm()
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo crear el usuario.'))
     }
-    resetForm()
   }
 
   const handleDeleteUser = async (userId: string) => {
@@ -247,21 +312,28 @@ export const UsersPage = () => {
   }
 
   const handleResetPassword = (userId: string) => {
-    const newPassword = window.prompt('Nueva contraseÃ±a temporal (min 6 caracteres):')
+    const newPassword = window.prompt('Nueva contrase?a temporal (m?nimo 6 caracteres):')
     if (!newPassword || newPassword.trim().length < 6) {
-      setAppError('La contraseÃ±a debe tener al menos 6 caracteres.')
+      setAppError('La contrase?a debe tener al menos 6 caracteres.')
       return
     }
-    setUsers(
-      users.map((user) =>
-        user.id === userId
-          ? { ...user, password: newPassword.trim() }
-          : user,
-      ),
-    )
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest(`/users/${userId}`, { method: 'PATCH', body: { password: newPassword.trim() } }).catch(() => null)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setAppError('No pod?s resetear contrase?as sin conexi?n.')
+      return
     }
+    apiRequest(`/users/${userId}`, { method: 'PATCH', body: { password: newPassword.trim() } })
+      .then(() => {
+        setUsers(
+          users.map((user) =>
+            user.id === userId
+              ? { ...user, password: newPassword.trim() }
+              : user,
+          ),
+        )
+      })
+      .catch((error) => {
+        setAppError(getApiErrorMessage(error, 'No se pudo resetear la contrase?a.'))
+      })
   }
 
   const handleRoleChange = (role: UserRole) => {
@@ -329,7 +401,7 @@ export const UsersPage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Usuarios y permisos</h2>
-        <p className="text-sm text-slate-600">GestiÃ³n de usuarios, roles y permisos por mÃ³dulo.</p>
+        <p className="text-sm text-slate-600">Gesti?n de usuarios, roles y permisos por m?dulo.</p>
       </header>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -355,12 +427,13 @@ export const UsersPage = () => {
           </label>
 
           <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
-            ContraseÃ±a
+            {editingUserId ? 'Contraseña (opcional)' : 'Contraseña'}
             <input
               type="password"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
               value={formData.password}
               onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
+              placeholder={editingUserId ? 'Dejar vac?a para conservar la actual' : ''}
             />
           </label>
 
@@ -400,11 +473,11 @@ export const UsersPage = () => {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <h3 className="text-lg font-bold text-slate-900">Permisos por mÃ³dulo</h3>
+          <h3 className="text-lg font-bold text-slate-900">Permisos por m?dulo</h3>
           <div className="mt-4 overflow-x-auto">
             <div className="min-w-[640px]">
               <div className="grid grid-cols-[180px_repeat(4,1fr)] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <span>MÃ³dulo</span>
+                <span>M?dulo</span>
                 {permissionActions.map((action) => (
                   <span key={action} className="text-center">
                     {action}
@@ -545,8 +618,7 @@ export const UsersPage = () => {
                   onClick={() => handleResetPassword(user.id)}
                   className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                 >
-                  Resetear contraseÃ±a
-                </button>
+                  Resetear contrase?a</button>
               </div>
             </div>
           ))}
@@ -556,7 +628,7 @@ export const UsersPage = () => {
       <ConfirmModal
         isOpen={Boolean(userIdPendingDelete)}
         title="Eliminar usuario"
-        message={`Â¿Estas seguro que deseas eliminar a ${
+        message={`?Est?s seguro de que deseas eliminar a ${
           users.find((user) => user.id === userIdPendingDelete)?.fullName ?? 'este usuario'
         }?`}
         onCancel={() => setUserIdPendingDelete(null)}

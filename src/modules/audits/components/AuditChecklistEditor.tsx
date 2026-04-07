@@ -75,7 +75,7 @@ export const AuditChecklistEditor = ({
                     className="w-full rounded border border-slate-300 px-2 py-1 text-sm text-slate-900 outline-none focus:border-amber-400"
                     value={item.observation}
                     onChange={(event) => onItemObservationChange(section.id, item.id, event.target.value)}
-                    placeholder="Observación"
+                    placeholder="Observaci?n"
                     readOnly={readOnly}
                   />
                 </div>
@@ -87,3 +87,4 @@ export const AuditChecklistEditor = ({
     </div>
   </section>
 )
+

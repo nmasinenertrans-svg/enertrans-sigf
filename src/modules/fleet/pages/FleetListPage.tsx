@@ -6,8 +6,14 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS, buildFleetDetailPath } from '../../../core/routing/routePaths'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { FleetUnitCard } from '../components/FleetUnitCard'
-import { createEmptyFleetFormData, getOperationalStatusLabel, normalizeFleetUnits, toFleetUnit } from '../services/fleetService'
-import type { FleetUnit } from '../../../types/domain'
+import {
+  createEmptyFleetFormData,
+  fleetUnitTypeLabelMap,
+  getOperationalStatusLabel,
+  normalizeFleetUnits,
+  toFleetUnit,
+} from '../services/fleetService'
+import { fleetUnitTypes, type FleetUnit } from '../../../types/domain'
 import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
@@ -71,6 +77,13 @@ const parseDocumentStatusFilter = (raw: string | null): 'ALL' | 'overdue' | 'soo
   return 'ALL'
 }
 
+const parseUnitTypeFilter = (raw: string | null): 'ALL' | (typeof fleetUnitTypes)[number] => {
+  if (raw === 'ALL') {
+    return raw
+  }
+  return fleetUnitTypes.find((item) => item === raw) ?? 'ALL'
+}
+
 const getDocumentStatus = (expiresAt?: string): 'overdue' | 'soon' | 'ok' | 'missing' => {
   if (!expiresAt) {
     return 'missing'
@@ -116,6 +129,9 @@ export const FleetListPage = () => {
     parseDocumentStatusFilter(searchParams.get('docStatus')),
   )
   const [clientFilter, setClientFilter] = useState(() => (searchParams.get('client') ?? '').trim())
+  const [unitTypeFilter, setUnitTypeFilter] = useState<'ALL' | (typeof fleetUnitTypes)[number]>(() =>
+    parseUnitTypeFilter(searchParams.get('unitType')),
+  )
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrScanning, setIsQrScanning] = useState(false)
@@ -157,6 +173,9 @@ export const FleetListPage = () => {
       .filter(Boolean)
     return normalizedUnits.filter((unit) => {
       if (statusFilter !== 'ALL' && unit.operationalStatus !== statusFilter) {
+        return false
+      }
+      if (unitTypeFilter !== 'ALL' && unit.unitType !== unitTypeFilter) {
         return false
       }
       if (clientGroupFilter === 'OTHERS') {
@@ -203,7 +222,7 @@ export const FleetListPage = () => {
         .toLowerCase()
       return haystack.includes(normalizedSearch)
     })
-  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, documentTypeFilter, documentStatusFilter, searchParams])
+  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, unitTypeFilter, documentTypeFilter, documentStatusFilter, searchParams])
 
   const stopQrCamera = () => {
     if (qrIntervalRef.current !== null) {
@@ -295,7 +314,7 @@ export const FleetListPage = () => {
     }
 
     if (!mediaStream) {
-      setQrError('No se pudo acceder a la cámara. Revisa permisos del navegador.')
+      setQrError('No se pudo acceder a la cámara. Revisá los permisos del navegador.')
       return
     }
 
@@ -316,7 +335,7 @@ export const FleetListPage = () => {
       try {
         await qrVideoRef.current.play()
       } catch {
-        setQrError('No se pudo iniciar la cámara. Revisa permisos del navegador.')
+        setQrError('No se pudo iniciar la cámara. Revisá los permisos del navegador.')
         stopQrCamera()
         return
       }
@@ -445,7 +464,7 @@ export const FleetListPage = () => {
         <div>
           <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
           <h2 className="text-2xl font-bold text-slate-900">Flota</h2>
-          <p className="text-sm text-slate-600">Gestión central de unidades operativas.</p>
+          <p className="text-sm text-slate-600">Gesti?n central de unidades operativas.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -502,7 +521,7 @@ export const FleetListPage = () => {
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Buscar
             <input
@@ -523,6 +542,21 @@ export const FleetListPage = () => {
               <option value="OPERATIONAL">{getOperationalStatusLabel('OPERATIONAL')}</option>
               <option value="MAINTENANCE">{getOperationalStatusLabel('MAINTENANCE')}</option>
               <option value="OUT_OF_SERVICE">{getOperationalStatusLabel('OUT_OF_SERVICE')}</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            Tipo
+            <select
+              value={unitTypeFilter}
+              onChange={(event) => setUnitTypeFilter(event.target.value as typeof unitTypeFilter)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+            >
+              <option value="ALL">Todos</option>
+              {fleetUnitTypes.map((unitType) => (
+                <option key={unitType} value={unitType}>
+                  {fleetUnitTypeLabelMap[unitType]}
+                </option>
+              ))}
             </select>
           </label>
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
@@ -551,7 +585,7 @@ export const FleetListPage = () => {
               <option value="missing">Sin registro</option>
             </select>
           </label>
-          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-4">
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-5">
             Cliente
             <input
               value={clientFilter === UNASSIGNED_CLIENT_FILTER ? '' : clientFilter}
@@ -573,8 +607,7 @@ export const FleetListPage = () => {
 
       {normalizedUnits.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          No hay unidades registradas. Creá tu primera unidad para iniciar la operación.
-        </div>
+          No hay unidades registradas. Cre? tu primera unidad para iniciar la operaci?n.</div>
       ) : (
         <>
           {filteredUnits.length === 0 ? (
@@ -601,7 +634,7 @@ export const FleetListPage = () => {
         <ConfirmModal
           isOpen={Boolean(unitPendingDelete)}
           title="Eliminar unidad"
-          message={`¿Deseás eliminar la unidad ${unitPendingDelete?.internalCode ?? ''}? Esta acción no se puede deshacer.`}
+          message={`?Dese?s eliminar la unidad ${unitPendingDelete?.internalCode ?? ""}? Esta acci?n no se puede deshacer.`}
           onCancel={() => setUnitPendingDelete(null)}
           onConfirm={handleConfirmDelete}
         />
@@ -613,7 +646,7 @@ export const FleetListPage = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Escanear QR de unidad</h3>
-                <p className="text-sm text-slate-600">Apunta la cámara o pega el link/ID del QR.</p>
+                <p className="text-sm text-slate-600">Apunt? la c?mara o peg? el link/ID del QR.</p>
               </div>
               <button
                 type="button"
@@ -633,7 +666,7 @@ export const FleetListPage = () => {
                 <input
                   value={qrInput}
                   onChange={(event) => setQrInput(event.target.value)}
-                  placeholder="Pega el QR o escanea con la cámara"
+                  placeholder="Peg? el QR o escane? con la c?mara"
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
                 />
               </label>
@@ -653,7 +686,7 @@ export const FleetListPage = () => {
                       onClick={stopQrCamera}
                       className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                     >
-                      Detener cámara
+                      Detener c?mara
                     </button>
                   ) : (
                     <button
@@ -663,12 +696,12 @@ export const FleetListPage = () => {
                       }}
                       className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                     >
-                      Escanear con cámara
+                      Escanear con c?mara
                     </button>
                   )
                 ) : (
                   <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    Cámara no disponible en este navegador.
+                    C?mara no disponible en este navegador.
                   </span>
                 )}
               </div>
@@ -691,3 +724,5 @@ export const FleetListPage = () => {
     </section>
   )
 }
+
+

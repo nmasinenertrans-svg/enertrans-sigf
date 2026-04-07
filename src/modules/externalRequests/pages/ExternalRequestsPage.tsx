@@ -275,7 +275,7 @@ export const ExternalRequestsPage = () => {
       return
     }
 
-    const confirmed = window.confirm('¿Eliminar esta nota de pedido externo?')
+    const confirmed = window.confirm('Â¿Eliminar esta nota de pedido externo?')
     if (!confirmed) {
       return
     }
@@ -668,3 +668,4 @@ export const ExternalRequestsPage = () => {
     </section>
   )
 }
+
