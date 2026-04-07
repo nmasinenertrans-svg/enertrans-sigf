@@ -981,12 +981,7 @@ export const ReportsPage = () => {
     <section className="space-y-5">
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
-          <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-            Premium analytics
-          </span>
-        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Reportes</h2>
         <p className="text-sm text-slate-600">
           Cumplimiento de tareas, ranking de reparaciones y comparativa proveedor vs proveedor en tiempo y costos.
         </p>
