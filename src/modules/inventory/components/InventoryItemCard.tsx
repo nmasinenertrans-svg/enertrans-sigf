@@ -43,7 +43,7 @@ export const InventoryItemCard = ({
           {item.linkedWorkOrderIds.length > 0 ? item.linkedWorkOrderIds.length : 0}
         </p>
         <p>
-          <span className="font-semibold">Ultimo movimiento:</span> {latestMovement}
+          <span className="font-semibold">Último movimiento:</span> {latestMovement}
         </p>
       </div>
 

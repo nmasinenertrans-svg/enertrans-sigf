@@ -494,7 +494,7 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                         ) : null}
                         {item.lastAttemptAt ? (
                           <p className="text-[11px] text-slate-500">
-                            Ultimo intento: {new Date(item.lastAttemptAt).toLocaleString()}
+                            Último intento: {new Date(item.lastAttemptAt).toLocaleString()}
                           </p>
                         ) : null}
                         {item.lastError ? (

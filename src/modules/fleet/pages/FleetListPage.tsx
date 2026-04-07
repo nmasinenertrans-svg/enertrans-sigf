@@ -464,7 +464,7 @@ export const FleetListPage = () => {
         <div>
           <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
           <h2 className="text-2xl font-bold text-slate-900">Flota</h2>
-          <p className="text-sm text-slate-600">Gesti?n central de unidades operativas.</p>
+          <p className="text-sm text-slate-600">Gestión central de unidades operativas.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -607,7 +607,7 @@ export const FleetListPage = () => {
 
       {normalizedUnits.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          No hay unidades registradas. Cre? tu primera unidad para iniciar la operaci?n.</div>
+          No hay unidades registradas. Creá tu primera unidad para iniciar la operación.</div>
       ) : (
         <>
           {filteredUnits.length === 0 ? (
@@ -634,7 +634,7 @@ export const FleetListPage = () => {
         <ConfirmModal
           isOpen={Boolean(unitPendingDelete)}
           title="Eliminar unidad"
-          message={`?Dese?s eliminar la unidad ${unitPendingDelete?.internalCode ?? ""}? Esta acci?n no se puede deshacer.`}
+          message={`¿Deseás eliminar la unidad ${unitPendingDelete?.internalCode ?? ""}? Esta acción no se puede deshacer.`}
           onCancel={() => setUnitPendingDelete(null)}
           onConfirm={handleConfirmDelete}
         />
@@ -646,7 +646,7 @@ export const FleetListPage = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Escanear QR de unidad</h3>
-                <p className="text-sm text-slate-600">Apunt? la c?mara o peg? el link/ID del QR.</p>
+                <p className="text-sm text-slate-600">Apuntá la cámara o pegá el link/ID del QR.</p>
               </div>
               <button
                 type="button"
@@ -666,7 +666,7 @@ export const FleetListPage = () => {
                 <input
                   value={qrInput}
                   onChange={(event) => setQrInput(event.target.value)}
-                  placeholder="Peg? el QR o escane? con la c?mara"
+                  placeholder="Pegá el QR o escaneá con la cámara"
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
                 />
               </label>
@@ -686,7 +686,7 @@ export const FleetListPage = () => {
                       onClick={stopQrCamera}
                       className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                     >
-                      Detener c?mara
+                      Detener cámara
                     </button>
                   ) : (
                     <button
@@ -696,12 +696,12 @@ export const FleetListPage = () => {
                       }}
                       className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                     >
-                      Escanear con c?mara
+                      Escanear con cámara
                     </button>
                   )
                 ) : (
                   <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    C?mara no disponible en este navegador.
+                    Cámara no disponible en este navegador.
                   </span>
                 )}
               </div>
@@ -724,5 +724,4 @@ export const FleetListPage = () => {
     </section>
   )
 }
-
 

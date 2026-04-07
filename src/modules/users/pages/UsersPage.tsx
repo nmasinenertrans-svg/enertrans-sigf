@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
@@ -161,13 +161,13 @@ export const UsersPage = () => {
 
     if (editingUserId) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        setAppError('No pod?s editar usuarios sin conexi?n.')
+        setAppError('No podés editar usuarios sin conexión.')
         return
       }
 
       const trimmedPassword = formData.password.trim()
       if (trimmedPassword && trimmedPassword.length < 6) {
-        setAppError('La contrase?a debe tener al menos 6 caracteres.')
+        setAppError('La contraseña debe tener al menos 6 caracteres.')
         return
       }
 
@@ -219,7 +219,7 @@ export const UsersPage = () => {
         )
         resetForm()
       } catch (error) {
-        setAppError(getApiErrorMessage(error, 'No se pudo guardar la edici?n del usuario.'))
+        setAppError(getApiErrorMessage(error, 'No se pudo guardar la edición del usuario.'))
       }
       return
     }
@@ -229,7 +229,7 @@ export const UsersPage = () => {
     }
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setAppError('No pod?s crear usuarios sin conexi?n.')
+      setAppError('No podés crear usuarios sin conexión.')
       return
     }
 
@@ -292,7 +292,7 @@ export const UsersPage = () => {
 
   const handleDeleteUser = async (userId: string) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setAppError('No podes eliminar usuarios sin conexion.')
+      setAppError('No podés eliminar usuarios sin conexión.')
       return
     }
 
@@ -312,13 +312,13 @@ export const UsersPage = () => {
   }
 
   const handleResetPassword = (userId: string) => {
-    const newPassword = window.prompt('Nueva contrase?a temporal (m?nimo 6 caracteres):')
+    const newPassword = window.prompt('Nueva contraseña temporal (mínimo 6 caracteres):')
     if (!newPassword || newPassword.trim().length < 6) {
-      setAppError('La contrase?a debe tener al menos 6 caracteres.')
+      setAppError('La contraseña debe tener al menos 6 caracteres.')
       return
     }
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setAppError('No pod?s resetear contrase?as sin conexi?n.')
+      setAppError('No podés resetear contraseñas sin conexión.')
       return
     }
     apiRequest(`/users/${userId}`, { method: 'PATCH', body: { password: newPassword.trim() } })
@@ -332,7 +332,7 @@ export const UsersPage = () => {
         )
       })
       .catch((error) => {
-        setAppError(getApiErrorMessage(error, 'No se pudo resetear la contrase?a.'))
+        setAppError(getApiErrorMessage(error, 'No se pudo resetear la contraseña.'))
       })
   }
 
@@ -401,7 +401,7 @@ export const UsersPage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Usuarios y permisos</h2>
-        <p className="text-sm text-slate-600">Gesti?n de usuarios, roles y permisos por m?dulo.</p>
+        <p className="text-sm text-slate-600">Gestión de usuarios, roles y permisos por módulo.</p>
       </header>
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -433,7 +433,7 @@ export const UsersPage = () => {
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
               value={formData.password}
               onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
-              placeholder={editingUserId ? 'Dejar vac?a para conservar la actual' : ''}
+              placeholder={editingUserId ? 'Dejar vacía para conservar la actual' : ''}
             />
           </label>
 
@@ -473,11 +473,11 @@ export const UsersPage = () => {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <h3 className="text-lg font-bold text-slate-900">Permisos por m?dulo</h3>
+          <h3 className="text-lg font-bold text-slate-900">Permisos por módulo</h3>
           <div className="mt-4 overflow-x-auto">
             <div className="min-w-[640px]">
               <div className="grid grid-cols-[180px_repeat(4,1fr)] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                <span>M?dulo</span>
+                <span>Módulo</span>
                 {permissionActions.map((action) => (
                   <span key={action} className="text-center">
                     {action}
@@ -593,7 +593,7 @@ export const UsersPage = () => {
                     <p className="text-sm font-semibold text-slate-900">{user.fullName}</p>
                     <p className="text-xs text-slate-600">{user.username}</p>
                     <p className="text-xs text-slate-500">Rol: {user.role}</p>
-                    <p className="text-xs text-slate-500">Ultimo acceso: {formatLastLogin(lastAccess)}</p>
+                    <p className="text-xs text-slate-500">Último acceso: {formatLastLogin(lastAccess)}</p>
                     <p className={`text-xs font-semibold ${accessState.className}`}>Uso: {accessState.label}</p>
                   </>
                 )
@@ -618,7 +618,7 @@ export const UsersPage = () => {
                   onClick={() => handleResetPassword(user.id)}
                   className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
                 >
-                  Resetear contrase?a</button>
+                  Resetear contraseña</button>
               </div>
             </div>
           ))}
@@ -628,7 +628,7 @@ export const UsersPage = () => {
       <ConfirmModal
         isOpen={Boolean(userIdPendingDelete)}
         title="Eliminar usuario"
-        message={`?Est?s seguro de que deseas eliminar a ${
+        message={`¿Estás seguro de que deseas eliminar a ${
           users.find((user) => user.id === userIdPendingDelete)?.fullName ?? 'este usuario'
         }?`}
         onCancel={() => setUserIdPendingDelete(null)}
@@ -643,5 +643,6 @@ export const UsersPage = () => {
     </section>
   )
 }
+
 
 

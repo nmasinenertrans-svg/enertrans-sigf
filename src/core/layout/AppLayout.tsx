@@ -78,27 +78,6 @@ const mergeByIdWithLocal = <T extends { id: string }>(remote: T[] | null, local?
   return Array.from(map.values())
 }
 
-const mergeUsersByUsername = (remote: AppUser[] | null, local: AppUser[]): AppUser[] | null => {
-  if (!remote) {
-    return null
-  }
-
-  const map = new Map<string, AppUser>()
-  remote.forEach((user) => {
-    const key = user.username?.trim().toLowerCase() || user.id
-    map.set(key, user)
-  })
-
-  local.forEach((user) => {
-    const key = user.username?.trim().toLowerCase() || user.id
-    if (!map.has(key)) {
-      map.set(key, user)
-    }
-  })
-
-  return Array.from(map.values())
-}
-
 export const AppLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(readSidebarState)
   const [isRouteLoading, setIsRouteLoading] = useState(true)
@@ -383,7 +362,8 @@ export const AppLayout = () => {
           queueItems.filter((item) => item.type === type).map((item) => item.payload as T)
 
         if (usersResponse) {
-          setUsers(mergeUsersByUsername(usersResponse, usersRef.current) ?? usersResponse)
+          // Users are server-authoritative. Merging with stale local state revives deleted users.
+          setUsers(usersResponse)
         }
         if (fleetResponse) {
           const queuedFleetCreates = getQueuedPayloads<FleetUnit>('fleet.create')
