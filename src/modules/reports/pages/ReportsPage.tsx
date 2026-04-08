@@ -935,7 +935,7 @@ export const ReportsPage = () => {
     const chartImage = buildOccupancyPieChart(pdfSegments)
     const summaryColumns = occupancyPivot.rows.length > 8 ? 2 : 1
     const rowsPerColumn = Math.max(1, Math.ceil(occupancyPivot.rows.length / summaryColumns))
-    const summaryRowHeight = 30
+    const summaryRowHeight = 40
     const chartCardHeight = Math.max(220, 56 + rowsPerColumn * summaryRowHeight)
     const chartSize = Math.min(224, Math.max(176, chartCardHeight - 30))
     if (chartImage) {
@@ -966,28 +966,34 @@ export const ReportsPage = () => {
     const summaryColumnGap = 16
     const summaryColumnWidth =
       (summaryInnerWidth - (summaryColumns - 1) * summaryColumnGap) / summaryColumns
+    const cropSummaryLabel = (value: string) => {
+      const maxChars = summaryColumns === 2 ? 22 : 36
+      return value.length > maxChars ? `${value.slice(0, maxChars - 1)}…` : value
+    }
 
     occupancyPivot.rows.forEach((row, index) => {
       const columnIndex = Math.floor(index / rowsPerColumn)
       const rowIndex = index % rowsPerColumn
       const cardX = summaryStartX + 12 + columnIndex * (summaryColumnWidth + summaryColumnGap)
       const cardY = summaryY + rowIndex * summaryRowHeight
-      const barWidth = Math.max(18, (summaryColumnWidth - 150) * (row.share / 100))
+      const cardHeight = 30
+      const barTrackWidth = summaryColumnWidth - 20
+      const barWidth = Math.max(12, barTrackWidth * (row.share / 100))
       const color = palette[index % palette.length]
       doc.setFillColor('#f8fafc')
-      doc.roundedRect(cardX, cardY, summaryColumnWidth, 22, 5, 5, 'F')
+      doc.roundedRect(cardX, cardY, summaryColumnWidth, cardHeight, 5, 5, 'F')
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(9)
       doc.setTextColor('#0f172a')
-      doc.text(row.label, cardX + 8, cardY + 14)
+      doc.text(cropSummaryLabel(row.label), cardX + 8, cardY + 13)
       doc.setTextColor('#475569')
-      doc.text(`${row.total} unidades`, cardX + summaryColumnWidth - 92, cardY + 14)
+      doc.text(`${row.total} unidades`, cardX + summaryColumnWidth - 100, cardY + 13)
+      doc.text(`${row.share.toFixed(1)}%`, cardX + summaryColumnWidth - 40, cardY + 13)
       doc.setFillColor(color)
-      doc.roundedRect(cardX + 8, cardY + 26, barWidth, 7, 4, 4, 'F')
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
-      doc.setTextColor('#64748b')
-      doc.text(`${row.share.toFixed(1)}%`, cardX + summaryColumnWidth - 40, cardY + 31)
+      doc.setFillColor('#e2e8f0')
+      doc.roundedRect(cardX + 8, cardY + 20, barTrackWidth, 6, 4, 4, 'F')
+      doc.setFillColor(color)
+      doc.roundedRect(cardX + 8, cardY + 20, barWidth, 6, 4, 4, 'F')
     })
 
     cursorY += chartCardHeight + 22
