@@ -1,8 +1,9 @@
 ﻿import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import * as XLSX from 'xlsx'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { ROUTE_PATHS, buildFleetDetailPath } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
 import { getFleetUnitTypeLabel, getOperationalStatusLabel, normalizeFleetUnits } from '../../fleet/services/fleetService'
@@ -51,6 +52,7 @@ type OccupancyPivotRow = {
   share: number
   breakdownCounts: Record<string, number>
   unitCodes: string[]
+  unitsByBreakdown: Record<string, Array<{ id: string; code: string }>>
 }
 
 const formatDateTime = (value?: string) => {
@@ -319,6 +321,7 @@ export const ReportsPage = () => {
   const [occupancyStatusFilter, setOccupancyStatusFilter] = useState<'ALL' | FleetOperationalStatus>('ALL')
   const [showAllOccupancyRows, setShowAllOccupancyRows] = useState(false)
   const [activeOccupancyRowLabel, setActiveOccupancyRowLabel] = useState<string | null>(null)
+  const [activeOccupancyBreakdownLabel, setActiveOccupancyBreakdownLabel] = useState<string | null>(null)
 
   const reportFleetUnits = useMemo<FleetUnit[]>(() => {
     const normalized = normalizeFleetUnits(fleetUnits)
@@ -450,6 +453,7 @@ export const ReportsPage = () => {
         total: number
         unitCodes: Set<string>
         breakdownCounts: Map<string, number>
+        unitsByBreakdown: Map<string, Array<{ id: string; code: string }>>
       }
     >()
     const breakdownTotals = new Map<string, number>()
@@ -462,11 +466,15 @@ export const ReportsPage = () => {
         total: 0,
         unitCodes: new Set<string>(),
         breakdownCounts: new Map<string, number>(),
+        unitsByBreakdown: new Map<string, Array<{ id: string; code: string }>>(),
       }
 
       currentRow.total += 1
       currentRow.unitCodes.add(unit.internalCode)
       currentRow.breakdownCounts.set(breakdownLabel, (currentRow.breakdownCounts.get(breakdownLabel) ?? 0) + 1)
+      const currentUnits = currentRow.unitsByBreakdown.get(breakdownLabel) ?? []
+      currentUnits.push({ id: unit.id, code: unit.internalCode })
+      currentRow.unitsByBreakdown.set(breakdownLabel, currentUnits)
       rowMap.set(rowLabel, currentRow)
       breakdownTotals.set(breakdownLabel, (breakdownTotals.get(breakdownLabel) ?? 0) + 1)
     })
@@ -482,6 +490,10 @@ export const ReportsPage = () => {
         total: row.total,
         share: percentage(row.total, totalUnits),
         unitCodes: Array.from(row.unitCodes).sort((a, b) => a.localeCompare(b)),
+        unitsByBreakdown: breakdownLabels.reduce<Record<string, Array<{ id: string; code: string }>>>((accumulator, label) => {
+          accumulator[label] = (row.unitsByBreakdown.get(label) ?? []).slice().sort((a, b) => a.code.localeCompare(b.code))
+          return accumulator
+        }, {}),
         breakdownCounts: breakdownLabels.reduce<Record<string, number>>((accumulator, label) => {
           accumulator[label] = row.breakdownCounts.get(label) ?? 0
           return accumulator
@@ -532,6 +544,7 @@ export const ReportsPage = () => {
     const stillExists = occupancyPivot.rows.some((row) => row.label === activeOccupancyRowLabel)
     if (!stillExists) {
       setActiveOccupancyRowLabel(null)
+      setActiveOccupancyBreakdownLabel(null)
     }
   }, [activeOccupancyRowLabel, occupancyPivot.rows])
 
@@ -539,6 +552,27 @@ export const ReportsPage = () => {
     () => occupancyPivot.rows.find((row) => row.label === activeOccupancyRowLabel) ?? null,
     [activeOccupancyRowLabel, occupancyPivot.rows],
   )
+
+  useEffect(() => {
+    if (!activeOccupancyRow) {
+      setActiveOccupancyBreakdownLabel(null)
+      return
+    }
+    if (activeOccupancyBreakdownLabel && (activeOccupancyRow.breakdownCounts[activeOccupancyBreakdownLabel] ?? 0) > 0) {
+      return
+    }
+    const firstAvailableBreakdown = occupancyPivot.breakdownLabels.find(
+      (label) => (activeOccupancyRow.breakdownCounts[label] ?? 0) > 0,
+    )
+    setActiveOccupancyBreakdownLabel(firstAvailableBreakdown ?? null)
+  }, [activeOccupancyBreakdownLabel, activeOccupancyRow, occupancyPivot.breakdownLabels])
+
+  const activeOccupancyDomains = useMemo(() => {
+    if (!activeOccupancyRow || !activeOccupancyBreakdownLabel) {
+      return []
+    }
+    return activeOccupancyRow.unitsByBreakdown[activeOccupancyBreakdownLabel] ?? []
+  }, [activeOccupancyBreakdownLabel, activeOccupancyRow])
 
   const taskMetrics = useMemo(() => {
     const operational = filteredTasks.filter((task) => !task.isInTaskBank)
@@ -889,14 +923,6 @@ export const ReportsPage = () => {
       cursorY,
     )
     cursorY += 14
-    doc.text(
-      `Filtros -> Cliente: ${occupancyClientFilter === 'ALL' ? 'Todos' : occupancyClientFilter} | Tipo: ${
-        occupancyTypeFilter === 'ALL' ? 'Todos' : getFleetUnitTypeLabel(occupancyTypeFilter)
-      } | Estado: ${occupancyStatusFilter === 'ALL' ? 'Todos' : getOperationalStatusLabel(occupancyStatusFilter)}`,
-      margin,
-      cursorY,
-    )
-    cursorY += 14
     doc.text(`Total de unidades: ${occupancyPivot.totalUnits} | Grupos: ${occupancyPivot.totalGroups}`, margin, cursorY)
     cursorY += 22
 
@@ -949,6 +975,127 @@ export const ReportsPage = () => {
         currentX += width
       })
       tableY += rowHeight
+    })
+
+    const occupancyUnitRows = filteredOccupancyUnits
+      .slice()
+      .sort((a, b) => {
+        const groupCompare = getOccupancyDimensionValue(a, occupancyGroupBy).localeCompare(
+          getOccupancyDimensionValue(b, occupancyGroupBy),
+        )
+        if (groupCompare !== 0) {
+          return groupCompare
+        }
+        const breakdownCompare = getOccupancyDimensionValue(a, effectiveOccupancyBreakdownBy).localeCompare(
+          getOccupancyDimensionValue(b, effectiveOccupancyBreakdownBy),
+        )
+        if (breakdownCompare !== 0) {
+          return breakdownCompare
+        }
+        return a.internalCode.localeCompare(b.internalCode)
+      })
+      .map((unit) => ({
+        groupLabel: getOccupancyDimensionValue(unit, occupancyGroupBy),
+        breakdownLabel: getOccupancyDimensionValue(unit, effectiveOccupancyBreakdownBy),
+        domain: unit.internalCode || 'Sin dominio',
+        brand: unit.brand || '-',
+        model: unit.model || '-',
+        year: String(unit.year || '-'),
+        owner: normalizeOccupancyValue(unit.ownerCompany ?? '', 'Sin empresa'),
+        client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
+        type: getFleetUnitTypeLabel(unit.unitType),
+        location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
+      }))
+
+    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Empresa', 'Cliente', 'Tipo', 'Ubicación']
+    const detailColumnWidths = [60, 56, 62, 34, 78, 74, 74, 62]
+    const detailFontSize = 7
+    const detailRowHeight = 18
+    const tableWidth = detailColumnWidths.reduce((sum, width) => sum + width, 0)
+    const drawDetailHeader = (y: number) => {
+      let x = margin
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(detailFontSize)
+      doc.setTextColor('#ffffff')
+      doc.setFillColor('#0f172a')
+      detailHeaders.forEach((header, index) => {
+        const width = detailColumnWidths[index] ?? 60
+        doc.rect(x, y, width, detailRowHeight, 'F')
+        doc.text(header, x + 3, y + 12)
+        x += width
+      })
+    }
+    const cropCell = (value: string, width: number) => {
+      const safeValue = value || '-'
+      const maxChars = Math.max(6, Math.floor(width / 5.4))
+      return safeValue.length > maxChars ? `${safeValue.slice(0, maxChars - 1)}…` : safeValue
+    }
+
+    doc.addPage()
+    cursorY = 42
+    doc.setFillColor('#000000')
+    doc.rect(margin, cursorY, pageWidth - margin * 2, 24, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.setTextColor('#facc15')
+    doc.text('DETALLE DE DOMINIOS', pageWidth / 2, cursorY + 16, { align: 'center' })
+    cursorY += 38
+    doc.setTextColor('#475569')
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.text(
+      `Listado de ${occupancyUnitRows.length} unidades ordenadas por ${occupancyDimensionLabelMap[occupancyGroupBy].toLowerCase()} y ${occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy].toLowerCase()}.`,
+      margin,
+      cursorY,
+    )
+    cursorY += 18
+
+    let detailY = cursorY
+    let currentGroup = ''
+    let currentBreakdown = ''
+    drawDetailHeader(detailY)
+    detailY += detailRowHeight
+
+    occupancyUnitRows.forEach((row) => {
+      const needsGroupHeader = row.groupLabel !== currentGroup || row.breakdownLabel !== currentBreakdown
+      if (needsGroupHeader) {
+        if (detailY > pageHeight - 70) {
+          doc.addPage()
+          detailY = 42
+          drawDetailHeader(detailY)
+          detailY += detailRowHeight
+        }
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor('#0f172a')
+        doc.setFillColor('#f8fafc')
+        doc.rect(margin, detailY, tableWidth, 16, 'F')
+        doc.text(`${row.groupLabel} · ${row.breakdownLabel}`, margin + 4, detailY + 11)
+        detailY += 16
+        currentGroup = row.groupLabel
+        currentBreakdown = row.breakdownLabel
+      }
+
+      if (detailY > pageHeight - 36) {
+        doc.addPage()
+        detailY = 42
+        drawDetailHeader(detailY)
+        detailY += detailRowHeight
+      }
+
+      let x = margin
+      const values = [row.domain, row.brand, row.model, row.year, row.owner, row.client, row.type, row.location]
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(detailFontSize)
+      doc.setTextColor('#111827')
+      values.forEach((value, index) => {
+        const width = detailColumnWidths[index] ?? 60
+        doc.setDrawColor('#cbd5e1')
+        doc.rect(x, detailY, width, detailRowHeight)
+        doc.text(cropCell(value, width), x + 3, detailY + 12)
+        x += width
+      })
+      detailY += detailRowHeight
     })
 
     doc.save('ocupacion-flota-por-cliente.pdf')
@@ -1238,9 +1385,9 @@ export const ReportsPage = () => {
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Tabla dinámica</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Explorador de dominios</h3>
               <p className="text-xs text-slate-500">
-                Filas: {occupancyDimensionLabelMap[occupancyGroupBy]} · Columnas: {occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy]}
+                Seleccioná un grupo en el gráfico y después una categoría para ver dominios y abrir la ficha de flota.
               </p>
             </div>
             {occupancyPivot.rows.length > 8 ? (
@@ -1262,102 +1409,118 @@ export const ReportsPage = () => {
               </p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cobertura</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Grupo activo</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {visibleOccupancyRows.length} de {occupancyPivot.totalGroups} grupos visibles
+                {activeOccupancyRow?.label ?? 'Ninguno seleccionado'}
               </p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Filtros activos</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Categoría activa</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {occupancyClientFilter === 'ALL' && occupancyTypeFilter === 'ALL' && occupancyStatusFilter === 'ALL'
-                  ? 'Sin filtros'
-                  : 'Vista acotada'}
+                {activeOccupancyBreakdownLabel ?? 'Elegí una categoría'}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {visibleOccupancyRows.length === 0 ? (
-              <p className="text-sm text-slate-500">No hay unidades que coincidan con los criterios elegidos.</p>
-            ) : (
-              visibleOccupancyRows.map((row) => (
-                <article key={row.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base font-bold text-slate-900">{row.label}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {row.unitCodes.slice(0, 6).join(' · ')}
-                        {row.unitCodes.length > 6 ? ` · +${row.unitCodes.length - 6} más` : ''}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        {row.total} unidades
-                      </span>
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                        {row.share.toFixed(1)}%
-                      </span>
-                    </div>
+          {!activeOccupancyRow ? (
+            <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+              <p className="text-sm font-semibold text-slate-700">Seleccioná un grupo del gráfico interactivo</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Por ejemplo, hacé click en INTERMEC y después elegí Pickup, Chasis, Tractor, etc.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-base font-bold text-slate-900">{activeOccupancyRow.label}</p>
+                    <p className="text-xs text-slate-500">
+                      {activeOccupancyRow.total} unidades · {activeOccupancyRow.share.toFixed(1)}% del total filtrado
+                    </p>
                   </div>
+                  <span className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-700">
+                    {occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy]}
+                  </span>
+                </div>
 
-                  <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-                    <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(6, Math.min(100, row.share))}%` }} />
-                  </div>
-
-                  <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {occupancyPivot.breakdownLabels.map((label, index) => {
-                      const value = row.breakdownCounts[label] ?? 0
-                      const localShare = row.total > 0 ? (value / row.total) * 100 : 0
-                      return (
-                        <div
-                          key={`${row.label}-${label}`}
-                          className={[
-                            'rounded-lg border px-3 py-2',
-                            value > 0 ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/40 opacity-60',
-                          ].join(' ')}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: palette[index % palette.length] }} />
-                              <span className="text-xs font-semibold text-slate-700">{label}</span>
-                            </div>
-                            <span className="text-xs font-bold text-slate-900">{value}</span>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {occupancyPivot.breakdownLabels.map((label, index) => {
+                    const value = activeOccupancyRow.breakdownCounts[label] ?? 0
+                    const localShare = activeOccupancyRow.total > 0 ? (value / activeOccupancyRow.total) * 100 : 0
+                    const isActiveBreakdown = label === activeOccupancyBreakdownLabel
+                    return (
+                      <button
+                        key={`${activeOccupancyRow.label}-${label}`}
+                        type="button"
+                        disabled={value <= 0}
+                        onClick={() => setActiveOccupancyBreakdownLabel(label)}
+                        className={[
+                          'rounded-lg border px-3 py-3 text-left transition',
+                          value <= 0
+                            ? 'cursor-not-allowed border-slate-100 bg-slate-50/40 opacity-50'
+                            : isActiveBreakdown
+                              ? 'border-amber-300 bg-white shadow-sm'
+                              : 'border-slate-200 bg-white hover:border-slate-300',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: palette[index % palette.length] }} />
+                            <span className="text-xs font-semibold text-slate-700">{label}</span>
                           </div>
-                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${Math.max(value > 0 ? 6 : 0, Math.min(100, localShare))}%`,
-                                backgroundColor: palette[index % palette.length],
-                              }}
-                            />
-                          </div>
-                          <p className="mt-1 text-[11px] text-slate-500">{localShare.toFixed(1)}% del grupo</p>
+                          <span className="text-xs font-bold text-slate-900">{value}</span>
                         </div>
-                      )
-                    })}
-                  </div>
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(value > 0 ? 6 : 0, Math.min(100, localShare))}%`,
+                              backgroundColor: palette[index % palette.length],
+                            }}
+                          />
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-500">{localShare.toFixed(1)}% del grupo</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
-                  <details className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                      Ver todas las patentes ({row.unitCodes.length})
-                    </summary>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {row.unitCodes.map((code) => (
-                        <span
-                          key={`${row.label}-${code}`}
-                          className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-600"
-                        >
-                          {code}
-                        </span>
-                      ))}
-                    </div>
-                  </details>
-                </article>
-              ))
-            )}
-          </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      {activeOccupancyBreakdownLabel ? `${activeOccupancyBreakdownLabel} · Dominios` : 'Dominios'}
+                    </h4>
+                    <p className="text-xs text-slate-500">Hacé click en un dominio para abrir su ficha en flota.</p>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                    {activeOccupancyDomains.length} dominio(s)
+                  </span>
+                </div>
+
+                {activeOccupancyDomains.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">No hay dominios disponibles para esa selección.</p>
+                ) : (
+                  <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {activeOccupancyDomains.map((unit) => (
+                      <Link
+                        key={`${unit.id}-${unit.code}`}
+                        to={buildFleetDetailPath(unit.id)}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-800 transition hover:border-amber-300 hover:bg-amber-50"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{unit.code}</span>
+                          <span className="text-xs text-amber-700">Abrir</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </article>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1664,6 +1827,14 @@ export const ReportsPage = () => {
     </section>
   )
 }
+
+
+
+
+
+
+
+
 
 
 
