@@ -926,14 +926,23 @@ export const ReportsPage = () => {
     doc.text(`Total de unidades: ${occupancyPivot.totalUnits} | Grupos: ${occupancyPivot.totalGroups}`, margin, cursorY)
     cursorY += 20
 
-    const chartImage = buildOccupancyPieChart(occupancyPivot.segments)
-    const topRows = occupancyPivot.rows.slice(0, 8)
-    const chartCardHeight = 240
+    const pdfSegments = occupancyPivot.rows.map((row, index) => ({
+      label: row.label,
+      value: row.total,
+      share: row.share,
+      color: palette[index % palette.length],
+    }))
+    const chartImage = buildOccupancyPieChart(pdfSegments)
+    const summaryColumns = occupancyPivot.rows.length > 8 ? 2 : 1
+    const rowsPerColumn = Math.max(1, Math.ceil(occupancyPivot.rows.length / summaryColumns))
+    const summaryRowHeight = 30
+    const chartCardHeight = Math.max(220, 56 + rowsPerColumn * summaryRowHeight)
+    const chartSize = Math.min(224, Math.max(176, chartCardHeight - 30))
     if (chartImage) {
       doc.setDrawColor('#cbd5e1')
       doc.setFillColor('#ffffff')
       doc.roundedRect(margin, cursorY, 260, chartCardHeight, 8, 8, 'FD')
-      doc.addImage(chartImage, 'PNG', margin + 18, cursorY + 18, 224, 224)
+      doc.addImage(chartImage, 'PNG', margin + (260 - chartSize) / 2, cursorY + (chartCardHeight - chartSize) / 2, chartSize, chartSize)
     }
 
     const summaryStartX = margin + 280
@@ -950,27 +959,35 @@ export const ReportsPage = () => {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor('#64748b')
-    doc.text('Top de participacion sobre la flota filtrada.', summaryStartX + 16, summaryY + 36)
+    doc.text('Participacion completa sobre la flota filtrada.', summaryStartX + 16, summaryY + 36)
 
     summaryY += 54
-    topRows.forEach((row, index) => {
-      const barWidth = Math.max(24, (summaryWidth - 200) * (row.share / 100))
+    const summaryInnerWidth = summaryWidth - 24
+    const summaryColumnGap = 16
+    const summaryColumnWidth =
+      (summaryInnerWidth - (summaryColumns - 1) * summaryColumnGap) / summaryColumns
+
+    occupancyPivot.rows.forEach((row, index) => {
+      const columnIndex = Math.floor(index / rowsPerColumn)
+      const rowIndex = index % rowsPerColumn
+      const cardX = summaryStartX + 12 + columnIndex * (summaryColumnWidth + summaryColumnGap)
+      const cardY = summaryY + rowIndex * summaryRowHeight
+      const barWidth = Math.max(18, (summaryColumnWidth - 150) * (row.share / 100))
       const color = palette[index % palette.length]
       doc.setFillColor('#f8fafc')
-      doc.roundedRect(summaryStartX + 12, summaryY, summaryWidth - 24, 22, 5, 5, 'F')
+      doc.roundedRect(cardX, cardY, summaryColumnWidth, 22, 5, 5, 'F')
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(9)
       doc.setTextColor('#0f172a')
-      doc.text(row.label, summaryStartX + 20, summaryY + 14)
+      doc.text(row.label, cardX + 8, cardY + 14)
       doc.setTextColor('#475569')
-      doc.text(`${row.total} unidades`, summaryStartX + summaryWidth - 108, summaryY + 14)
+      doc.text(`${row.total} unidades`, cardX + summaryColumnWidth - 92, cardY + 14)
       doc.setFillColor(color)
-      doc.roundedRect(summaryStartX + 18, summaryY + 26, barWidth, 7, 4, 4, 'F')
+      doc.roundedRect(cardX + 8, cardY + 26, barWidth, 7, 4, 4, 'F')
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
       doc.setTextColor('#64748b')
-      doc.text(`${row.share.toFixed(1)}%`, summaryStartX + summaryWidth - 48, summaryY + 31)
-      summaryY += 42
+      doc.text(`${row.share.toFixed(1)}%`, cardX + summaryColumnWidth - 40, cardY + 31)
     })
 
     cursorY += chartCardHeight + 22
