@@ -898,19 +898,19 @@ export const ReportsPage = () => {
   }
 
   const exportOccupancyPdf = () => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
-    const margin = 32
-    let cursorY = 36
+    const margin = 28
+    let cursorY = 28
 
     doc.setFillColor('#000000')
-    doc.rect(margin, cursorY, pageWidth - margin * 2, 26, 'F')
+    doc.roundedRect(margin, cursorY, pageWidth - margin * 2, 28, 6, 6, 'F')
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(15)
+    doc.setFontSize(16)
     doc.setTextColor('#facc15')
-    doc.text('REPORTE DINAMICO DE FLOTA', pageWidth / 2, cursorY + 17, { align: 'center' })
-    cursorY += 40
+    doc.text('REPORTE DINAMICO DE FLOTA', pageWidth / 2, cursorY + 19, { align: 'center' })
+    cursorY += 42
 
     doc.setTextColor('#475569')
     doc.setFont('helvetica', 'normal')
@@ -924,58 +924,56 @@ export const ReportsPage = () => {
     )
     cursorY += 14
     doc.text(`Total de unidades: ${occupancyPivot.totalUnits} | Grupos: ${occupancyPivot.totalGroups}`, margin, cursorY)
-    cursorY += 22
+    cursorY += 20
 
     const chartImage = buildOccupancyPieChart(occupancyPivot.segments)
+    const topRows = occupancyPivot.rows.slice(0, 8)
+    const chartCardHeight = 240
     if (chartImage) {
       doc.setDrawColor('#cbd5e1')
       doc.setFillColor('#ffffff')
-      doc.roundedRect(margin, cursorY, 220, 220, 8, 8, 'FD')
-      doc.addImage(chartImage, 'PNG', margin + 10, cursorY + 10, 200, 200)
+      doc.roundedRect(margin, cursorY, 260, chartCardHeight, 8, 8, 'FD')
+      doc.addImage(chartImage, 'PNG', margin + 18, cursorY + 18, 224, 224)
     }
 
-    const tableStartX = margin + 240
-    let tableY = cursorY
-    const visibleColumns = occupancyPivot.breakdownLabels.slice(0, 4)
-    const headers = [occupancyDimensionLabelMap[occupancyGroupBy], ...visibleColumns, 'Total']
-    const colWidths = [120, ...visibleColumns.map(() => 50), 46]
-    const rowHeight = 18
+    const summaryStartX = margin + 280
+    const summaryWidth = pageWidth - summaryStartX - margin
+    let summaryY = cursorY
 
+    doc.setDrawColor('#cbd5e1')
+    doc.setFillColor('#ffffff')
+    doc.roundedRect(summaryStartX, summaryY, summaryWidth, chartCardHeight, 8, 8, 'FD')
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor('#ffffff')
-    doc.setFillColor('#0f172a')
-    let currentX = tableStartX
-    headers.forEach((header, index) => {
-      const width = colWidths[index] ?? 50
-      doc.rect(currentX, tableY, width, rowHeight, 'F')
-      doc.text(header, currentX + 4, tableY + 12)
-      currentX += width
-    })
-    tableY += rowHeight
-
+    doc.setFontSize(12)
+    doc.setTextColor('#0f172a')
+    doc.text('Resumen por grupo', summaryStartX + 16, summaryY + 20)
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor('#111827')
-    occupancyPivot.rows.slice(0, 10).forEach((row) => {
-      if (tableY > pageHeight - 40) {
-        doc.addPage()
-        tableY = 40
-      }
-      currentX = tableStartX
-      const cells = [
-        row.label,
-        ...visibleColumns.map((label) => String(row.breakdownCounts[label] ?? 0)),
-        String(row.total),
-      ]
-      cells.forEach((cell, index) => {
-        const width = colWidths[index] ?? 50
-        doc.setDrawColor('#cbd5e1')
-        doc.rect(currentX, tableY, width, rowHeight)
-        doc.text(cell, currentX + 4, tableY + 12)
-        currentX += width
-      })
-      tableY += rowHeight
+    doc.setFontSize(9)
+    doc.setTextColor('#64748b')
+    doc.text('Top de participacion sobre la flota filtrada.', summaryStartX + 16, summaryY + 36)
+
+    summaryY += 54
+    topRows.forEach((row, index) => {
+      const barWidth = Math.max(24, (summaryWidth - 200) * (row.share / 100))
+      const color = palette[index % palette.length]
+      doc.setFillColor('#f8fafc')
+      doc.roundedRect(summaryStartX + 12, summaryY, summaryWidth - 24, 22, 5, 5, 'F')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.setTextColor('#0f172a')
+      doc.text(row.label, summaryStartX + 20, summaryY + 14)
+      doc.setTextColor('#475569')
+      doc.text(`${row.total} unidades`, summaryStartX + summaryWidth - 108, summaryY + 14)
+      doc.setFillColor(color)
+      doc.roundedRect(summaryStartX + 18, summaryY + 26, barWidth, 7, 4, 4, 'F')
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor('#64748b')
+      doc.text(`${row.share.toFixed(1)}%`, summaryStartX + summaryWidth - 48, summaryY + 31)
+      summaryY += 42
     })
+
+    cursorY += chartCardHeight + 22
 
     const occupancyUnitRows = filteredOccupancyUnits
       .slice()
@@ -1007,10 +1005,10 @@ export const ReportsPage = () => {
         location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
       }))
 
-    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Empresa', 'Cliente', 'Tipo', 'Ubicación']
-    const detailColumnWidths = [60, 56, 62, 34, 78, 74, 74, 62]
-    const detailFontSize = 7
-    const detailRowHeight = 18
+    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación']
+    const detailColumnWidths = [72, 82, 96, 42, 112, 112, 124, 120]
+    const detailFontSize = 8
+    const detailRowHeight = 20
     const tableWidth = detailColumnWidths.reduce((sum, width) => sum + width, 0)
     const drawDetailHeader = (y: number) => {
       let x = margin
@@ -1027,19 +1025,19 @@ export const ReportsPage = () => {
     }
     const cropCell = (value: string, width: number) => {
       const safeValue = value || '-'
-      const maxChars = Math.max(6, Math.floor(width / 5.4))
+      const maxChars = Math.max(8, Math.floor(width / 5.8))
       return safeValue.length > maxChars ? `${safeValue.slice(0, maxChars - 1)}…` : safeValue
     }
 
     doc.addPage()
-    cursorY = 42
+    cursorY = 28
     doc.setFillColor('#000000')
-    doc.rect(margin, cursorY, pageWidth - margin * 2, 24, 'F')
+    doc.roundedRect(margin, cursorY, pageWidth - margin * 2, 26, 6, 6, 'F')
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(13)
+    doc.setFontSize(14)
     doc.setTextColor('#facc15')
-    doc.text('DETALLE DE DOMINIOS', pageWidth / 2, cursorY + 16, { align: 'center' })
-    cursorY += 38
+    doc.text('DETALLE DE DOMINIOS', pageWidth / 2, cursorY + 17, { align: 'center' })
+    cursorY += 40
     doc.setTextColor('#475569')
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
@@ -1053,32 +1051,59 @@ export const ReportsPage = () => {
     let detailY = cursorY
     let currentGroup = ''
     let currentBreakdown = ''
-    drawDetailHeader(detailY)
-    detailY += detailRowHeight
+    let rowIndexWithinSection = 0
 
     occupancyUnitRows.forEach((row) => {
       const needsGroupHeader = row.groupLabel !== currentGroup || row.breakdownLabel !== currentBreakdown
       if (needsGroupHeader) {
-        if (detailY > pageHeight - 70) {
+        if (detailY > pageHeight - 92) {
           doc.addPage()
-          detailY = 42
-          drawDetailHeader(detailY)
-          detailY += detailRowHeight
+          detailY = 28
+          doc.setFillColor('#000000')
+          doc.roundedRect(margin, detailY, pageWidth - margin * 2, 26, 6, 6, 'F')
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(14)
+          doc.setTextColor('#facc15')
+          doc.text('DETALLE DE DOMINIOS', pageWidth / 2, detailY + 17, { align: 'center' })
+          detailY += 40
         }
         doc.setFont('helvetica', 'bold')
-        doc.setFontSize(8)
+        doc.setFontSize(10)
         doc.setTextColor('#0f172a')
-        doc.setFillColor('#f8fafc')
-        doc.rect(margin, detailY, tableWidth, 16, 'F')
-        doc.text(`${row.groupLabel} · ${row.breakdownLabel}`, margin + 4, detailY + 11)
-        detailY += 16
+        doc.setFillColor('#fef3c7')
+        doc.roundedRect(margin, detailY, tableWidth, 20, 5, 5, 'F')
+        doc.text(`${row.groupLabel} · ${row.breakdownLabel}`, margin + 8, detailY + 13)
+        const sectionCount = occupancyUnitRows.filter(
+          (item) => item.groupLabel === row.groupLabel && item.breakdownLabel === row.breakdownLabel,
+        ).length
+        doc.setTextColor('#92400e')
+        doc.setFontSize(8)
+        doc.text(`${sectionCount} unidad(es)`, margin + tableWidth - 70, detailY + 13)
+        detailY += 26
+        drawDetailHeader(detailY)
+        detailY += detailRowHeight
         currentGroup = row.groupLabel
         currentBreakdown = row.breakdownLabel
+        rowIndexWithinSection = 0
       }
 
-      if (detailY > pageHeight - 36) {
+      if (detailY > pageHeight - 34) {
         doc.addPage()
-        detailY = 42
+        detailY = 28
+        doc.setFillColor('#000000')
+        doc.roundedRect(margin, detailY, pageWidth - margin * 2, 26, 6, 6, 'F')
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(14)
+        doc.setTextColor('#facc15')
+        doc.text('DETALLE DE DOMINIOS', pageWidth / 2, detailY + 17, { align: 'center' })
+        detailY += 40
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.setTextColor('#0f172a')
+        doc.setFillColor('#fef3c7')
+        doc.roundedRect(margin, detailY, tableWidth, 20, 5, 5, 'F')
+        doc.text(`${currentGroup} · ${currentBreakdown}`, margin + 8, detailY + 13)
+        detailY += 26
         drawDetailHeader(detailY)
         detailY += detailRowHeight
       }
@@ -1091,11 +1116,13 @@ export const ReportsPage = () => {
       values.forEach((value, index) => {
         const width = detailColumnWidths[index] ?? 60
         doc.setDrawColor('#cbd5e1')
-        doc.rect(x, detailY, width, detailRowHeight)
+        doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
+        doc.rect(x, detailY, width, detailRowHeight, 'FD')
         doc.text(cropCell(value, width), x + 3, detailY + 12)
         x += width
       })
       detailY += detailRowHeight
+      rowIndexWithinSection += 1
     })
 
     doc.save('ocupacion-flota-por-cliente.pdf')
