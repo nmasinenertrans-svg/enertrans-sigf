@@ -12,7 +12,6 @@ import {
   normalizeFleetUnit,
 } from '../services/fleetService'
 import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersService'
-import { jsPDF } from 'jspdf'
 import type { FleetUnit } from '../../../types/domain'
 import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
 
@@ -674,6 +673,7 @@ export const FleetDetailPage = () => {
 
     try {
       setIsQrPdfLoading(true)
+      const { jsPDF } = await import('jspdf')
       const qrDataUrl = await fetchImageAsDataUrl(buildQrImageUrl(qrProfileUrl))
       const doc = new jsPDF({
         orientation: 'portrait',
