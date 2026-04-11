@@ -1,7 +1,7 @@
+import { FormRow } from '../../../components/shared/FormRow'
 import type { ExternalRequest, Supplier, WorkOrder } from '../../../types/domain'
 import type { RepairFormData, RepairFormErrors, RepairFormField } from '../types'
 import { calculateInvoicedFromSurcharge, calculateMargin, isExternalRequestEligibleForRepair } from '../services/repairsService'
-import type { ReactNode } from 'react'
 
 interface RepairsFormProps {
   workOrders: WorkOrder[]
@@ -19,19 +19,6 @@ interface RepairsFormProps {
 const inputClassName =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-amber-400'
 
-interface FormRowProps {
-  label: string
-  errorMessage?: string
-  children: ReactNode
-}
-
-const FormRow = ({ label, errorMessage, children }: FormRowProps) => (
-  <label className="flex flex-col gap-2">
-    <span className="text-sm font-semibold text-slate-700">{label}</span>
-    {children}
-    {errorMessage ? <span className="text-xs font-semibold text-rose-700">{errorMessage}</span> : null}
-  </label>
-)
 
 const toCurrency = (value: string | undefined): 'ARS' | 'USD' => (value === 'USD' ? 'USD' : 'ARS')
 

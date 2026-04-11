@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
+import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { TaskPriority, TaskRecord, TaskStatus } from '../../../types/domain'
@@ -63,7 +64,6 @@ export const TasksPage = () => {
   } = useAppContext()
 
   const [tasks, setTasks] = useState<TaskRecord[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [formData, setFormData] = useState<TaskFormData>(createEmptyForm)
@@ -81,24 +81,19 @@ export const TasksPage = () => {
     [users],
   )
 
-  const loadTasks = useCallback(async () => {
-    if (!canViewTasks) {
-      return
-    }
-    setIsLoading(true)
-    try {
-      const response = await apiRequest<TaskRecord[]>('/tasks')
-      setTasks(Array.isArray(response) ? response : [])
-    } catch {
-      setAppError('No se pudieron cargar las tareas.')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [canViewTasks, setAppError])
-
-  useEffect(() => {
-    loadTasks()
-  }, [loadTasks])
+  const { isLoading } = useAsyncLoader(
+    async (getMounted) => {
+      if (!canViewTasks) return
+      try {
+        const response = await apiRequest<TaskRecord[]>('/tasks')
+        if (!getMounted()) return
+        setTasks(Array.isArray(response) ? response : [])
+      } catch {
+        setAppError('No se pudieron cargar las tareas.')
+      }
+    },
+    [canViewTasks, setAppError],
+  )
 
   const resetForm = () => {
     setEditingTaskId(null)

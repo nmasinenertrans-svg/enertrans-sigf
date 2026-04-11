@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react'
+﻿import { FormRow } from '../../../components/shared/FormRow'
 import type { FleetFormData, FleetFormErrors, FleetFormField } from '../types'
 import {
   fleetOperationalStatuses,
@@ -22,19 +22,6 @@ interface FleetUnitFormProps {
   semiTrailerOptions?: Array<{ id: string; label: string }>
 }
 
-interface InputRowProps {
-  label: string
-  errorMessage?: string
-  children: ReactNode
-}
-
-const InputRow = ({ label, errorMessage, children }: InputRowProps) => (
-  <label className="flex flex-col gap-2">
-    <span className="text-sm font-semibold text-slate-700">{label}</span>
-    {children}
-    {errorMessage ? <span className="text-xs font-semibold text-rose-700">{errorMessage}</span> : null}
-  </label>
-)
 
 const inputClassName =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-amber-400 disabled:bg-slate-100 disabled:text-slate-500'
@@ -105,34 +92,34 @@ export const FleetUnitForm = ({
           onSubmit()
         }}
       >
-        <InputRow label={internalCodeLabel} errorMessage={errors.internalCode}>
+        <FormRow label={internalCodeLabel} errorMessage={errors.internalCode}>
           <input
             value={formData.internalCode}
             onChange={(event) => onFieldChange('internalCode', event.target.value)}
             className={inputClassName}
             placeholder={internalCodePlaceholder}
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Marca" errorMessage={errors.brand}>
+        <FormRow label="Marca" errorMessage={errors.brand}>
           <input
             value={formData.brand}
             onChange={(event) => onFieldChange('brand', event.target.value)}
             className={inputClassName}
             placeholder="Ej: Mercedes-Benz"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Modelo" errorMessage={errors.model}>
+        <FormRow label="Modelo" errorMessage={errors.model}>
           <input
             value={formData.model}
             onChange={(event) => onFieldChange('model', event.target.value)}
             className={inputClassName}
             placeholder="Ej: Atego 1729"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Año" errorMessage={errors.year}>
+        <FormRow label="Año" errorMessage={errors.year}>
           <input
             type="number"
             min={1900}
@@ -141,36 +128,36 @@ export const FleetUnitForm = ({
             className={inputClassName}
             placeholder="Ej: 2022"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Cliente" errorMessage={errors.clientName}>
+        <FormRow label="Cliente" errorMessage={errors.clientName}>
           <input
             value={formData.clientName}
             onChange={(event) => onFieldChange('clientName', event.target.value)}
             className={inputClassName}
             placeholder="Ej: YPF"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Ubicacion" errorMessage={errors.location}>
+        <FormRow label="Ubicacion" errorMessage={errors.location}>
           <input
             value={formData.location}
             onChange={(event) => onFieldChange('location', event.target.value)}
             className={inputClassName}
             placeholder="Ej: Neuquen"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Empresa propietaria" errorMessage={errors.ownerCompany}>
+        <FormRow label="Empresa propietaria" errorMessage={errors.ownerCompany}>
           <input
             value={formData.ownerCompany}
             onChange={(event) => onFieldChange('ownerCompany', event.target.value)}
             className={inputClassName}
             placeholder="Ej: Enertrans Logistics"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Tipo de unidad" errorMessage={errors.unitType}>
+        <FormRow label="Tipo de unidad" errorMessage={errors.unitType}>
           <select
             value={formData.unitType}
             onChange={(event) => {
@@ -196,9 +183,9 @@ export const FleetUnitForm = ({
               </option>
             ))}
           </select>
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Estado operativo">
+        <FormRow label="Estado operativo">
           <select
             value={formData.operationalStatus}
             onChange={(event) => onFieldChange('operationalStatus', event.target.value as FleetOperationalStatus)}
@@ -216,36 +203,36 @@ export const FleetUnitForm = ({
               La unidad queda fuera de servicio si faltan o vencen RTO y seguro. El izaje aplica solo si tiene hidrogrua.
             </span>
           ) : null}
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Configuracion" errorMessage={errors.configurationNotes}>
+        <FormRow label="Configuracion" errorMessage={errors.configurationNotes}>
           <input
             value={formData.configurationNotes}
             onChange={(event) => onFieldChange('configurationNotes', event.target.value)}
             className={inputClassName}
             placeholder="Configuracion tecnica"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="N° chasis" errorMessage={errors.chassisNumber}>
+        <FormRow label="N° chasis" errorMessage={errors.chassisNumber}>
           <input
             value={formData.chassisNumber}
             onChange={(event) => onFieldChange('chassisNumber', event.target.value)}
             className={inputClassName}
             placeholder="Ej: CHS-98321"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="N° motor" errorMessage={errors.engineNumber}>
+        <FormRow label="N° motor" errorMessage={errors.engineNumber}>
           <input
             value={formData.engineNumber}
             onChange={(event) => onFieldChange('engineNumber', event.target.value)}
             className={inputClassName}
             placeholder="Ej: MTR-42210"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Tara (kg)" errorMessage={errors.tareWeightKg}>
+        <FormRow label="Tara (kg)" errorMessage={errors.tareWeightKg}>
           <input
             type="number"
             min={0}
@@ -254,9 +241,9 @@ export const FleetUnitForm = ({
             className={inputClassName}
             placeholder="Ej: 5000"
           />
-        </InputRow>
+        </FormRow>
 
-        <InputRow label="Carga maxima (kg)" errorMessage={errors.maxLoadKg}>
+        <FormRow label="Carga maxima (kg)" errorMessage={errors.maxLoadKg}>
           <input
             type="number"
             min={0}
@@ -265,7 +252,7 @@ export const FleetUnitForm = ({
             className={inputClassName}
             placeholder="Ej: 12000"
           />
-        </InputRow>
+        </FormRow>
 
         <div
           className="col-span-1 mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:col-span-2"
@@ -300,32 +287,32 @@ export const FleetUnitForm = ({
 
         {showHydroCraneFields ? (
           <>
-            <InputRow label="Marca hidrogrua" errorMessage={errors.hydroCraneBrand}>
+            <FormRow label="Marca hidrogrua" errorMessage={errors.hydroCraneBrand}>
               <input
                 value={formData.hydroCraneBrand}
                 onChange={(event) => onFieldChange('hydroCraneBrand', event.target.value)}
                 className={inputClassName}
                 placeholder="Marca"
               />
-            </InputRow>
+            </FormRow>
 
-            <InputRow label="Modelo hidrogrua" errorMessage={errors.hydroCraneModel}>
+            <FormRow label="Modelo hidrogrua" errorMessage={errors.hydroCraneModel}>
               <input
                 value={formData.hydroCraneModel}
                 onChange={(event) => onFieldChange('hydroCraneModel', event.target.value)}
                 className={inputClassName}
                 placeholder="Modelo"
               />
-            </InputRow>
+            </FormRow>
 
-            <InputRow label="N° serie hidrogrua" errorMessage={errors.hydroCraneSerialNumber}>
+            <FormRow label="N° serie hidrogrua" errorMessage={errors.hydroCraneSerialNumber}>
               <input
                 value={formData.hydroCraneSerialNumber}
                 onChange={(event) => onFieldChange('hydroCraneSerialNumber', event.target.value)}
                 className={inputClassName}
                 placeholder="Numero de serie"
               />
-            </InputRow>
+            </FormRow>
           </>
         ) : null}
 
@@ -372,7 +359,7 @@ export const FleetUnitForm = ({
 
       {formData.hasSemiTrailer ? (
         <>
-            <InputRow label="Semirremolque existente" errorMessage={errors.semiTrailerUnitId}>
+            <FormRow label="Semirremolque existente" errorMessage={errors.semiTrailerUnitId}>
               <select
                 value={formData.semiTrailerUnitId}
                 onChange={(event) => onFieldChange('semiTrailerUnitId', event.target.value)}
@@ -385,38 +372,38 @@ export const FleetUnitForm = ({
                   </option>
                 ))}
               </select>
-            </InputRow>
+            </FormRow>
 
             {showSemiTrailerFields ? (
               <>
-                <InputRow label="Dominio semirremolque" errorMessage={errors.semiTrailerLicensePlate}>
+                <FormRow label="Dominio semirremolque" errorMessage={errors.semiTrailerLicensePlate}>
                   <input
                     value={formData.semiTrailerLicensePlate}
                     onChange={(event) => onFieldChange('semiTrailerLicensePlate', event.target.value)}
                     className={inputClassName}
                     placeholder="Dominio"
                   />
-                </InputRow>
+                </FormRow>
 
-                <InputRow label="Marca semirremolque" errorMessage={errors.semiTrailerBrand}>
+                <FormRow label="Marca semirremolque" errorMessage={errors.semiTrailerBrand}>
                   <input
                     value={formData.semiTrailerBrand}
                     onChange={(event) => onFieldChange('semiTrailerBrand', event.target.value)}
                     className={inputClassName}
                     placeholder="Marca"
                   />
-                </InputRow>
+                </FormRow>
 
-                <InputRow label="Modelo semirremolque" errorMessage={errors.semiTrailerModel}>
+                <FormRow label="Modelo semirremolque" errorMessage={errors.semiTrailerModel}>
                   <input
                     value={formData.semiTrailerModel}
                     onChange={(event) => onFieldChange('semiTrailerModel', event.target.value)}
                     className={inputClassName}
                     placeholder="Modelo"
                   />
-                </InputRow>
+                </FormRow>
 
-                <InputRow label="Anio semirremolque" errorMessage={errors.semiTrailerYear}>
+                <FormRow label="Anio semirremolque" errorMessage={errors.semiTrailerYear}>
                   <input
                     type="number"
                     min={1900}
@@ -425,16 +412,16 @@ export const FleetUnitForm = ({
                     className={inputClassName}
                     placeholder="Ej: 2022"
                   />
-                </InputRow>
+                </FormRow>
 
-                <InputRow label="N° chasis semirremolque" errorMessage={errors.semiTrailerChassisNumber}>
+                <FormRow label="N° chasis semirremolque" errorMessage={errors.semiTrailerChassisNumber}>
                   <input
                     value={formData.semiTrailerChassisNumber}
                     onChange={(event) => onFieldChange('semiTrailerChassisNumber', event.target.value)}
                     className={inputClassName}
                     placeholder="Numero de chasis"
                   />
-                </InputRow>
+                </FormRow>
               </>
             ) : null}
         </>

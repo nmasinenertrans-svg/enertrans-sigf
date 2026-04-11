@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { BackLink } from '../../../components/shared/BackLink'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -82,42 +82,34 @@ export const SupplierDetailPage = () => {
   } = useAppContext()
 
   const [isLoading, setIsLoading] = useState(false)
+  const mountedRef = useRef(true)
 
   const supplier = useMemo(() => suppliers.find((item) => item.id === supplierId) ?? null, [suppliers, supplierId])
 
-  useEffect(() => {
-    if (!supplierId || supplier) {
-      return
-    }
-
-    let isMounted = true
+  const fetchSupplier = useCallback(async () => {
+    if (!supplierId || supplier) return
     setIsLoading(true)
-
-    void apiRequest<Supplier>(`/suppliers/${supplierId}`)
-      .then((response) => {
-        if (!isMounted) {
-          return
-        }
-        const nextSuppliers = suppliers.some((item) => item.id === response.id)
-          ? suppliers.map((item) => (item.id === response.id ? response : item))
-          : [response, ...suppliers]
-        setSuppliers(nextSuppliers)
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAppError('No se pudo cargar la ficha del proveedor.')
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      })
-
-    return () => {
-      isMounted = false
+    try {
+      const response = await apiRequest<Supplier>(`/suppliers/${supplierId}`)
+      if (!mountedRef.current) return
+      const nextSuppliers = suppliers.some((item) => item.id === response.id)
+        ? suppliers.map((item) => (item.id === response.id ? response : item))
+        : [response, ...suppliers]
+      setSuppliers(nextSuppliers)
+    } catch {
+      if (mountedRef.current) setAppError('No se pudo cargar la ficha del proveedor.')
+    } finally {
+      if (mountedRef.current) setIsLoading(false)
     }
   }, [supplierId, supplier, suppliers, setSuppliers, setAppError])
+
+  useEffect(() => {
+    mountedRef.current = true
+    void fetchSupplier()
+    return () => {
+      mountedRef.current = false
+    }
+  }, [fetchSupplier])
 
   const repairMetrics = useMemo(() => {
     if (!supplier) {

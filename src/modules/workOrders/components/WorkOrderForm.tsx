@@ -1,4 +1,5 @@
-﻿import { useMemo, useState, type ReactNode } from 'react'
+﻿import { useMemo, useState } from 'react'
+import { FormRow } from '../../../components/shared/FormRow'
 import type { FleetUnit, InventoryItem } from '../../../types/domain'
 import type { WorkOrderFormData, WorkOrderFormErrors, WorkOrderFormField } from '../types'
 
@@ -17,19 +18,6 @@ interface WorkOrderFormProps {
 const inputClassName =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-amber-400'
 
-interface FormRowProps {
-  label: string
-  errorMessage?: string
-  children: ReactNode
-}
-
-const FormRow = ({ label, errorMessage, children }: FormRowProps) => (
-  <label className="flex flex-col gap-2">
-    <span className="text-sm font-semibold text-slate-700">{label}</span>
-    {children}
-    {errorMessage ? <span className="text-xs font-semibold text-rose-700">{errorMessage}</span> : null}
-  </label>
-)
 
 export const WorkOrderForm = ({
   fleetUnits,
