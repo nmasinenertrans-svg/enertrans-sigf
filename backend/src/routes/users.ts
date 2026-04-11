@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import { hashPassword } from '../utils/password.js'
+import { getErrorCode } from '../utils/errors.js'
 
 const router = Router()
 const LAST_LOGIN_BY_USER_KEY = '__lastLoginByUser'
@@ -172,8 +173,8 @@ router.delete('/:id', async (req, res) => {
   try {
     await prisma.user.delete({ where: { id: req.params.id } })
     return res.status(204).send()
-  } catch (error: any) {
-    if (error?.code === 'P2003') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2003') {
       return res.status(409).json({
         message:
           'No se puede eliminar este usuario porque tiene historial asociado (inspecciones/tareas).',

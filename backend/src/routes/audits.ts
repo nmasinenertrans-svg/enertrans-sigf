@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '../db.js'
+import { getErrorCode } from '../utils/errors.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { supabase, supabaseBucket } from '../storage/supabase.js'
 
@@ -403,16 +404,16 @@ router.post('/', async (req, res) => {
     }
 
     return res.status(201).json(item)
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2002') {
       // Do not mask collisions by returning a record looked up by code:
       // that can make the UI show an old audit when creating a new one.
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
-    if (error?.code === 'P2003') {
+    if (getErrorCode(error) === 'P2003') {
       return res.status(400).json({ message: 'Referencia invalida. Verifica la unidad.' })
     }
-    if (error?.code === 'P2025') {
+    if (getErrorCode(error) === 'P2025') {
       return res.status(404).json({ message: 'Unidad no encontrada.' })
     }
     console.error('Error creando inspeccion:', error)

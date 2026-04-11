@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma, runWithSchemaFailover } from '../db.js'
+import { getErrorCode } from '../utils/errors.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { runCrmAutomations } from '../services/crmAutomations.js'
 
@@ -444,11 +445,11 @@ router.post('/deals/:id/convert-client', requirePermission('CRM', 'edit'), async
     )
 
     return res.json(result)
-  } catch (error: any) {
-    if (error?.code === 'NOT_FOUND') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'NOT_FOUND') {
       return res.status(404).json({ message: 'Oportunidad no encontrada.' })
     }
-    if (error?.code === 'DEAL_COMPANY_REQUIRED') {
+    if (getErrorCode(error) === 'DEAL_COMPANY_REQUIRED') {
       return res.status(400).json({ message: 'La oportunidad no tiene empresa valida para convertir.' })
     }
     console.error('CRM convert client error:', error)
@@ -799,8 +800,8 @@ router.post('/deals/:id/activities', requirePermission('CRM', 'edit'), async (re
     )
 
     return res.status(201).json(created)
-  } catch (error: any) {
-    if (error?.code === 'NOT_FOUND') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'NOT_FOUND') {
       return res.status(404).json({ message: 'Oportunidad no encontrada.' })
     }
     console.error('CRM POST activity error:', error)
@@ -858,8 +859,8 @@ router.delete('/deals/:id', requirePermission('CRM', 'delete'), async (req, res)
     }
     await runWithSchemaFailover(() => prisma.crmDeal.delete({ where: { id: dealId } }))
     return res.status(204).send()
-  } catch (error: any) {
-    if (error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2025') {
       return res.status(404).json({ message: 'Oportunidad no encontrada.' })
     }
     console.error('CRM DELETE deal error:', error)

@@ -1,6 +1,7 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
 import { getActiveDbSchema, prisma, runWithSchemaFailover } from '../db.js'
+import { getErrorCode } from '../utils/errors.js'
 
 const router = Router()
 
@@ -573,9 +574,9 @@ router.post('/', async (req, res) => {
       },
     })
     return res.status(201).json(unit)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Fleet POST error:', error)
-    if (error?.code === 'P2002') {
+    if (getErrorCode(error) === 'P2002') {
       return res.status(409).json({ message: 'Unidad duplicada.' })
     }
     return res.status(500).json({ message: 'No se pudo crear la unidad.' })
@@ -638,7 +639,7 @@ router.patch('/:id', async (req, res) => {
       },
     })
     return res.json(unit)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Fleet PATCH error:', error)
     return res.status(500).json({ message: 'No se pudo actualizar la unidad.' })
   }

@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
+import { getErrorCode } from '../utils/errors.js'
 
 const router = Router()
 const WORK_ORDER_DUPLICATE_WINDOW_MS = 15 * 60 * 1000
@@ -99,8 +100,8 @@ router.post('/', async (req, res) => {
       },
     })
     return res.status(201).json(item)
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2002') {
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
     return res.status(500).json({ message: 'No se pudo crear la OT.' })
@@ -130,8 +131,8 @@ router.patch('/:id', async (req, res) => {
     })
 
     return res.json(item)
-  } catch (error: any) {
-    if (error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2025') {
       return res.status(404).json({ message: 'Orden de trabajo no encontrada.' })
     }
     console.error('WorkOrder PATCH error:', error)

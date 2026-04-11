@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma, runWithSchemaFailover } from '../db.js'
+import { getErrorCode } from '../utils/errors.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { pushUserNotifications, resolveOperationalNotificationRecipients } from '../services/userNotifications.js'
 
@@ -430,7 +431,7 @@ router.get('/', async (_req, res) => {
       prisma.externalRequest.findMany({ orderBy: { createdAt: 'desc' } }),
     )
     return res.json(fallbackItems)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('ExternalRequest GET error:', error)
     const recovered = await recoveryPromise
     if (recovered.length > 0) {
@@ -452,10 +453,10 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     res.status(201).json(item)
     scheduleExternalRequestCreatedNotification(req, item)
     return
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('ExternalRequest CREATE error:', error)
 
-    const isExternalRequestColumnMismatch = error?.code === 'P2022'
+    const isExternalRequestColumnMismatch = getErrorCode(error) === 'P2022'
     if (isExternalRequestColumnMismatch) {
       try {
         const legacyData = toLegacyCreateData(parsed.data)
@@ -495,10 +496,10 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       console.error('ExternalRequest CREATE existing lookup error:', lookupError)
     }
 
-    if (error?.code === 'P2002') {
+    if (getErrorCode(error) === 'P2002') {
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
-    if (error?.code === 'P2003') {
+    if (getErrorCode(error) === 'P2003') {
       return res.status(409).json({ message: 'Unidad no valida.' })
     }
     return res.status(500).json({ message: 'No se pudo crear la nota de pedido.' })
@@ -523,8 +524,8 @@ router.patch('/:id', async (req, res) => {
       return prisma.externalRequest.update({ where: { id: req.params.id }, data })
     })
     return res.json(item)
-  } catch (error: any) {
-    if (error?.code === 'NOT_FOUND' || error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'NOT_FOUND' || getErrorCode(error) === 'P2025') {
       return res.status(404).json({ message: 'La nota de pedido no existe.' })
     }
     console.error('ExternalRequest PATCH error:', error)
@@ -552,11 +553,11 @@ router.delete('/:id', async (req, res) => {
       await prisma.externalRequest.delete({ where: { id: req.params.id } })
     })
     return res.status(204).send()
-  } catch (error: any) {
-    if (error?.code === 'NOT_FOUND' || error?.code === 'P2025') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'NOT_FOUND' || getErrorCode(error) === 'P2025') {
       return res.status(404).json({ message: 'La nota de pedido no existe.' })
     }
-    if (error?.code === 'REQUEST_LINKED') {
+    if (getErrorCode(error) === 'REQUEST_LINKED') {
       return res.status(409).json({ message: 'No se puede eliminar una NDP ya vinculada a una reparacion.' })
     }
     console.error('ExternalRequest DELETE error:', error)

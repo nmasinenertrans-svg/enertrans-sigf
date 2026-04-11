@@ -1,6 +1,7 @@
 ﻿import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
+import { getErrorCode } from '../utils/errors.js'
 
 const router = Router()
 
@@ -29,8 +30,8 @@ router.post('/', async (req, res) => {
   try {
     const item = await prisma.inventoryItem.create({ data: parsed.data })
     return res.status(201).json(item)
-  } catch (error: any) {
-    if (error?.code === 'P2002') {
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2002') {
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
     return res.status(500).json({ message: 'No se pudo crear el item.' })

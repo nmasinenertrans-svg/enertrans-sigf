@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { prisma, runWithSchemaFailover } from '../db.js'
+import { getErrorCode } from '../utils/errors.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { pushUserNotifications, resolveOperationalNotificationRecipients } from '../services/userNotifications.js'
 
@@ -741,11 +742,11 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     })
 
     return res.status(201).json(legacyItem)
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof RepairRequestError) {
       return res.status(error.status).json({ message: error.message })
     }
-    if (error?.code === 'P2002') {
+    if (getErrorCode(error) === 'P2002') {
       return res.status(409).json({ message: 'Registro duplicado.' })
     }
     if (isMissingOperationalColumnError(error)) {
