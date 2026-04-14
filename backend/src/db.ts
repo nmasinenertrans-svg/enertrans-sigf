@@ -310,10 +310,15 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   )
 
   // CRM Comercial: tipos y tablas base para embudo y actividades.
+  // Nota: el check usa pg_namespace para asegurar que el tipo exista en el schema
+  // activo y no solo en public, evitando que ALTER TABLE falle al referenciar el tipo.
   await safeExecuteCompatSql(`
     DO $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CurrencyCode') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'CurrencyCode' AND n.nspname = current_schema()
+      ) THEN
         CREATE TYPE "CurrencyCode" AS ENUM ('ARS', 'USD');
       END IF;
     END
@@ -322,7 +327,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`
     DO $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmDealStage') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'CrmDealStage' AND n.nspname = current_schema()
+      ) THEN
         CREATE TYPE "CrmDealStage" AS ENUM ('LEAD', 'CONTACTED', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST');
       END IF;
     END
@@ -331,7 +339,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`
     DO $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmDealKind') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'CrmDealKind' AND n.nspname = current_schema()
+      ) THEN
         CREATE TYPE "CrmDealKind" AS ENUM ('TENDER', 'CONTRACT');
       END IF;
     END
@@ -340,7 +351,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`
     DO $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmActivityType') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'CrmActivityType' AND n.nspname = current_schema()
+      ) THEN
         CREATE TYPE "CrmActivityType" AS ENUM ('CALL', 'WHATSAPP', 'EMAIL', 'MEETING', 'TASK');
       END IF;
     END
@@ -349,7 +363,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`
     DO $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmActivityStatus') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'CrmActivityStatus' AND n.nspname = current_schema()
+      ) THEN
         CREATE TYPE "CrmActivityStatus" AS ENUM ('PENDING', 'DONE');
       END IF;
     END
@@ -358,7 +375,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`
     DO $$
     BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CrmDealUnitStatus') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = 'CrmDealUnitStatus' AND n.nspname = current_schema()
+      ) THEN
         CREATE TYPE "CrmDealUnitStatus" AS ENUM ('EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA');
       END IF;
     END
