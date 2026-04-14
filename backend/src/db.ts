@@ -165,7 +165,33 @@ const safeExecuteCompatSql = async (sql: string): Promise<void> => {
   try {
     await prisma.$executeRawUnsafe(qualified)
   } catch (error) {
-    console.warn('[DB] compat SQL warning:', error, '| sql:', qualified.trim().slice(0, 300))
+    console.warn('[DB] error en SQL de compatibilidad:', error, '| sql:', qualified.trim().slice(0, 300))
+  }
+}
+
+// Crea un tipo enum en el esquema activo de forma explícita (sin depender de current_schema() en SQL).
+// Usa el nombre del esquema activo desde TypeScript para evitar ambigüedad de search_path.
+const safeCreateEnumType = async (typeName: string, values: string[]): Promise<void> => {
+  const schema = getNormalizedActiveSchema()
+  const quotedSchema = quoteIdentifier(schema)
+  const quotedType = quoteIdentifier(typeName)
+  const enumValues = values.map(v => `'${v.replace(/'/g, "''")}'`).join(', ')
+  const sql = `
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE t.typname = '${typeName}' AND n.nspname = '${schema}'
+      ) THEN
+        CREATE TYPE ${quotedSchema}.${quotedType} AS ENUM (${enumValues});
+      END IF;
+    END
+    $$;
+  `
+  try {
+    await prisma.$executeRawUnsafe(sql)
+  } catch (error) {
+    console.warn(`[DB] error creando tipo ${schema}.${typeName}:`, error)
   }
 }
 
@@ -313,86 +339,14 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   // CRM Comercial: tipos y tablas base para embudo y actividades.
   // Nota: el check usa pg_namespace para asegurar que el tipo exista en el schema
   // activo y no solo en public, evitando que ALTER TABLE falle al referenciar el tipo.
-  // Create enum types with explicit schema qualification via EXECUTE format
-  // to avoid any search_path ambiguity (types may exist in public but not in the active schema).
-  await safeExecuteCompatSql(`
-    DO $$
-    DECLARE s TEXT := current_schema();
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'CurrencyCode' AND n.nspname = s
-      ) THEN
-        EXECUTE format('CREATE TYPE %I.%I AS ENUM (''ARS'', ''USD'')', s, 'CurrencyCode');
-      END IF;
-    END
-    $$;
-  `)
-  await safeExecuteCompatSql(`
-    DO $$
-    DECLARE s TEXT := current_schema();
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'CrmDealStage' AND n.nspname = s
-      ) THEN
-        EXECUTE format('CREATE TYPE %I.%I AS ENUM (''LEAD'', ''CONTACTED'', ''QUALIFICATION'', ''PROPOSAL'', ''NEGOTIATION'', ''WON'', ''LOST'')', s, 'CrmDealStage');
-      END IF;
-    END
-    $$;
-  `)
-  await safeExecuteCompatSql(`
-    DO $$
-    DECLARE s TEXT := current_schema();
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'CrmDealKind' AND n.nspname = s
-      ) THEN
-        EXECUTE format('CREATE TYPE %I.%I AS ENUM (''TENDER'', ''CONTRACT'')', s, 'CrmDealKind');
-      END IF;
-    END
-    $$;
-  `)
-  await safeExecuteCompatSql(`
-    DO $$
-    DECLARE s TEXT := current_schema();
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'CrmActivityType' AND n.nspname = s
-      ) THEN
-        EXECUTE format('CREATE TYPE %I.%I AS ENUM (''CALL'', ''WHATSAPP'', ''EMAIL'', ''MEETING'', ''TASK'')', s, 'CrmActivityType');
-      END IF;
-    END
-    $$;
-  `)
-  await safeExecuteCompatSql(`
-    DO $$
-    DECLARE s TEXT := current_schema();
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'CrmActivityStatus' AND n.nspname = s
-      ) THEN
-        EXECUTE format('CREATE TYPE %I.%I AS ENUM (''PENDING'', ''DONE'')', s, 'CrmActivityStatus');
-      END IF;
-    END
-    $$;
-  `)
-  await safeExecuteCompatSql(`
-    DO $$
-    DECLARE s TEXT := current_schema();
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'CrmDealUnitStatus' AND n.nspname = s
-      ) THEN
-        EXECUTE format('CREATE TYPE %I.%I AS ENUM (''EN_CONCURSO'', ''ADJUDICADA'', ''PERDIDA'', ''LIBERADA'')', s, 'CrmDealUnitStatus');
-      END IF;
-    END
-    $$;
-  `)
+  // Crea los tipos enum en el esquema activo usando el nombre desde TypeScript,
+  // evitando depender de current_schema() en SQL (que puede resolver a public si el tipo ya existe allí).
+  await safeCreateEnumType('CurrencyCode', ['ARS', 'USD'])
+  await safeCreateEnumType('CrmDealStage', ['LEAD', 'CONTACTED', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'])
+  await safeCreateEnumType('CrmDealKind', ['TENDER', 'CONTRACT'])
+  await safeCreateEnumType('CrmActivityType', ['CALL', 'WHATSAPP', 'EMAIL', 'MEETING', 'TASK'])
+  await safeCreateEnumType('CrmActivityStatus', ['PENDING', 'DONE'])
+  await safeCreateEnumType('CrmDealUnitStatus', ['EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA'])
   await safeExecuteCompatSql(`
     CREATE TABLE IF NOT EXISTS "CrmDeal" (
       "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
