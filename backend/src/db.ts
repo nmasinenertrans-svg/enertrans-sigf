@@ -766,6 +766,11 @@ const isSchemaMismatchError = (error: unknown): boolean => {
     return true
   }
   const message = String(maybeError.message ?? '').toLowerCase()
+  // PrismaClientUnknownRequestError from raw Postgres errors:
+  // 42704 = undefined_object (type not found), 42p01 = undefined_table
+  if (message.includes('42704') || message.includes('42p01')) {
+    return true
+  }
   return message.includes('does not exist in the current database') || message.includes('table') && message.includes('does not exist')
 }
 
