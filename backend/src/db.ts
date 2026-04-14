@@ -195,6 +195,41 @@ const safeCreateEnumType = async (typeName: string, values: string[]): Promise<v
   }
 }
 
+// Si una columna enum apunta al tipo de otro schema (ej: public."CrmDealStage" en vez de enertrans_prod."CrmDealStage"),
+// la migra al tipo del schema activo. Necesario cuando la tabla fue creada con search_path=public.
+const safeFixEnumColumn = async (tableName: string, columnName: string, typeName: string): Promise<void> => {
+  const schema = getNormalizedActiveSchema()
+  const quotedSchema = quoteIdentifier(schema)
+  const quotedTable = quoteIdentifier(tableName)
+  const quotedColumn = quoteIdentifier(columnName)
+  const quotedType = quoteIdentifier(typeName)
+  const sql = `
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM pg_attribute a
+        JOIN pg_class r ON r.oid = a.attrelid AND r.relname = '${tableName}'
+        JOIN pg_namespace rn ON rn.oid = r.relnamespace AND rn.nspname = '${schema}'
+        JOIN pg_type t ON t.oid = a.atttypid AND t.typname = '${typeName}'
+        JOIN pg_namespace tn ON tn.oid = t.typnamespace AND tn.nspname != '${schema}'
+        WHERE a.attname = '${columnName}' AND a.attnum > 0
+      ) THEN
+        ALTER TABLE ${quotedSchema}.${quotedTable}
+          ALTER COLUMN ${quotedColumn} TYPE ${quotedSchema}.${quotedType}
+          USING ${quotedColumn}::text::${quotedSchema}.${quotedType};
+      END IF;
+    END
+    $$;
+  `
+  try {
+    await prisma.$executeRawUnsafe(sql)
+    console.log(`[DB] columna ${schema}.${tableName}.${columnName} migrada a tipo ${schema}.${typeName}`)
+  } catch (error) {
+    console.warn(`[DB] error migrando columna ${tableName}.${columnName}:`, error)
+  }
+}
+
 const tableExistsInActiveSchema = async (tableName: string): Promise<boolean> => {
   const schema = getNormalizedActiveSchema()
   try {
@@ -347,6 +382,14 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeCreateEnumType('CrmActivityType', ['CALL', 'WHATSAPP', 'EMAIL', 'MEETING', 'TASK'])
   await safeCreateEnumType('CrmActivityStatus', ['PENDING', 'DONE'])
   await safeCreateEnumType('CrmDealUnitStatus', ['EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA'])
+  // Si la tabla ya existe con columnas enum apuntando al schema incorrecto (ej: public),
+  // las migramos al schema activo antes de crear/alterar la tabla.
+  await safeFixEnumColumn('CrmDeal', 'stage', 'CrmDealStage')
+  await safeFixEnumColumn('CrmDeal', 'dealKind', 'CrmDealKind')
+  await safeFixEnumColumn('CrmDeal', 'currency', 'CurrencyCode')
+  await safeFixEnumColumn('CrmActivity', 'type', 'CrmActivityType')
+  await safeFixEnumColumn('CrmActivity', 'status', 'CrmActivityStatus')
+  await safeFixEnumColumn('CrmDealUnit', 'status', 'CrmDealUnitStatus')
   await safeExecuteCompatSql(`
     CREATE TABLE IF NOT EXISTS "CrmDeal" (
       "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
