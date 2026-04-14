@@ -195,14 +195,24 @@ const safeCreateEnumType = async (typeName: string, values: string[]): Promise<v
   }
 }
 
-// Si una columna enum apunta al tipo de otro schema (ej: public."CrmDealStage" en vez de enertrans_prod."CrmDealStage"),
-// la migra al tipo del schema activo. Necesario cuando la tabla fue creada con search_path=public.
-const safeFixEnumColumn = async (tableName: string, columnName: string, typeName: string): Promise<void> => {
+// Si una columna enum apunta al tipo de otro schema (ej: public."CrmDealStage"),
+// la migra al tipo del schema activo con DROP DEFAULT → ALTER TYPE → SET DEFAULT.
+// El DEFAULT hay que dropearlo antes porque PostgreSQL no puede castear automáticamente
+// un valor default del tipo viejo al tipo nuevo.
+const safeFixEnumColumn = async (
+  tableName: string,
+  columnName: string,
+  typeName: string,
+  defaultValue?: string,
+): Promise<void> => {
   const schema = getNormalizedActiveSchema()
   const quotedSchema = quoteIdentifier(schema)
   const quotedTable = quoteIdentifier(tableName)
   const quotedColumn = quoteIdentifier(columnName)
   const quotedType = quoteIdentifier(typeName)
+  const restoreDefault = defaultValue
+    ? `ALTER TABLE ${quotedSchema}.${quotedTable} ALTER COLUMN ${quotedColumn} SET DEFAULT '${defaultValue.replace(/'/g, "''")}'::"${schema}"."${typeName}";`
+    : ''
   const sql = `
     DO $$
     BEGIN
@@ -215,9 +225,11 @@ const safeFixEnumColumn = async (tableName: string, columnName: string, typeName
         JOIN pg_namespace tn ON tn.oid = t.typnamespace AND tn.nspname != '${schema}'
         WHERE a.attname = '${columnName}' AND a.attnum > 0
       ) THEN
+        ALTER TABLE ${quotedSchema}.${quotedTable} ALTER COLUMN ${quotedColumn} DROP DEFAULT;
         ALTER TABLE ${quotedSchema}.${quotedTable}
           ALTER COLUMN ${quotedColumn} TYPE ${quotedSchema}.${quotedType}
           USING ${quotedColumn}::text::${quotedSchema}.${quotedType};
+        ${restoreDefault}
       END IF;
     END
     $$;
@@ -384,12 +396,12 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeCreateEnumType('CrmDealUnitStatus', ['EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA'])
   // Si la tabla ya existe con columnas enum apuntando al schema incorrecto (ej: public),
   // las migramos al schema activo antes de crear/alterar la tabla.
-  await safeFixEnumColumn('CrmDeal', 'stage', 'CrmDealStage')
-  await safeFixEnumColumn('CrmDeal', 'dealKind', 'CrmDealKind')
-  await safeFixEnumColumn('CrmDeal', 'currency', 'CurrencyCode')
+  await safeFixEnumColumn('CrmDeal', 'stage', 'CrmDealStage', 'LEAD')
+  await safeFixEnumColumn('CrmDeal', 'dealKind', 'CrmDealKind', 'TENDER')
+  await safeFixEnumColumn('CrmDeal', 'currency', 'CurrencyCode', 'ARS')
   await safeFixEnumColumn('CrmActivity', 'type', 'CrmActivityType')
-  await safeFixEnumColumn('CrmActivity', 'status', 'CrmActivityStatus')
-  await safeFixEnumColumn('CrmDealUnit', 'status', 'CrmDealUnitStatus')
+  await safeFixEnumColumn('CrmActivity', 'status', 'CrmActivityStatus', 'PENDING')
+  await safeFixEnumColumn('CrmDealUnit', 'status', 'CrmDealUnitStatus', 'EN_CONCURSO')
   await safeExecuteCompatSql(`
     CREATE TABLE IF NOT EXISTS "CrmDeal" (
       "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
