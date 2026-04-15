@@ -14,6 +14,7 @@ import {
   createEmptyExternalRequestFormData,
   createEmptyPartItemFormData,
   toExternalRequest,
+  toExternalRequestFormData,
   validateExternalRequestFormData,
   type ExternalRequestFormData,
   type ExternalRequestFormErrors,
@@ -28,6 +29,7 @@ export const ExternalRequestsPage = () => {
   } = useAppContext()
 
   const canCreate = can('WORK_ORDERS', 'create')
+  const canEdit = can('WORK_ORDERS', 'edit')
   const canDelete = can('WORK_ORDERS', 'delete')
 
   const [formData, setFormData] = useState<ExternalRequestFormData>(() => createEmptyExternalRequestFormData(''))
@@ -35,6 +37,8 @@ export const ExternalRequestsPage = () => {
   const [providerFile, setProviderFile] = useState<File | null>(null)
   const [providerFileInputKey, setProviderFileInputKey] = useState(0)
   const [uploadingAttachmentId, setUploadingAttachmentId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
   const [unitFilter, setUnitFilter] = useState<string>('ALL')
   const [searchTerm, setSearchTerm] = useState('')
   const [unitSearch, setUnitSearch] = useState('')
@@ -139,6 +143,56 @@ export const ExternalRequestsPage = () => {
     setProviderFile(null)
     setProviderFileInputKey((previous) => previous + 1)
     setUnitSearch('')
+    setEditingId(null)
+  }
+
+  const handleStartEdit = (request: ExternalRequest) => {
+    const unit = fleetUnits.find((item) => item.id === request.unitId)
+    setFormData(toExternalRequestFormData(request))
+    setUnitSearch(unit?.internalCode ?? '')
+    setErrors({})
+    setProviderFile(null)
+    setProviderFileInputKey((previous) => previous + 1)
+    setEditingId(request.id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleEditSubmit = async () => {
+    if (!canEdit || !editingId) return
+    const resolvedUnitId = resolveUnitIdFromSearch()
+    const draftForValidation = { ...formData, unitId: resolvedUnitId }
+    const validationErrors = validateExternalRequestFormData(draftForValidation, fleetUnits)
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      return
+    }
+    const tasks = formData.tasksInput.split(/\n|,/).map((item) => item.trim()).filter(Boolean)
+    setIsSaving(true)
+    try {
+      const updated = await apiRequest<ExternalRequest>(`/external-requests/${editingId}`, {
+        method: 'PATCH',
+        body: {
+          unitId: resolvedUnitId,
+          companyName: formData.companyName.trim(),
+          description: formData.description.trim(),
+          tasks,
+          currency: formData.currency,
+          partsItems: formData.partsItems
+            .map((item) => ({
+              description: item.description.trim(),
+              quantity: Number(item.quantityInput.replace(',', '.')),
+              unitPrice: Number(item.unitPriceInput.replace(/\./g, '').replace(',', '.')),
+            }))
+            .filter((item) => item.description && item.quantity > 0),
+        },
+      })
+      setExternalRequests(externalRequests.map((item) => (item.id === editingId ? updated : item)))
+      resetForm()
+    } catch {
+      setAppError('No se pudieron guardar los cambios.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const resolveUnitIdFromSearch = () => {
@@ -345,10 +399,16 @@ export const ExternalRequestsPage = () => {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="xl:col-span-1">
-          {canCreate ? (
+          {canCreate || (canEdit && editingId) ? (
             <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900">Nueva nota</h3>
-              <p className="mt-1 text-sm text-slate-600">Asocia unidad, repuestos comprados y presupuesto proveedor.</p>
+              <h3 className="text-lg font-bold text-slate-900">
+                {editingId ? 'Editar nota' : 'Nueva nota'}
+              </h3>
+              <p className="mt-1 text-sm text-slate-600">
+                {editingId
+                  ? 'Modificá los datos de la nota. El código no cambia.'
+                  : 'Asocia unidad, repuestos comprados y presupuesto proveedor.'}
+              </p>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
                 Unidad
@@ -494,14 +554,15 @@ export const ExternalRequestsPage = () => {
                   onClick={resetForm}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                 >
-                  Limpiar
+                  {editingId ? 'Cancelar' : 'Limpiar'}
                 </button>
                 <button
                   type="button"
-                  onClick={handleSubmit}
-                  className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
+                  disabled={isSaving}
+                  onClick={editingId ? () => { void handleEditSubmit() } : handleSubmit}
+                  className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50"
                 >
-                  Generar nota
+                  {isSaving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Generar nota'}
                 </button>
               </div>
             </section>
@@ -640,6 +701,15 @@ export const ExternalRequestsPage = () => {
                           />
                         </label>
 
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(request)}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                          >
+                            Editar
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => handleExport(request.id)}
