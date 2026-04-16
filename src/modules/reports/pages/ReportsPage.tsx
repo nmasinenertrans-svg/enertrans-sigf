@@ -213,6 +213,64 @@ const percentage = (part: number, total: number) => (total > 0 ? (part / total) 
 
 const palette = ['#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']
 
+// ─── Gráfico dona SVG reutilizable ────────────────────────────────────────────
+interface DonutSlice {
+  label: string
+  value: number
+  color: string
+}
+
+const DonutChart = ({ slices, size = 160 }: { slices: DonutSlice[]; size?: number }) => {
+  const total = slices.reduce((sum, s) => sum + s.value, 0)
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center" style={{ width: size, height: size }}>
+        <p className="text-xs text-slate-400">Sin datos</p>
+      </div>
+    )
+  }
+  const cx = size / 2
+  const cy = size / 2
+  const R = size * 0.42
+  const r = size * 0.24
+  let angle = -Math.PI / 2
+
+  const arcPath = (startAngle: number, sweep: number) => {
+    const endAngle = startAngle + sweep
+    const x1 = cx + R * Math.cos(startAngle)
+    const y1 = cy + R * Math.sin(startAngle)
+    const x2 = cx + R * Math.cos(endAngle)
+    const y2 = cy + R * Math.sin(endAngle)
+    const xi1 = cx + r * Math.cos(endAngle)
+    const yi1 = cy + r * Math.sin(endAngle)
+    const xi2 = cx + r * Math.cos(startAngle)
+    const yi2 = cy + r * Math.sin(startAngle)
+    const large = sweep > Math.PI ? 1 : 0
+    return `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi1} ${yi1} A ${r} ${r} 0 ${large} 0 ${xi2} ${yi2} Z`
+  }
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {slices.map((slice) => {
+        if (slice.value === 0) return null
+        const sweep = (slice.value / total) * 2 * Math.PI
+        const path = arcPath(angle, sweep)
+        angle += sweep
+        return <path key={slice.label} d={path} fill={slice.color} stroke="white" strokeWidth="1.5" />
+      })}
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize={size * 0.11} fontWeight="bold" fill="#111827">
+        {total}
+      </text>
+      <text x={cx} y={cy + size * 0.09} textAnchor="middle" fontSize={size * 0.08} fill="#6b7280">
+        unidades
+      </text>
+    </svg>
+  )
+}
+
+const TRUCK_TYPES: FleetUnit['unitType'][] = ['CHASSIS', 'CHASSIS_WITH_HYDROCRANE', 'TRACTOR', 'TRACTOR_WITH_HYDROCRANE']
+const PICKUP_TYPES: FleetUnit['unitType'][] = ['PICKUP']
+
 const buildOccupancyPieChart = (segments: OccupancyPdfSegment[]) => {
   const canvas = document.createElement('canvas')
   canvas.width = 360
@@ -710,6 +768,56 @@ export const ReportsPage = () => {
     [filteredAudits],
   )
   const auditApprovalRate = percentage(approvedAudits, filteredAudits.length)
+
+  // ─── Gráficos dona: composición de flota ─────────────────────────────────────
+  const fleetCompositionSlices = useMemo<DonutSlice[]>(() => {
+    const trucks = reportFleetUnits.filter((u) => TRUCK_TYPES.includes(u.unitType)).length
+    const vans = reportFleetUnits.filter((u) => u.unitType === 'VAN').length
+    const autos = reportFleetUnits.filter((u) => u.unitType === 'AUTOMOBILE').length
+    const pickups = reportFleetUnits.filter((u) => u.unitType === 'PICKUP').length
+    const semis = reportFleetUnits.filter((u) => u.unitType === 'SEMI_TRAILER').length
+    return [
+      { label: 'Camiones', value: trucks, color: '#0ea5e9' },
+      { label: 'Furgones', value: vans, color: '#f59e0b' },
+      { label: 'Automóvil', value: autos, color: '#10b981' },
+      { label: 'Pickup / Camioneta', value: pickups, color: '#8b5cf6' },
+      { label: 'Semirremolque', value: semis, color: '#64748b' },
+    ].filter((s) => s.value > 0)
+  }, [reportFleetUnits])
+
+  const truckContractSlices = useMemo<DonutSlice[]>(() => {
+    const trucks = reportFleetUnits.filter((u) => TRUCK_TYPES.includes(u.unitType))
+    const withoutContract = trucks.filter((u) => !u.clientName?.trim()).length
+    const byClient = new Map<string, number>()
+    trucks.filter((u) => u.clientName?.trim()).forEach((u) => {
+      const name = u.clientName.trim()
+      byClient.set(name, (byClient.get(name) ?? 0) + 1)
+    })
+    const contractSlices: DonutSlice[] = Array.from(byClient.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, value], index) => ({ label, value, color: palette[index % palette.length] }))
+    return [
+      { label: 'Sin contrato', value: withoutContract, color: '#e2e8f0' },
+      ...contractSlices,
+    ].filter((s) => s.value > 0)
+  }, [reportFleetUnits])
+
+  const pickupContractSlices = useMemo<DonutSlice[]>(() => {
+    const pickups = reportFleetUnits.filter((u) => PICKUP_TYPES.includes(u.unitType))
+    const withoutContract = pickups.filter((u) => !u.clientName?.trim()).length
+    const byClient = new Map<string, number>()
+    pickups.filter((u) => u.clientName?.trim()).forEach((u) => {
+      const name = u.clientName.trim()
+      byClient.set(name, (byClient.get(name) ?? 0) + 1)
+    })
+    const contractSlices: DonutSlice[] = Array.from(byClient.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, value], index) => ({ label, value, color: palette[index % palette.length] }))
+    return [
+      { label: 'Sin contrato', value: withoutContract, color: '#e2e8f0' },
+      ...contractSlices,
+    ].filter((s) => s.value > 0)
+  }, [reportFleetUnits])
 
   const effectiveLeftProvider = useMemo(() => {
     if (providerMetrics.length === 0) {
@@ -1871,6 +1979,85 @@ export const ReportsPage = () => {
             >
               Descargar XLSX
             </button>
+          </div>
+        </article>
+      </div>
+
+      {/* ── Composición de flota (gráficos dona) ───────────────────────────── */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Composición de flota</h3>
+          <p className="mt-1 text-xs text-slate-500">Distribución por tipo de vehículo.</p>
+          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <DonutChart slices={fleetCompositionSlices} size={160} />
+            <ul className="flex-1 space-y-2">
+              {fleetCompositionSlices.map((slice) => (
+                <li key={slice.label} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                    <span className="font-medium text-slate-700">{slice.label}</span>
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {slice.value}
+                    <span className="ml-1 text-xs font-normal text-slate-400">
+                      ({percentage(slice.value, fleetCompositionSlices.reduce((s, x) => s + x.value, 0)).toFixed(0)}%)
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Camiones por contrato</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            {truckContractSlices.reduce((s, x) => s + x.value, 0)} camiones (chasis, tractor, hidro).
+          </p>
+          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <DonutChart slices={truckContractSlices} size={160} />
+            <ul className="flex-1 space-y-2">
+              {truckContractSlices.map((slice) => (
+                <li key={slice.label} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                    <span className="font-medium text-slate-700 truncate max-w-[120px]" title={slice.label}>{slice.label}</span>
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {slice.value}
+                    <span className="ml-1 text-xs font-normal text-slate-400">
+                      ({percentage(slice.value, truckContractSlices.reduce((s, x) => s + x.value, 0)).toFixed(0)}%)
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Camionetas por contrato</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            {pickupContractSlices.reduce((s, x) => s + x.value, 0)} pickups / camionetas.
+          </p>
+          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <DonutChart slices={pickupContractSlices} size={160} />
+            <ul className="flex-1 space-y-2">
+              {pickupContractSlices.map((slice) => (
+                <li key={slice.label} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                    <span className="font-medium text-slate-700 truncate max-w-[120px]" title={slice.label}>{slice.label}</span>
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {slice.value}
+                    <span className="ml-1 text-xs font-normal text-slate-400">
+                      ({percentage(slice.value, pickupContractSlices.reduce((s, x) => s + x.value, 0)).toFixed(0)}%)
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         </article>
       </div>
