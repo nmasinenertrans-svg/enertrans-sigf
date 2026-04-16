@@ -819,7 +819,7 @@ export const ReportsPage = () => {
       { label: 'Automóvil', value: autos, color: '#10b981' },
       { label: 'Pickup / Camioneta', value: pickups, color: '#8b5cf6' },
       { label: 'Semirremolque', value: semis, color: '#64748b' },
-    ].filter((s) => s.value > 0)
+    ].filter((s) => s.value > 0).sort((a, b) => b.value - a.value)
   }, [reportFleetUnits])
 
   const truckContractSlices = useMemo<DonutSlice[]>(() => {
@@ -836,7 +836,7 @@ export const ReportsPage = () => {
     return [
       { label: 'Sin contrato', value: withoutContract, color: '#e2e8f0' },
       ...contractSlices,
-    ].filter((s) => s.value > 0)
+    ].filter((s) => s.value > 0).sort((a, b) => b.value - a.value)
   }, [reportFleetUnits])
 
   const pickupContractSlices = useMemo<DonutSlice[]>(() => {
@@ -853,7 +853,7 @@ export const ReportsPage = () => {
     return [
       { label: 'Sin contrato', value: withoutContract, color: '#e2e8f0' },
       ...contractSlices,
-    ].filter((s) => s.value > 0)
+    ].filter((s) => s.value > 0).sort((a, b) => b.value - a.value)
   }, [reportFleetUnits])
 
   const fleetCompositionUnitMap = useMemo(() => {
