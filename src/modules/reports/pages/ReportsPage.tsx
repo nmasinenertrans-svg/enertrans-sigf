@@ -220,7 +220,17 @@ interface DonutSlice {
   color: string
 }
 
-const DonutChart = ({ slices, size = 160 }: { slices: DonutSlice[]; size?: number }) => {
+const DonutChart = ({
+  slices,
+  size = 160,
+  activeLabel,
+  onSliceClick,
+}: {
+  slices: DonutSlice[]
+  size?: number
+  activeLabel?: string | null
+  onSliceClick?: (label: string) => void
+}) => {
   const total = slices.reduce((sum, s) => sum + s.value, 0)
   if (total === 0) {
     return (
@@ -249,14 +259,33 @@ const DonutChart = ({ slices, size = 160 }: { slices: DonutSlice[]; size?: numbe
     return `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi1} ${yi1} A ${r} ${r} 0 ${large} 0 ${xi2} ${yi2} Z`
   }
 
+  const hasActive = activeLabel != null && activeLabel !== ''
+
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      style={{ cursor: onSliceClick ? 'pointer' : 'default' }}
+    >
       {slices.map((slice) => {
         if (slice.value === 0) return null
         const sweep = (slice.value / total) * 2 * Math.PI
         const path = arcPath(angle, sweep)
         angle += sweep
-        return <path key={slice.label} d={path} fill={slice.color} stroke="white" strokeWidth="1.5" />
+        const isActive = slice.label === activeLabel
+        return (
+          <path
+            key={slice.label}
+            d={path}
+            fill={slice.color}
+            stroke="white"
+            strokeWidth={isActive ? 2.5 : 1.5}
+            opacity={hasActive && !isActive ? 0.3 : 1}
+            style={{ transition: 'opacity 0.15s' }}
+            onClick={() => onSliceClick?.(slice.label)}
+          />
+        )
       })}
       <text x={cx} y={cy - 4} textAnchor="middle" fontSize={size * 0.11} fontWeight="bold" fill="#111827">
         {total}
@@ -385,6 +414,9 @@ export const ReportsPage = () => {
   const [showAllOccupancyRows, setShowAllOccupancyRows] = useState(false)
   const [activeOccupancyRowLabel, setActiveOccupancyRowLabel] = useState<string | null>(null)
   const [activeOccupancyBreakdownLabel, setActiveOccupancyBreakdownLabel] = useState<string | null>(null)
+  const [activeFleetSlice, setActiveFleetSlice] = useState<string | null>(null)
+  const [activeTruckSlice, setActiveTruckSlice] = useState<string | null>(null)
+  const [activePickupSlice, setActivePickupSlice] = useState<string | null>(null)
 
   const reportFleetUnits = useMemo<FleetUnit[]>(() => {
     const normalized = normalizeFleetUnits(fleetUnits)
@@ -822,6 +854,47 @@ export const ReportsPage = () => {
       { label: 'Sin contrato', value: withoutContract, color: '#e2e8f0' },
       ...contractSlices,
     ].filter((s) => s.value > 0)
+  }, [reportFleetUnits])
+
+  const fleetCompositionUnitMap = useMemo(() => {
+    const sliceLabel = (u: FleetUnit): string => {
+      if (TRUCK_TYPES.includes(u.unitType)) return 'Camiones'
+      if (u.unitType === 'VAN') return 'Furgones'
+      if (u.unitType === 'AUTOMOBILE') return 'Automóvil'
+      if (u.unitType === 'PICKUP') return 'Pickup / Camioneta'
+      if (u.unitType === 'SEMI_TRAILER') return 'Semirremolque'
+      return 'Otros'
+    }
+    const map = new Map<string, FleetUnit[]>()
+    reportFleetUnits.forEach((u) => {
+      const label = sliceLabel(u)
+      const list = map.get(label) ?? []
+      list.push(u)
+      map.set(label, list)
+    })
+    return map
+  }, [reportFleetUnits])
+
+  const truckContractUnitMap = useMemo(() => {
+    const map = new Map<string, FleetUnit[]>()
+    reportFleetUnits.filter((u) => TRUCK_TYPES.includes(u.unitType)).forEach((u) => {
+      const label = isWithoutContract(u.clientName) ? 'Sin contrato' : u.clientName.trim()
+      const list = map.get(label) ?? []
+      list.push(u)
+      map.set(label, list)
+    })
+    return map
+  }, [reportFleetUnits])
+
+  const pickupContractUnitMap = useMemo(() => {
+    const map = new Map<string, FleetUnit[]>()
+    reportFleetUnits.filter((u) => PICKUP_TYPES.includes(u.unitType)).forEach((u) => {
+      const label = isWithoutContract(u.clientName) ? 'Sin contrato' : u.clientName.trim()
+      const list = map.get(label) ?? []
+      list.push(u)
+      map.set(label, list)
+    })
+    return map
   }, [reportFleetUnits])
 
   const effectiveLeftProvider = useMemo(() => {
@@ -1284,7 +1357,7 @@ export const ReportsPage = () => {
         },
         {
           title: 'Camiones por contrato',
-          subtitle: `${truckContractSlices.reduce((s, x) => s + x.value, 0)} camiones (chasis, tractor, hidro)`,
+          subtitle: `${truckContractSlices.reduce((s, x) => s + x.value, 0)} camiones`,
           slices: truckContractSlices,
         },
         {
@@ -1772,6 +1845,205 @@ export const ReportsPage = () => {
           )}
         </article>
       </div>
+
+      {/* ── Composición de flota (gráficos dona interactivos) ────────────────── */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        {/* ── Composición por tipo ── */}
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Composición de flota</h3>
+          <p className="mt-1 text-xs text-slate-500">Distribución por tipo de vehículo.</p>
+          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <DonutChart
+              slices={fleetCompositionSlices}
+              size={160}
+              activeLabel={activeFleetSlice}
+              onSliceClick={(label) => setActiveFleetSlice((prev) => (prev === label ? null : label))}
+            />
+            <ul className="flex-1 space-y-1">
+              {fleetCompositionSlices.map((slice) => {
+                const total = fleetCompositionSlices.reduce((s, x) => s + x.value, 0)
+                const isActive = activeFleetSlice === slice.label
+                return (
+                  <li key={slice.label}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveFleetSlice((prev) => (prev === slice.label ? null : slice.label))}
+                      className={[
+                        'w-full rounded-lg px-2 py-1.5 text-left transition',
+                        isActive ? 'bg-slate-100 ring-1 ring-slate-300' : 'hover:bg-slate-50',
+                      ].join(' ')}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                          <span className="font-medium text-slate-700">{slice.label}</span>
+                        </span>
+                        <span className="font-semibold text-slate-900">
+                          {slice.value}
+                          <span className="ml-1 text-xs font-normal text-slate-400">({percentage(slice.value, total).toFixed(0)}%)</span>
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+          {activeFleetSlice ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-700">{activeFleetSlice} · {fleetCompositionUnitMap.get(activeFleetSlice)?.length ?? 0} unidades</p>
+                <button type="button" onClick={() => setActiveFleetSlice(null)} className="text-xs text-slate-400 hover:text-slate-600">Limpiar</button>
+              </div>
+              <div className="mt-2 grid gap-1.5 grid-cols-2 md:grid-cols-3">
+                {(fleetCompositionUnitMap.get(activeFleetSlice) ?? []).map((unit) => (
+                  <Link
+                    key={unit.id}
+                    to={buildFleetDetailPath(unit.id)}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800 transition hover:border-amber-300 hover:bg-amber-50"
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate">{unit.internalCode || unit.id}</span>
+                      <span className="shrink-0 text-[10px] text-amber-600">→</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </article>
+
+        {/* ── Camiones por contrato ── */}
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Camiones por contrato</h3>
+          <p className="mt-1 text-xs text-slate-500">{truckContractSlices.reduce((s, x) => s + x.value, 0)} camiones.</p>
+          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <DonutChart
+              slices={truckContractSlices}
+              size={160}
+              activeLabel={activeTruckSlice}
+              onSliceClick={(label) => setActiveTruckSlice((prev) => (prev === label ? null : label))}
+            />
+            <ul className="flex-1 space-y-1">
+              {truckContractSlices.map((slice) => {
+                const total = truckContractSlices.reduce((s, x) => s + x.value, 0)
+                const isActive = activeTruckSlice === slice.label
+                return (
+                  <li key={slice.label}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTruckSlice((prev) => (prev === slice.label ? null : slice.label))}
+                      className={[
+                        'w-full rounded-lg px-2 py-1.5 text-left transition',
+                        isActive ? 'bg-slate-100 ring-1 ring-slate-300' : 'hover:bg-slate-50',
+                      ].join(' ')}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                          <span className="font-medium text-slate-700 truncate max-w-[120px]" title={slice.label}>{slice.label}</span>
+                        </span>
+                        <span className="font-semibold text-slate-900">
+                          {slice.value}
+                          <span className="ml-1 text-xs font-normal text-slate-400">({percentage(slice.value, total).toFixed(0)}%)</span>
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+          {activeTruckSlice ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-700">{activeTruckSlice} · {truckContractUnitMap.get(activeTruckSlice)?.length ?? 0} unidades</p>
+                <button type="button" onClick={() => setActiveTruckSlice(null)} className="text-xs text-slate-400 hover:text-slate-600">Limpiar</button>
+              </div>
+              <div className="mt-2 grid gap-1.5 grid-cols-2 md:grid-cols-3">
+                {(truckContractUnitMap.get(activeTruckSlice) ?? []).map((unit) => (
+                  <Link
+                    key={unit.id}
+                    to={buildFleetDetailPath(unit.id)}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800 transition hover:border-amber-300 hover:bg-amber-50"
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate">{unit.internalCode || unit.id}</span>
+                      <span className="shrink-0 text-[10px] text-amber-600">→</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </article>
+
+        {/* ── Camionetas por contrato ── */}
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-900">Camionetas por contrato</h3>
+          <p className="mt-1 text-xs text-slate-500">{pickupContractSlices.reduce((s, x) => s + x.value, 0)} pickups / camionetas.</p>
+          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <DonutChart
+              slices={pickupContractSlices}
+              size={160}
+              activeLabel={activePickupSlice}
+              onSliceClick={(label) => setActivePickupSlice((prev) => (prev === label ? null : label))}
+            />
+            <ul className="flex-1 space-y-1">
+              {pickupContractSlices.map((slice) => {
+                const total = pickupContractSlices.reduce((s, x) => s + x.value, 0)
+                const isActive = activePickupSlice === slice.label
+                return (
+                  <li key={slice.label}>
+                    <button
+                      type="button"
+                      onClick={() => setActivePickupSlice((prev) => (prev === slice.label ? null : slice.label))}
+                      className={[
+                        'w-full rounded-lg px-2 py-1.5 text-left transition',
+                        isActive ? 'bg-slate-100 ring-1 ring-slate-300' : 'hover:bg-slate-50',
+                      ].join(' ')}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                          <span className="font-medium text-slate-700 truncate max-w-[120px]" title={slice.label}>{slice.label}</span>
+                        </span>
+                        <span className="font-semibold text-slate-900">
+                          {slice.value}
+                          <span className="ml-1 text-xs font-normal text-slate-400">({percentage(slice.value, total).toFixed(0)}%)</span>
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+          {activePickupSlice ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-700">{activePickupSlice} · {pickupContractUnitMap.get(activePickupSlice)?.length ?? 0} unidades</p>
+                <button type="button" onClick={() => setActivePickupSlice(null)} className="text-xs text-slate-400 hover:text-slate-600">Limpiar</button>
+              </div>
+              <div className="mt-2 grid gap-1.5 grid-cols-2 md:grid-cols-3">
+                {(pickupContractUnitMap.get(activePickupSlice) ?? []).map((unit) => (
+                  <Link
+                    key={unit.id}
+                    to={buildFleetDetailPath(unit.id)}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800 transition hover:border-amber-300 hover:bg-amber-50"
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate">{unit.internalCode || unit.id}</span>
+                      <span className="shrink-0 text-[10px] text-amber-600">→</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </article>
+      </div>
+
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-3">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
@@ -2074,84 +2346,6 @@ export const ReportsPage = () => {
         </article>
       </div>
 
-      {/* ── Composición de flota (gráficos dona) ───────────────────────────── */}
-      <div className="grid gap-4 xl:grid-cols-3">
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Composición de flota</h3>
-          <p className="mt-1 text-xs text-slate-500">Distribución por tipo de vehículo.</p>
-          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-            <DonutChart slices={fleetCompositionSlices} size={160} />
-            <ul className="flex-1 space-y-2">
-              {fleetCompositionSlices.map((slice) => (
-                <li key={slice.label} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
-                    <span className="font-medium text-slate-700">{slice.label}</span>
-                  </span>
-                  <span className="font-semibold text-slate-900">
-                    {slice.value}
-                    <span className="ml-1 text-xs font-normal text-slate-400">
-                      ({percentage(slice.value, fleetCompositionSlices.reduce((s, x) => s + x.value, 0)).toFixed(0)}%)
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </article>
-
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Camiones por contrato</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            {truckContractSlices.reduce((s, x) => s + x.value, 0)} camiones (chasis, tractor, hidro).
-          </p>
-          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-            <DonutChart slices={truckContractSlices} size={160} />
-            <ul className="flex-1 space-y-2">
-              {truckContractSlices.map((slice) => (
-                <li key={slice.label} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
-                    <span className="font-medium text-slate-700 truncate max-w-[120px]" title={slice.label}>{slice.label}</span>
-                  </span>
-                  <span className="font-semibold text-slate-900">
-                    {slice.value}
-                    <span className="ml-1 text-xs font-normal text-slate-400">
-                      ({percentage(slice.value, truckContractSlices.reduce((s, x) => s + x.value, 0)).toFixed(0)}%)
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </article>
-
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Camionetas por contrato</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            {pickupContractSlices.reduce((s, x) => s + x.value, 0)} pickups / camionetas.
-          </p>
-          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-            <DonutChart slices={pickupContractSlices} size={160} />
-            <ul className="flex-1 space-y-2">
-              {pickupContractSlices.map((slice) => (
-                <li key={slice.label} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
-                    <span className="font-medium text-slate-700 truncate max-w-[120px]" title={slice.label}>{slice.label}</span>
-                  </span>
-                  <span className="font-semibold text-slate-900">
-                    {slice.value}
-                    <span className="ml-1 text-xs font-normal text-slate-400">
-                      ({percentage(slice.value, pickupContractSlices.reduce((s, x) => s + x.value, 0)).toFixed(0)}%)
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </article>
-      </div>
     </section>
   )
 }
