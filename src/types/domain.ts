@@ -380,6 +380,8 @@ export interface ExternalRequest {
   providerFileName?: string
   providerFileBase64?: string
   providerFileUrl?: string
+  ocCode?: string | null
+  ocGeneratedAt?: string | null
 }
 
 export interface ExternalRequestPartItem {

@@ -7,7 +7,7 @@ import { apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
 import { BackLink } from '../../../components/shared/BackLink'
-import { exportExternalRequestPdf } from '../services/externalRequestPdfService'
+import { exportExternalRequestPdf, exportPurchaseOrderPdf } from '../services/externalRequestPdfService'
 import {
   buildExternalRequestView,
   calculatePartsTotal,
@@ -313,14 +313,23 @@ export const ExternalRequestsPage = () => {
 
   const handleExport = async (requestId: string) => {
     const request = externalRequests.find((item) => item.id === requestId)
-    if (!request) {
-      return
-    }
+    if (!request) return
     const unit = fleetUnits.find((item) => item.id === request.unitId)
     try {
       await exportExternalRequestPdf({ request, unit })
     } catch {
       setAppError('No se pudo generar la nota de pedido.')
+    }
+  }
+
+  const handleExportOc = async (requestId: string) => {
+    const request = externalRequests.find((item) => item.id === requestId)
+    if (!request) return
+    const unit = fleetUnits.find((item) => item.id === request.unitId)
+    try {
+      await exportPurchaseOrderPdf({ request, unit })
+    } catch {
+      setAppError('No se pudo generar la orden de compra.')
     }
   }
 
@@ -636,7 +645,7 @@ export const ExternalRequestsPage = () => {
                         </span>
                       </div>
 
-                      <div className="mt-2 flex items-center gap-2 text-xs">
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <span
                           className={`rounded-full border px-2 py-1 font-semibold ${
                             request.eligibilityStatus === 'READY_FOR_REPAIR'
@@ -646,6 +655,11 @@ export const ExternalRequestsPage = () => {
                         >
                           {request.eligibilityStatus === 'READY_FOR_REPAIR' ? 'Lista para reparacion' : 'Pendiente adjunto'}
                         </span>
+                        {request.ocCode ? (
+                          <span className="rounded-full border border-teal-300 bg-teal-50 px-2 py-1 font-semibold text-teal-700">
+                            OC generada: {request.ocCode}
+                          </span>
+                        ) : null}
                         {request.linkedRepairId ? (
                           <span className="rounded-full border border-sky-300 bg-sky-50 px-2 py-1 font-semibold text-sky-700">
                             Vinculada a reparacion
@@ -715,8 +729,17 @@ export const ExternalRequestsPage = () => {
                           onClick={() => handleExport(request.id)}
                           className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500"
                         >
-                          Imprimir nota
+                          Imprimir NDP
                         </button>
+                        {request.ocCode ? (
+                          <button
+                            type="button"
+                            onClick={() => { void handleExportOc(request.id) }}
+                            className="rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700"
+                          >
+                            Imprimir OC
+                          </button>
+                        ) : null}
                         {canDelete ? (
                           <button
                             type="button"

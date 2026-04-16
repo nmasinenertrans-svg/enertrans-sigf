@@ -217,3 +217,170 @@ export const exportExternalRequestPdf = async ({ request, unit }: ExternalReques
 
   pdf.save(`NotaPedido_${request.code}_${unit?.internalCode ?? 'unidad'}.pdf`)
 }
+
+export const exportPurchaseOrderPdf = async ({ request, unit }: ExternalRequestPdfPayload): Promise<void> => {
+  const { jsPDF: JsPDF } = await import('jspdf')
+  const pdf = new JsPDF({ unit: 'mm', format: 'a4' })
+  let logoDataUrl: string | null = null
+  try {
+    logoDataUrl = await fetchImageAsDataUrl(enertransLogoUrl)
+  } catch {
+    logoDataUrl = null
+  }
+
+  addWatermark(pdf, logoDataUrl)
+
+  const pageWidth = pdf.internal.pageSize.getWidth()
+
+  // Header OC (fondo verde oscuro para distinguir de NDP)
+  pdf.setFillColor(15, 118, 110)
+  pdf.rect(0, 0, pageWidth, 22, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(13)
+  pdf.setTextColor(255, 255, 255)
+  pdf.text('ENERTRANS S.R.L.', 14, 9)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.text('Orden de compra', 14, 15)
+  if (logoDataUrl) {
+    try { pdf.addImage(logoDataUrl, 'PNG', pageWidth - 34, 4, 20, 14) } catch { /* ignore */ }
+  }
+
+  let cursorY = 30
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(12)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text('ORDEN DE COMPRA', pageWidth / 2, cursorY, { align: 'center' })
+
+  cursorY += 8
+  const infoBoxTop = cursorY
+  pdf.setDrawColor(217, 217, 217)
+  pdf.setFillColor(255, 255, 255)
+  pdf.roundedRect(12, infoBoxTop - 5, pageWidth - 24, 18, 3, 3, 'FD')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(75, 85, 99)
+  pdf.text('Dominio', 18, infoBoxTop + 2)
+  pdf.text('N° OC', 80, infoBoxTop + 2)
+  pdf.text('Fecha', 140, infoBoxTop + 2)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setTextColor(17, 24, 39)
+  pdf.text(unit?.internalCode ?? 'N/D', 18, infoBoxTop + 8)
+  pdf.text(request.ocCode ?? '-', 80, infoBoxTop + 8)
+  pdf.text(
+    new Date(request.ocGeneratedAt ?? request.createdAt ?? new Date().toISOString()).toLocaleDateString('es-AR'),
+    140,
+    infoBoxTop + 8,
+  )
+  cursorY = infoBoxTop + 22
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(75, 85, 99)
+  pdf.text('Proveedor', 18, cursorY)
+  pdf.text('NDP de origen', 100, cursorY)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setTextColor(17, 24, 39)
+  pdf.text(request.companyName || '-', 18, cursorY + 5)
+  pdf.text(request.code, 100, cursorY + 5)
+  cursorY += 13
+
+  // Descripción
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.text('Descripcion', 14, cursorY)
+  cursorY += 4
+  const descLines = pdf.splitTextToSize(request.description || '-', pageWidth - 28)
+  const descHeight = Math.max(12, descLines.length * 4 + 4)
+  pdf.setDrawColor(217, 217, 217)
+  pdf.roundedRect(12, cursorY - 3, pageWidth - 24, descHeight + 4, 3, 3, 'S')
+  pdf.setFont('helvetica', 'normal')
+  pdf.text(descLines, 16, cursorY + 3)
+  cursorY += descHeight + 8
+
+  // Tabla de repuestos con precios
+  const currency = request.currency ?? 'ARS'
+  const moneyFmt = new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'es-AR', { style: 'currency', currency })
+  const partsItems = Array.isArray(request.partsItems) ? request.partsItems : []
+
+  if (partsItems.length > 0) {
+    const tableLeft = 12
+    const tableWidth = pageWidth - 24
+    const colWidths = [tableWidth * 0.45, tableWidth * 0.12, tableWidth * 0.2, tableWidth * 0.23]
+    const colX = [
+      tableLeft,
+      tableLeft + colWidths[0],
+      tableLeft + colWidths[0] + colWidths[1],
+      tableLeft + colWidths[0] + colWidths[1] + colWidths[2],
+    ]
+    const rowH = 7
+
+    pdf.setFillColor(15, 118, 110)
+    pdf.rect(tableLeft, cursorY, tableWidth, rowH, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(8)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text('Descripcion', colX[0] + 2, cursorY + 5)
+    pdf.text('Cant', colX[1] + 2, cursorY + 5)
+    pdf.text('P. Unit.', colX[2] + 2, cursorY + 5)
+    pdf.text('Total', colX[3] + 2, cursorY + 5)
+    cursorY += rowH
+
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(31, 41, 55)
+    partsItems.forEach((item, index) => {
+      const bg = index % 2 === 0 ? [249, 250, 251] : [255, 255, 255]
+      pdf.setFillColor(bg[0], bg[1], bg[2])
+      pdf.rect(tableLeft, cursorY, tableWidth, rowH, 'F')
+      pdf.setDrawColor(217, 217, 217)
+      pdf.rect(tableLeft, cursorY, tableWidth, rowH, 'S')
+      pdf.setFontSize(8)
+      const descItem = pdf.splitTextToSize(item.description, colWidths[0] - 4)
+      pdf.text(descItem[0] ?? '', colX[0] + 2, cursorY + 5)
+      pdf.text(String(item.quantity), colX[1] + 2, cursorY + 5)
+      pdf.text(moneyFmt.format(item.unitPrice), colX[2] + 2, cursorY + 5)
+      pdf.text(moneyFmt.format(item.lineTotal ?? item.quantity * item.unitPrice), colX[3] + 2, cursorY + 5)
+      cursorY += rowH
+    })
+
+    // Total general
+    const total = partsItems.reduce((acc, item) => acc + (item.lineTotal ?? item.quantity * item.unitPrice), 0)
+    pdf.setFillColor(15, 118, 110)
+    pdf.rect(tableLeft, cursorY, tableWidth, rowH, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text('TOTAL', colX[0] + 2, cursorY + 5)
+    pdf.text(moneyFmt.format(total), colX[3] + 2, cursorY + 5)
+    cursorY += rowH + 8
+  }
+
+  // Presupuesto adjunto
+  if (request.providerFileName) {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(75, 85, 99)
+    pdf.text('Presupuesto adjunto:', 14, cursorY)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(17, 24, 39)
+    pdf.text(request.providerFileName, 60, cursorY)
+    cursorY += 10
+  }
+
+  // Firmas
+  const signatureY = Math.max(cursorY + 10, 245)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(75, 85, 99)
+  pdf.line(20, signatureY, 80, signatureY)
+  pdf.line(pageWidth - 80, signatureY, pageWidth - 20, signatureY)
+  pdf.text('APRUEBA', 40, signatureY + 6)
+  pdf.text('PROVEEDOR', pageWidth - 55, signatureY + 6)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(107, 114, 128)
+  pdf.text('ENERTRANS • Orden de compra', 14, pdf.internal.pageSize.getHeight() - 8)
+
+  pdf.save(`OrdenCompra_${request.ocCode ?? request.code}_${unit?.internalCode ?? 'unidad'}.pdf`)
+}

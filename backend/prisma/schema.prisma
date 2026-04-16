@@ -327,6 +327,8 @@ model ExternalRequest {
   linkedRepairId String?
   providerFileName String   @default("")
   providerFileUrl  String   @default("")
+  ocCode           String?
+  ocGeneratedAt    DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

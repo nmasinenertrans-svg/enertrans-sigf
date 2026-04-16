@@ -308,9 +308,13 @@ const listExternalRequestsFromRecoverySchemas = async () => {
   return allRows.map(mapRecoveryExternalRequestToPublicShape)
 }
 
-const toCreateData = (input: ExternalRequestInput) => {
+const toCreateData = async (input: ExternalRequestInput) => {
   const partsItems = normalizePartItems(input.partsItems ?? [])
   const providerFileUrl = (input.providerFileUrl ?? '').trim()
+  const hasProviderFile = Boolean(providerFileUrl)
+
+  const ocCode = hasProviderFile ? await generateNextOcCode() : undefined
+  const ocGeneratedAt = hasProviderFile ? new Date() : undefined
 
   return {
     id: input.id,
@@ -325,11 +329,21 @@ const toCreateData = (input: ExternalRequestInput) => {
     eligibilityStatus: resolveEligibilityStatus(providerFileUrl),
     providerFileName: (input.providerFileName ?? '').trim(),
     providerFileUrl,
+    ocCode,
+    ocGeneratedAt,
     createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
   }
 }
 
-const toUpdateData = (input: ExternalRequestUpdateInput, existing: any) => {
+const generateNextOcCode = async (): Promise<string> => {
+  const rows = await runWithSchemaFailover(() =>
+    prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS count FROM "ExternalRequest" WHERE "ocCode" IS NOT NULL`,
+  )
+  const count = Number(rows[0]?.count ?? 0)
+  return `OC-${String(count + 1).padStart(5, '0')}`
+}
+
+const toUpdateData = async (input: ExternalRequestUpdateInput, existing: any): Promise<Record<string, unknown>> => {
   const nextTasks =
     input.tasks !== undefined
       ? normalizeTasks(input.tasks)
@@ -350,6 +364,15 @@ const toUpdateData = (input: ExternalRequestUpdateInput, existing: any) => {
     partsTotal: calculatePartsTotal(nextPartsItems),
     eligibilityStatus: resolveEligibilityStatus(nextProviderFileUrl),
     providerFileUrl: nextProviderFileUrl,
+  }
+
+  // Auto-generar OC cuando se adjunta un presupuesto por primera vez
+  const hadProviderFile = Boolean(String(existing.providerFileUrl ?? '').trim())
+  const hasProviderFile = Boolean(nextProviderFileUrl)
+  const alreadyHasOc = Boolean(existing.ocCode)
+  if (hasProviderFile && !hadProviderFile && !alreadyHasOc) {
+    data.ocCode = await generateNextOcCode()
+    data.ocGeneratedAt = new Date()
   }
 
   if (input.code !== undefined) {
@@ -448,7 +471,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const data = toCreateData(parsed.data)
+    const data = await toCreateData(parsed.data)
     const item = await runWithSchemaFailover(() => prisma.externalRequest.create({ data }))
     res.status(201).json(item)
     scheduleExternalRequestCreatedNotification(req, item)
@@ -520,7 +543,7 @@ router.patch('/:id', async (req, res) => {
         ;(notFoundError as any).code = 'NOT_FOUND'
         throw notFoundError
       }
-      const data = toUpdateData(parsed.data, existing)
+      const data = await toUpdateData(parsed.data, existing)
       return prisma.externalRequest.update({ where: { id: req.params.id }, data })
     })
     return res.json(item)
