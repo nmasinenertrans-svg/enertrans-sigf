@@ -1185,6 +1185,91 @@ export const ReportsPage = () => {
 
     cursorY += chartCardHeight + 22
 
+    const noFiltersApplied = occupancyClientFilter === 'ALL' && occupancyTypeFilter === 'ALL' && occupancyStatusFilter === 'ALL'
+
+    if (noFiltersApplied) {
+      doc.addPage()
+      let donY = margin
+
+      doc.setFillColor('#000000')
+      doc.roundedRect(margin, donY, pageWidth - margin * 2, 26, 6, 6, 'F')
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(14)
+      doc.setTextColor('#facc15')
+      doc.text('COMPOSICIÓN DE FLOTA', pageWidth / 2, donY + 17, { align: 'center' })
+      donY += 38
+
+      const donCharts = [
+        {
+          title: 'Composición por tipo',
+          subtitle: `${reportFleetUnits.length} unidades totales`,
+          slices: fleetCompositionSlices,
+        },
+        {
+          title: 'Camiones por contrato',
+          subtitle: `${truckContractSlices.reduce((s, x) => s + x.value, 0)} camiones`,
+          slices: truckContractSlices,
+        },
+        {
+          title: 'Camionetas por contrato',
+          subtitle: `${pickupContractSlices.reduce((s, x) => s + x.value, 0)} pickups / camionetas`,
+          slices: pickupContractSlices,
+        },
+      ]
+
+      const colGap = 12
+      const colWidth = (pageWidth - margin * 2 - colGap * 2) / 3
+      const cardH = pageHeight - donY - margin
+
+      donCharts.forEach((section, colIndex) => {
+        const colX = margin + colIndex * (colWidth + colGap)
+        const total = section.slices.reduce((s, x) => s + x.value, 0) || 1
+
+        doc.setDrawColor('#cbd5e1')
+        doc.setFillColor('#ffffff')
+        doc.roundedRect(colX, donY, colWidth, cardH, 8, 8, 'FD')
+
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(10)
+        doc.setTextColor('#0f172a')
+        doc.text(section.title, colX + 10, donY + 18)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor('#64748b')
+        doc.text(section.subtitle, colX + 10, donY + 30)
+
+        const chartSegs = section.slices.map((s) => ({
+          label: s.label,
+          value: s.value,
+          share: (s.value / total) * 100,
+          color: s.color,
+        }))
+        const chartImg = buildOccupancyPieChart(chartSegs)
+        const chartSize = Math.min(colWidth - 24, 130)
+        if (chartImg) {
+          doc.addImage(chartImg, 'PNG', colX + (colWidth - chartSize) / 2, donY + 40, chartSize, chartSize)
+        }
+
+        let legendY = donY + 40 + chartSize + 10
+        const maxLabelChars = Math.max(8, Math.floor((colWidth - 72) / 5.2))
+        section.slices.forEach((slice) => {
+          if (legendY > donY + cardH - 10) return
+          const pct = ((slice.value / total) * 100).toFixed(0)
+          const label = slice.label.length > maxLabelChars ? `${slice.label.slice(0, maxLabelChars - 1)}…` : slice.label
+          doc.setFillColor(slice.color)
+          doc.circle(colX + 16, legendY - 2.5, 3.5, 'F')
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(8)
+          doc.setTextColor('#374151')
+          doc.text(label, colX + 26, legendY)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor('#0f172a')
+          doc.text(`${slice.value} (${pct}%)`, colX + colWidth - 8, legendY, { align: 'right' })
+          legendY += 13
+        })
+      })
+    }
+
     const occupancyUnitRows = filteredOccupancyUnits
       .slice()
       .sort((a, b) => {
@@ -1334,91 +1419,6 @@ export const ReportsPage = () => {
       detailY += detailRowHeight
       rowIndexWithinSection += 1
     })
-
-    const noFiltersApplied = occupancyClientFilter === 'ALL' && occupancyTypeFilter === 'ALL' && occupancyStatusFilter === 'ALL'
-
-    if (noFiltersApplied) {
-      doc.addPage()
-      let donY = margin
-
-      doc.setFillColor('#000000')
-      doc.roundedRect(margin, donY, pageWidth - margin * 2, 26, 6, 6, 'F')
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(14)
-      doc.setTextColor('#facc15')
-      doc.text('COMPOSICIÓN DE FLOTA', pageWidth / 2, donY + 17, { align: 'center' })
-      donY += 38
-
-      const donCharts = [
-        {
-          title: 'Composición por tipo',
-          subtitle: `${reportFleetUnits.length} unidades totales`,
-          slices: fleetCompositionSlices,
-        },
-        {
-          title: 'Camiones por contrato',
-          subtitle: `${truckContractSlices.reduce((s, x) => s + x.value, 0)} camiones`,
-          slices: truckContractSlices,
-        },
-        {
-          title: 'Camionetas por contrato',
-          subtitle: `${pickupContractSlices.reduce((s, x) => s + x.value, 0)} pickups / camionetas`,
-          slices: pickupContractSlices,
-        },
-      ]
-
-      const colGap = 12
-      const colWidth = (pageWidth - margin * 2 - colGap * 2) / 3
-      const cardH = pageHeight - donY - margin
-
-      donCharts.forEach((section, colIndex) => {
-        const colX = margin + colIndex * (colWidth + colGap)
-        const total = section.slices.reduce((s, x) => s + x.value, 0) || 1
-
-        doc.setDrawColor('#cbd5e1')
-        doc.setFillColor('#ffffff')
-        doc.roundedRect(colX, donY, colWidth, cardH, 8, 8, 'FD')
-
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(10)
-        doc.setTextColor('#0f172a')
-        doc.text(section.title, colX + 10, donY + 18)
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(8)
-        doc.setTextColor('#64748b')
-        doc.text(section.subtitle, colX + 10, donY + 30)
-
-        const chartSegs = section.slices.map((s) => ({
-          label: s.label,
-          value: s.value,
-          share: (s.value / total) * 100,
-          color: s.color,
-        }))
-        const chartImg = buildOccupancyPieChart(chartSegs)
-        const chartSize = Math.min(colWidth - 24, 130)
-        if (chartImg) {
-          doc.addImage(chartImg, 'PNG', colX + (colWidth - chartSize) / 2, donY + 40, chartSize, chartSize)
-        }
-
-        let legendY = donY + 40 + chartSize + 10
-        const maxLabelChars = Math.max(8, Math.floor((colWidth - 72) / 5.2))
-        section.slices.forEach((slice) => {
-          if (legendY > donY + cardH - 10) return
-          const pct = ((slice.value / total) * 100).toFixed(0)
-          const label = slice.label.length > maxLabelChars ? `${slice.label.slice(0, maxLabelChars - 1)}…` : slice.label
-          doc.setFillColor(slice.color)
-          doc.circle(colX + 16, legendY - 2.5, 3.5, 'F')
-          doc.setFont('helvetica', 'normal')
-          doc.setFontSize(8)
-          doc.setTextColor('#374151')
-          doc.text(label, colX + 26, legendY)
-          doc.setFont('helvetica', 'bold')
-          doc.setTextColor('#0f172a')
-          doc.text(`${slice.value} (${pct}%)`, colX + colWidth - 8, legendY, { align: 'right' })
-          legendY += 13
-        })
-      })
-    }
 
     doc.save('ocupacion-flota-por-cliente.pdf')
   }
