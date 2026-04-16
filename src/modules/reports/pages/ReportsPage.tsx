@@ -1043,8 +1043,9 @@ export const ReportsPage = () => {
     const chartImage = buildOccupancyPieChart(pdfSegments)
     const summaryColumns = occupancyPivot.rows.length > 8 ? 2 : 1
     const rowsPerColumn = Math.max(1, Math.ceil(occupancyPivot.rows.length / summaryColumns))
-    const summaryRowHeight = 40
-    const chartCardHeight = Math.max(220, 56 + rowsPerColumn * summaryRowHeight)
+    const maxCardHeight = pageHeight - cursorY - margin
+    const summaryRowHeight = Math.min(40, Math.max(34, Math.floor((maxCardHeight - 56) / rowsPerColumn)))
+    const chartCardHeight = Math.min(maxCardHeight, Math.max(220, 56 + rowsPerColumn * summaryRowHeight))
     const chartSize = Math.min(224, Math.max(176, chartCardHeight - 30))
     if (chartImage) {
       doc.setDrawColor('#cbd5e1')
