@@ -649,6 +649,7 @@ export const FleetDetailPage = () => {
       }
       .qr { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
       .qr img { width: 6.8cm; height: 6.8cm; }
+      @page { size: 8cm 8cm; margin: 0; }
       @media print {
         body { padding: 0; }
       }
