@@ -742,11 +742,9 @@ export const FleetListPage = () => {
                 </p>
               ) : null}
 
-              {isQrScanning ? (
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
-                  <video ref={qrVideoRef} className="h-64 w-full object-cover" muted playsInline autoPlay />
-                </div>
-              ) : null}
+              <div className={`overflow-hidden rounded-lg border border-slate-200 bg-slate-900 ${isQrScanning ? '' : 'hidden'}`}>
+                <video ref={qrVideoRef} className="h-64 w-full object-cover" muted playsInline />
+              </div>
             </div>
           </div>
         </div>
