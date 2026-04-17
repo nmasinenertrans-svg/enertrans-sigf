@@ -132,6 +132,7 @@ export const FleetListPage = () => {
   const [unitTypeFilter, setUnitTypeFilter] = useState<'ALL' | (typeof fleetUnitTypes)[number]>(() =>
     parseUnitTypeFilter(searchParams.get('unitType')),
   )
+  const [locationFilter, setLocationFilter] = useState('ALL')
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrScanning, setIsQrScanning] = useState(false)
@@ -162,6 +163,14 @@ export const FleetListPage = () => {
     [normalizedUnits],
   )
 
+  const locationOptions = useMemo(
+    () =>
+      Array.from(new Set(normalizedUnits.map((u) => (u.location ?? '').trim()).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [normalizedUnits],
+  )
+
   const filteredUnits = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
     const normalizedClientFilter = clientFilter.trim().toLowerCase()
@@ -176,6 +185,9 @@ export const FleetListPage = () => {
         return false
       }
       if (unitTypeFilter !== 'ALL' && unit.unitType !== unitTypeFilter) {
+        return false
+      }
+      if (locationFilter !== 'ALL' && (unit.location ?? '').trim() !== locationFilter) {
         return false
       }
       if (clientGroupFilter === 'OTHERS') {
@@ -222,7 +234,7 @@ export const FleetListPage = () => {
         .toLowerCase()
       return haystack.includes(normalizedSearch)
     })
-  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, unitTypeFilter, documentTypeFilter, documentStatusFilter, searchParams])
+  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, unitTypeFilter, locationFilter, documentTypeFilter, documentStatusFilter, searchParams])
 
   const stopQrCamera = () => {
     if (qrIntervalRef.current !== null) {
@@ -521,7 +533,7 @@ export const FleetListPage = () => {
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Buscar
             <input
@@ -585,7 +597,22 @@ export const FleetListPage = () => {
               <option value="missing">Sin registro</option>
             </select>
           </label>
-          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-5">
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            Ubicación
+            <select
+              value={locationFilter}
+              onChange={(event) => setLocationFilter(event.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+            >
+              <option value="ALL">Todas</option>
+              {locationOptions.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-6">
             Cliente
             <input
               value={clientFilter === UNASSIGNED_CLIENT_FILTER ? '' : clientFilter}
