@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import jsQR from 'jsqr'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { BackLink } from '../../../components/shared/BackLink'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -18,19 +19,6 @@ import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
 
-interface BarcodeDetectorInstance {
-  detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>>
-}
-
-interface BarcodeDetectorCtor {
-  new (options?: { formats?: string[] }): BarcodeDetectorInstance
-}
-
-interface WindowWithBarcodeDetector extends Window {
-  BarcodeDetector?: BarcodeDetectorCtor
-}
-
-const qrFormats = ['qr_code']
 const UNASSIGNED_CLIENT_FILTER = '__UNASSIGNED__'
 
 const getApiErrorMessage = (error: unknown, fallback: string): string => {
@@ -143,15 +131,7 @@ export const FleetListPage = () => {
   const qrIntervalRef = useRef<number | null>(null)
   const qrCameraCheckRef = useRef<number | null>(null)
 
-  const qrDetectorCtor = useMemo(
-    () => (window as WindowWithBarcodeDetector).BarcodeDetector,
-    [],
-  )
-
-  const hasQrSupport = useMemo(
-    () => Boolean(qrDetectorCtor && navigator.mediaDevices?.getUserMedia),
-    [qrDetectorCtor],
-  )
+  const hasQrSupport = Boolean(navigator.mediaDevices?.getUserMedia)
 
   const summary = useMemo(
     () => ({
@@ -327,7 +307,7 @@ export const FleetListPage = () => {
   }
 
   const startQrCamera = async () => {
-    if (!hasQrSupport || !qrDetectorCtor) {
+    if (!hasQrSupport) {
       return
     }
 
@@ -343,8 +323,8 @@ export const FleetListPage = () => {
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
         break
-      } catch (error) {
-        void error
+      } catch {
+        // try next constraint
       }
     }
 
@@ -355,51 +335,51 @@ export const FleetListPage = () => {
 
     qrStreamRef.current = mediaStream
 
-    if (qrVideoRef.current) {
-      qrVideoRef.current.srcObject = mediaStream
-      qrVideoRef.current.muted = true
-      qrVideoRef.current.autoplay = true
-      qrVideoRef.current.playsInline = true
-      await new Promise<void>((resolve) => {
-        if (!qrVideoRef.current) {
-          resolve()
-          return
-        }
-        qrVideoRef.current.onloadedmetadata = () => resolve()
-      })
-      try {
-        await qrVideoRef.current.play()
-      } catch {
-        setQrError('No se pudo iniciar la cámara. Revisá los permisos del navegador.')
-        stopQrCamera()
-        return
-      }
+    const video = qrVideoRef.current
+    if (!video) {
+      return
+    }
+
+    video.srcObject = mediaStream
+    video.muted = true
+    video.playsInline = true
+    await new Promise<void>((resolve) => {
+      video.onloadedmetadata = () => resolve()
+    })
+    try {
+      await video.play()
+    } catch {
+      setQrError('No se pudo iniciar la cámara. Revisá los permisos del navegador.')
+      stopQrCamera()
+      return
     }
 
     qrCameraCheckRef.current = window.setTimeout(() => {
-      if (qrVideoRef.current && (qrVideoRef.current.videoWidth === 0 || qrVideoRef.current.videoHeight === 0)) {
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
         setQrError('La cámara no entregó imagen. Probá cerrar y abrir nuevamente.')
         stopQrCamera()
       }
-    }, 1200)
+    }, 1500)
 
-    const detector = new qrDetectorCtor({ formats: qrFormats })
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
 
-    qrIntervalRef.current = window.setInterval(async () => {
-      if (!qrVideoRef.current) {
+    qrIntervalRef.current = window.setInterval(() => {
+      if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) {
         return
       }
-      try {
-        const detections = await detector.detect(qrVideoRef.current)
-        const rawValue = detections[0]?.rawValue?.trim()
-        if (rawValue) {
-          stopQrCamera()
-          handleQrValue(rawValue)
-        }
-      } catch {
-        // ignore detection noise
+      const { videoWidth: w, videoHeight: h } = video
+      if (w === 0 || h === 0) return
+      canvas.width = w
+      canvas.height = h
+      ctx.drawImage(video, 0, 0, w, h)
+      const imageData = ctx.getImageData(0, 0, w, h)
+      const result = jsQR(imageData.data, w, h, { inversionAttempts: 'dontInvert' })
+      if (result?.data) {
+        stopQrCamera()
+        handleQrValue(result.data)
       }
-    }, 500)
+    }, 300)
 
     setIsQrScanning(true)
   }
