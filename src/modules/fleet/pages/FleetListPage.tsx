@@ -103,7 +103,7 @@ const getDocumentStatus = (expiresAt?: string): 'overdue' | 'soon' | 'ok' | 'mis
 }
 
 export const FleetListPage = () => {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {
     state: { fleetUnits, featureFlags },
     actions: { setFleetUnits, setAppError },
@@ -118,7 +118,7 @@ export const FleetListPage = () => {
   const isDev = currentUser?.role === 'DEV'
 
   const normalizedUnits = useMemo(() => normalizeFleetUnits(fleetUnits), [fleetUnits])
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') ?? '')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPERATIONAL' | 'MAINTENANCE' | 'OUT_OF_SERVICE'>(() =>
     parseStatusFilter(searchParams.get('status')),
   )
@@ -132,7 +132,7 @@ export const FleetListPage = () => {
   const [unitTypeFilter, setUnitTypeFilter] = useState<'ALL' | (typeof fleetUnitTypes)[number]>(() =>
     parseUnitTypeFilter(searchParams.get('unitType')),
   )
-  const [locationFilter, setLocationFilter] = useState('ALL')
+  const [locationFilter, setLocationFilter] = useState(() => searchParams.get('location') ?? 'ALL')
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrScanning, setIsQrScanning] = useState(false)
@@ -162,6 +162,29 @@ export const FleetListPage = () => {
     }),
     [normalizedUnits],
   )
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams)
+    // filtros simples
+    if (statusFilter !== 'ALL') next.set('status', statusFilter)
+    else next.delete('status')
+    if (unitTypeFilter !== 'ALL') next.set('unitType', unitTypeFilter)
+    else next.delete('unitType')
+    if (documentTypeFilter !== 'ALL') next.set('docType', documentTypeFilter)
+    else next.delete('docType')
+    if (documentStatusFilter !== 'ALL') next.set('docStatus', documentStatusFilter)
+    else next.delete('docStatus')
+    if (locationFilter !== 'ALL') next.set('location', locationFilter)
+    else next.delete('location')
+    // cliente (puede ser texto libre o el centinela sin-asignar)
+    if (clientFilter) next.set('client', clientFilter)
+    else next.delete('client')
+    // búsqueda de texto
+    if (searchTerm) next.set('q', searchTerm)
+    else next.delete('q')
+    setSearchParams(next, { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, unitTypeFilter, documentTypeFilter, documentStatusFilter, locationFilter, clientFilter, searchTerm])
 
   const locationOptions = useMemo(
     () =>
