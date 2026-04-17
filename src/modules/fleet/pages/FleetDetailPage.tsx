@@ -714,7 +714,7 @@ export const FleetDetailPage = () => {
       <header className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <BackLink to={ROUTE_PATHS.fleet.list} label="Volver a flota" />
+            <BackLink historyBack label="Volver a flota" />
             <h2 className="text-xl font-bold text-slate-900">Detalle de Unidad</h2>
             <p className="mt-1 text-sm text-slate-600">{selectedUnit.internalCode}</p>
           </div>
