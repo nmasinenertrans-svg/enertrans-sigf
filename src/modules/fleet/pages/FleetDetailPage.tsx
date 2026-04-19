@@ -121,6 +121,10 @@ export const FleetDetailPage = () => {
   const [activeTab, setActiveTab] = useState<DetailTabId>('maintenancePlan')
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrPdfLoading, setIsQrPdfLoading] = useState(false)
+  const [copySpecsOpen, setCopySpecsOpen] = useState(false)
+  const [copySpecsSearch, setCopySpecsSearch] = useState('')
+  const [copySpecsSource, setCopySpecsSource] = useState<FleetUnit | null>(null)
+  const [isCopyingSpecs, setIsCopyingSpecs] = useState(false)
 
   const {
     state: { currentUser, fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements },
@@ -605,6 +609,20 @@ export const FleetDetailPage = () => {
       ]
     : []
 
+  const handleCopySpecs = async (source: FleetUnit) => {
+    if (!selectedUnit) return
+    setIsCopyingSpecs(true)
+    const update = { lubricants: source.lubricants, filters: source.filters }
+    updateUnit((unit) => ({ ...unit, ...update }))
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      await apiRequest(`/fleet/${selectedUnit.id}`, { method: 'PATCH', body: update }).catch(() => null)
+    }
+    setIsCopyingSpecs(false)
+    setCopySpecsOpen(false)
+    setCopySpecsSearch('')
+    setCopySpecsSource(null)
+  }
+
   const fetchImageAsDataUrl = async (url: string): Promise<string> => {
     const response = await fetch(url)
     if (!response.ok) {
@@ -915,8 +933,17 @@ export const FleetDetailPage = () => {
 
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
           <section className="rounded-lg border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-bold text-slate-700">
-              Lubricantes
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2">
+              <span className="text-sm font-bold text-slate-700">Lubricantes</span>
+              {canEditFleet && (
+                <button
+                  type="button"
+                  onClick={() => setCopySpecsOpen(true)}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Copiar de otra unidad
+                </button>
+              )}
             </div>
             <div className="divide-y divide-slate-200">
               {lubricantRows.map((row) => (
@@ -1493,6 +1520,75 @@ export const FleetDetailPage = () => {
           </div>
         </div>
       ) : null}
+
+      {copySpecsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Copiar especificaciones de...</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Los lubricantes y filtros de la unidad seleccionada se copiarán a esta unidad.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setCopySpecsOpen(false); setCopySpecsSearch(''); setCopySpecsSource(null) }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                value={copySpecsSearch}
+                onChange={(e) => setCopySpecsSearch(e.target.value)}
+                placeholder="Buscar por dominio, marca, modelo..."
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              />
+              <div className="mt-3 max-h-72 overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
+                {fleetUnits
+                  .filter((u) => u.id !== selectedUnit?.id)
+                  .filter((u) => {
+                    const s = copySpecsSearch.trim().toLowerCase()
+                    if (!s) return true
+                    return (
+                      u.internalCode.toLowerCase().includes(s) ||
+                      u.brand.toLowerCase().includes(s) ||
+                      u.model.toLowerCase().includes(s)
+                    )
+                  })
+                  .map((unit) => (
+                    <button
+                      key={unit.id}
+                      type="button"
+                      onClick={() => setCopySpecsSource(unit)}
+                      className={`w-full px-4 py-3 text-left text-sm transition-colors hover:bg-slate-50 ${copySpecsSource?.id === unit.id ? 'border-l-4 border-amber-400 bg-amber-50' : ''}`}
+                    >
+                      <p className="font-semibold text-slate-900">{unit.internalCode}</p>
+                      <p className="text-xs text-slate-500">{unit.brand} {unit.model} · {getFleetUnitTypeLabel(unit.unitType)} · {unit.location || 'Sin ubicación'}</p>
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => { setCopySpecsOpen(false); setCopySpecsSearch(''); setCopySpecsSource(null) }}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!copySpecsSource || isCopyingSpecs}
+                onClick={() => { if (copySpecsSource) void handleCopySpecs(copySpecsSource) }}
+                className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCopyingSpecs ? 'Copiando...' : 'Confirmar copia'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

@@ -122,6 +122,12 @@ export const FleetListPage = () => {
   )
   const [locationFilter, setLocationFilter] = useState(() => searchParams.get('location') ?? 'ALL')
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkSpecsOpen, setBulkSpecsOpen] = useState(false)
+  const [bulkSpecsSearch, setBulkSpecsSearch] = useState('')
+  const [bulkSpecsSource, setBulkSpecsSource] = useState<FleetUnit | null>(null)
+  const [isBulkApplying, setIsBulkApplying] = useState(false)
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrScanning, setIsQrScanning] = useState(false)
   const [qrInput, setQrInput] = useState('')
@@ -444,6 +450,32 @@ export const FleetListPage = () => {
     }
   }
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleBulkApplySpecs = async (source: FleetUnit) => {
+    setIsBulkApplying(true)
+    const update = { lubricants: source.lubricants, filters: source.filters }
+    setFleetUnits(fleetUnits.map((unit) => (selectedIds.has(unit.id) ? { ...unit, ...update } : unit)))
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      await Promise.all(
+        [...selectedIds].map((id) => apiRequest(`/fleet/${id}`, { method: 'PATCH', body: update }).catch(() => null)),
+      )
+    }
+    setIsBulkApplying(false)
+    setBulkSpecsOpen(false)
+    setBulkSpecsSearch('')
+    setBulkSpecsSource(null)
+    setSelectedIds(new Set())
+    setSelectionMode(false)
+  }
+
   const handleQuickSeed = () => {
     const formData = createEmptyFleetFormData()
     const stamp = Date.now().toString().slice(-4)
@@ -483,6 +515,33 @@ export const FleetListPage = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canEdit && !selectionMode && (
+            <button
+              type="button"
+              onClick={() => setSelectionMode(true)}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Seleccionar unidades
+            </button>
+          )}
+          {selectionMode && (
+            <>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set(filteredUnits.map((u) => u.id)))}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Seleccionar todos ({filteredUnits.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSelectionMode(false); setSelectedIds(new Set()) }}
+                className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+              >
+                Cancelar selección
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setIsQrOpen(true)}
@@ -647,13 +706,32 @@ export const FleetListPage = () => {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {filteredUnits.map((unit) => (
-                <FleetUnitCard
-                  key={unit.id}
-                  unit={unit}
-                  onRequestDelete={setUnitPendingDelete}
-                  canEdit={canEdit}
-                  canDelete={canDelete}
-                />
+                <div key={unit.id} className="relative">
+                  {selectionMode && (
+                    <button
+                      type="button"
+                      onClick={() => toggleSelect(unit.id)}
+                      className={`absolute left-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded border-2 shadow-sm ${
+                        selectedIds.has(unit.id)
+                          ? 'border-amber-500 bg-amber-400 text-slate-900'
+                          : 'border-slate-400 bg-white'
+                      }`}
+                    >
+                      {selectedIds.has(unit.id) && <span className="text-xs font-bold leading-none">✓</span>}
+                    </button>
+                  )}
+                  <div
+                    onClick={selectionMode ? () => toggleSelect(unit.id) : undefined}
+                    className={selectionMode ? 'cursor-pointer select-none' : ''}
+                  >
+                    <FleetUnitCard
+                      unit={unit}
+                      onRequestDelete={selectionMode ? () => {} : setUnitPendingDelete}
+                      canEdit={!selectionMode && canEdit}
+                      canDelete={!selectionMode && canDelete}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -749,6 +827,94 @@ export const FleetListPage = () => {
           </div>
         </div>
       ) : null}
+
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-2xl">
+          <span className="text-sm font-semibold text-slate-700">{selectedIds.size} unidad{selectedIds.size !== 1 ? 'es' : ''} seleccionada{selectedIds.size !== 1 ? 's' : ''}</span>
+          <button
+            type="button"
+            onClick={() => setBulkSpecsOpen(true)}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
+          >
+            Aplicar especificaciones
+          </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedIds(new Set()); setSelectionMode(false) }}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {bulkSpecsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Copiar especificaciones de...</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Seleccioná la unidad fuente. Sus lubricantes y filtros se copiarán a las {selectedIds.size} unidades seleccionadas.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setBulkSpecsOpen(false); setBulkSpecsSearch(''); setBulkSpecsSource(null) }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                value={bulkSpecsSearch}
+                onChange={(e) => setBulkSpecsSearch(e.target.value)}
+                placeholder="Buscar por dominio, marca, modelo..."
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              />
+              <div className="mt-3 max-h-72 overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
+                {normalizedUnits
+                  .filter((u) => {
+                    const s = bulkSpecsSearch.trim().toLowerCase()
+                    if (!s) return true
+                    return (
+                      u.internalCode.toLowerCase().includes(s) ||
+                      u.brand.toLowerCase().includes(s) ||
+                      u.model.toLowerCase().includes(s)
+                    )
+                  })
+                  .map((unit) => (
+                    <button
+                      key={unit.id}
+                      type="button"
+                      onClick={() => setBulkSpecsSource(unit)}
+                      className={`w-full px-4 py-3 text-left text-sm transition-colors hover:bg-slate-50 ${bulkSpecsSource?.id === unit.id ? 'border-l-4 border-amber-400 bg-amber-50' : ''}`}
+                    >
+                      <p className="font-semibold text-slate-900">{unit.internalCode}</p>
+                      <p className="text-xs text-slate-500">{unit.brand} {unit.model} · {fleetUnitTypeLabelMap[unit.unitType]} · {unit.location || 'Sin ubicación'}</p>
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => { setBulkSpecsOpen(false); setBulkSpecsSearch(''); setBulkSpecsSource(null) }}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!bulkSpecsSource || isBulkApplying}
+                onClick={() => { if (bulkSpecsSource) void handleBulkApplySpecs(bulkSpecsSource) }}
+                className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBulkApplying ? 'Aplicando...' : `Aplicar a ${selectedIds.size} unidades`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
