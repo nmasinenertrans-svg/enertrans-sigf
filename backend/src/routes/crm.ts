@@ -197,6 +197,10 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
   try {
     const stage = parsed.data.stage
     const expectedCloseDate = parseOptionalDate(parsed.data.expectedCloseDate)
+    const assignedToUserId = parsed.data.assignedToUserId ?? null
+    const resolvedAssignedToUserId = assignedToUserId
+      ? (await prisma.user.findUnique({ where: { id: assignedToUserId }, select: { id: true } }))?.id ?? null
+      : null
     const created = await runWithSchemaFailover(() =>
       prisma.crmDeal.create({
         data: {
@@ -215,7 +219,7 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
           stage,
           probability: resolveProbability(stage, parsed.data.probability),
           expectedCloseDate: expectedCloseDate ?? undefined,
-          assignedToUserId: parsed.data.assignedToUserId ?? null,
+          assignedToUserId: resolvedAssignedToUserId,
           notes: normalizeText(parsed.data.notes),
           createdByUserId: req.userId,
           lastContactAt: new Date(),
@@ -253,6 +257,12 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req: any, re
     const nextProbability = resolveProbability(nextStage, parsed.data.probability, existing.probability)
     const nextExpectedCloseDate =
       parsed.data.expectedCloseDate !== undefined ? parseOptionalDate(parsed.data.expectedCloseDate) : undefined
+    const nextAssignedToUserId =
+      parsed.data.assignedToUserId !== undefined
+        ? parsed.data.assignedToUserId
+          ? (await prisma.user.findUnique({ where: { id: parsed.data.assignedToUserId }, select: { id: true } }))?.id ?? null
+          : null
+        : undefined
 
     const nextLostReason =
       nextStage === 'LOST'
@@ -283,7 +293,7 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req: any, re
             stage: parsed.data.stage,
             probability: nextProbability,
             expectedCloseDate: nextExpectedCloseDate,
-            assignedToUserId: parsed.data.assignedToUserId,
+            assignedToUserId: nextAssignedToUserId,
             notes: parsed.data.notes !== undefined ? normalizeText(parsed.data.notes) : undefined,
             wonAt: nextStage === 'WON' ? existing.wonAt ?? new Date() : null,
             lostReason: nextLostReason,

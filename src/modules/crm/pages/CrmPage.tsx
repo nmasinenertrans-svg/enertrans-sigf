@@ -4,7 +4,20 @@ import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
-import { apiRequest } from '../../../services/api/apiClient'
+import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
+
+const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof ApiRequestError) {
+    try {
+      const parsed = JSON.parse(error.responseBody) as { message?: string }
+      if (typeof parsed?.message === 'string' && parsed.message.trim()) return parsed.message
+    } catch {
+      if (typeof error.responseBody === 'string' && error.responseBody.trim()) return error.responseBody
+    }
+  }
+  if (error instanceof Error && error.message.trim()) return error.message
+  return fallback
+}
 import type { CrmActivity, CrmActivityType, CrmDeal, CrmDealKind, CrmDealStage, CrmDealUnitStatus } from '../../../types/domain'
 
 const STAGES: Array<{ key: CrmDealStage; label: string }> = [
@@ -83,8 +96,8 @@ export const CrmPage = () => {
       setActivities(Array.isArray(data.activities) ? data.activities : [])
       setStageDraft(nextDeals.reduce<Record<string, CrmDealStage>>((acc, deal) => { acc[deal.id] = deal.stage; return acc }, {}))
       setSelectedDealId((prev) => (prev && nextDeals.some((deal) => deal.id === prev) ? prev : nextDeals[0]?.id || ''))
-    } catch {
-      setAppError('No se pudo cargar CRM.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo cargar CRM.'))
     } finally {
       if (withLoader) setIsLoading(false)
     }
@@ -124,7 +137,7 @@ export const CrmPage = () => {
     }
   }, [activities, deals])
 
-  const payload = (form: DealForm) => ({ title: trim(form.title), companyName: trim(form.companyName), dealKind: form.dealKind, referenceCode: trim(form.referenceCode), isHistorical: form.isHistorical, contactName: trim(form.contactName), contactEmail: trim(form.contactEmail), contactPhone: trim(form.contactPhone), source: trim(form.source), serviceLine: trim(form.serviceLine), amount: num(form.amount), currency: form.currency, probability: form.probability.trim() ? num(form.probability) : undefined, stage: form.stage, expectedCloseDate: form.expectedCloseDate ? new Date(`${form.expectedCloseDate}T00:00:00.000Z`).toISOString() : undefined, assignedToUserId: form.assignedToUserId || null, notes: trim(form.notes), lostReason: form.stage === 'LOST' ? trim(form.lostReason) : '' })
+  const payload = (form: DealForm) => ({ title: trim(form.title), companyName: trim(form.companyName), dealKind: form.dealKind, referenceCode: trim(form.referenceCode), isHistorical: form.isHistorical, contactName: trim(form.contactName), contactEmail: trim(form.contactEmail), contactPhone: trim(form.contactPhone), source: trim(form.source), serviceLine: trim(form.serviceLine), amount: num(form.amount), currency: form.currency, probability: form.probability.trim() ? num(form.probability) : undefined, stage: form.stage, expectedCloseDate: form.expectedCloseDate ? new Date(`${form.expectedCloseDate}T00:00:00.000Z`).toISOString() : undefined, assignedToUserId: salesUsers.some((u) => u.id === form.assignedToUserId) ? form.assignedToUserId : null, notes: trim(form.notes), lostReason: form.stage === 'LOST' ? trim(form.lostReason) : '' })
 
   const createDeal = async () => {
     if (!canCreate) return
@@ -133,7 +146,7 @@ export const CrmPage = () => {
     try {
       const created = await apiRequest<CrmDeal>('/crm/deals', { method: 'POST', body: payload(createForm) })
       setDeals((prev) => [created, ...prev]); setStageDraft((prev) => ({ ...prev, [created.id]: created.stage })); setCreateForm(EMPTY_DEAL); setSelectedDealId(created.id)
-    } catch { setAppError('No se pudo crear la oportunidad.') } finally { setIsCreateSaving(false) }
+    } catch (error) { setAppError(getApiErrorMessage(error, 'No se pudo crear la oportunidad.')) } finally { setIsCreateSaving(false) }
   }
   const saveDeal = async () => {
     if (!canEdit || !selectedDeal) return
@@ -141,7 +154,7 @@ export const CrmPage = () => {
     try {
       const updated = await apiRequest<CrmDeal>(`/crm/deals/${selectedDeal.id}`, { method: 'PATCH', body: payload(editForm) })
       setDeals((prev) => prev.map((deal) => deal.id === updated.id ? updated : deal)); setStageDraft((prev) => ({ ...prev, [updated.id]: updated.stage })); void loadCrm(false)
-    } catch { setAppError('No se pudo actualizar la oportunidad.') } finally { setIsEditSaving(false) }
+    } catch (error) { setAppError(getApiErrorMessage(error, 'No se pudo actualizar la oportunidad.')) } finally { setIsEditSaving(false) }
   }
   const moveStage = async (dealId: string, stage: CrmDealStage) => {
     if (!canEdit) return
@@ -152,13 +165,13 @@ export const CrmPage = () => {
       const reason = selectedDeal?.id === dealId && stage === 'LOST' ? trim(editForm.lostReason) : ''
       const updated = await apiRequest<CrmDeal>(`/crm/deals/${dealId}/stage`, { method: 'PATCH', body: { stage, lostReason: reason } })
       setDeals((list) => list.map((deal) => deal.id === dealId ? updated : deal)); void loadCrm(false)
-    } catch { setDeals(prev); setStageDraft((map) => ({ ...map, [dealId]: current.stage })); setAppError('No se pudo mover la etapa.') }
+    } catch (error) { setDeals(prev); setStageDraft((map) => ({ ...map, [dealId]: current.stage })); setAppError(getApiErrorMessage(error, 'No se pudo mover la etapa.')) }
   }
   const convertDeal = async (deal: CrmDeal) => {
     if (!canEdit) return
     setIsConvertingId(deal.id)
     try { const res = await apiRequest<{ deal: CrmDeal }>(`/crm/deals/${deal.id}/convert-client`, { method: 'POST' }); setDeals((list) => list.map((item) => item.id === deal.id ? res.deal : item)); void loadCrm(false) }
-    catch { setAppError('No se pudo convertir a cliente.') } finally { setIsConvertingId(null) }
+    catch (error) { setAppError(getApiErrorMessage(error, 'No se pudo convertir a cliente.')) } finally { setIsConvertingId(null) }
   }
   const addActivity = async () => {
     if (!canEdit || !selectedDeal) return
@@ -167,18 +180,18 @@ export const CrmPage = () => {
     try {
       const created = await apiRequest<CrmActivity>(`/crm/deals/${selectedDeal.id}/activities`, { method: 'POST', body: { type: activityForm.type, summary: trim(activityForm.summary), dueAt: activityForm.dueAt ? new Date(`${activityForm.dueAt}T00:00:00.000Z`).toISOString() : undefined } })
       setActivities((prev) => [created, ...prev]); setActivityForm(EMPTY_ACTIVITY)
-    } catch { setAppError('No se pudo registrar la actividad.') } finally { setIsActivitySaving(false) }
+    } catch (error) { setAppError(getApiErrorMessage(error, 'No se pudo registrar la actividad.')) } finally { setIsActivitySaving(false) }
   }
   const toggleActivity = async (activity: CrmActivity) => {
     if (!canEdit) return
     try { const updated = await apiRequest<CrmActivity>(`/crm/activities/${activity.id}`, { method: 'PATCH', body: { status: activity.status === 'DONE' ? 'PENDING' : 'DONE' } }); setActivities((list) => list.map((item) => item.id === updated.id ? updated : item)) }
-    catch { setAppError('No se pudo actualizar la actividad.') }
+    catch (error) { setAppError(getApiErrorMessage(error, 'No se pudo actualizar la actividad.')) }
   }
   const deleteDeal = async () => {
     if (!confirmDelete || !canDelete) return
     setIsDeletingId(confirmDelete.id)
     try { await apiRequest(`/crm/deals/${confirmDelete.id}`, { method: 'DELETE' }); setDeals((list) => list.filter((item) => item.id !== confirmDelete.id)); setActivities((list) => list.filter((item) => item.dealId !== confirmDelete.id)); setConfirmDelete(null) }
-    catch { setAppError('No se pudo eliminar la oportunidad.') } finally { setIsDeletingId(null) }
+    catch (error) { setAppError(getApiErrorMessage(error, 'No se pudo eliminar la oportunidad.')) } finally { setIsDeletingId(null) }
   }
 
   const searchUnits = async () => {
@@ -187,8 +200,8 @@ export const CrmPage = () => {
     try {
       const data = await apiRequest<UnitSearch[]>(`/crm/deals/${selectedDeal.id}/units/search?q=${encodeURIComponent(trim(unitQuery))}`)
       setUnitResults(Array.isArray(data) ? data : [])
-    } catch {
-      setAppError('No se pudieron buscar unidades.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudieron buscar unidades.'))
     } finally {
       setIsSearchingUnit(false)
     }
@@ -201,8 +214,8 @@ export const CrmPage = () => {
       setUnitNote('')
       await searchUnits()
       await loadCrm(false)
-    } catch (error: any) {
-      setAppError(error?.message || 'No se pudo vincular la unidad.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo vincular la unidad.'))
     }
   }
 
@@ -212,8 +225,8 @@ export const CrmPage = () => {
       await apiRequest(`/crm/deals/${selectedDeal.id}/units/${linkId}`, { method: 'PATCH', body: { status } })
       await searchUnits()
       await loadCrm(false)
-    } catch (error: any) {
-      setAppError(error?.message || 'No se pudo actualizar la unidad.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo actualizar la unidad.'))
     }
   }
 
@@ -223,8 +236,8 @@ export const CrmPage = () => {
       await apiRequest(`/crm/deals/${selectedDeal.id}/units/${linkId}`, { method: 'DELETE' })
       await searchUnits()
       await loadCrm(false)
-    } catch {
-      setAppError('No se pudo desvincular la unidad.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo desvincular la unidad.'))
     }
   }
 
@@ -240,8 +253,8 @@ export const CrmPage = () => {
       }
       setAutomationStatus(`Automatizacion ejecutada: ${result.generated} alertas (${result.scannedDeals} oportunidades / ${result.scannedActivities} actividades).`)
       await loadCrm(false)
-    } catch {
-      setAppError('No se pudo ejecutar automatizaciones CRM.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo ejecutar automatizaciones CRM.'))
     } finally {
       setIsAutomationRunning(false)
     }
