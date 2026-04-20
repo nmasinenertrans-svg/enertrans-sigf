@@ -2,7 +2,6 @@ interface InventoryStockCardProps {
   totalItems: number
   totalStockUnits: number
   lowStockItems: number
-  linkedToWorkOrders: number
   totalValueArs: number
   totalValueUsd: number
 }
@@ -14,7 +13,6 @@ export const InventoryStockCard = ({
   totalItems,
   totalStockUnits,
   lowStockItems,
-  linkedToWorkOrders,
   totalValueArs,
   totalValueUsd,
 }: InventoryStockCardProps) => (

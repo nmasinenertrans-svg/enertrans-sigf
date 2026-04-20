@@ -68,7 +68,6 @@ export const InventoryPage = () => {
       totalItems: inventoryView.length,
       totalStockUnits: inventoryView.reduce((acc, item) => acc + item.stock, 0),
       lowStockItems: inventoryView.filter((item) => item.stock <= lowStockThreshold).length,
-      linkedToWorkOrders: inventoryView.filter((item) => item.linkedWorkOrderIds.length > 0).length,
     }),
     [inventoryView],
   )
@@ -209,7 +208,6 @@ export const InventoryPage = () => {
         totalItems={summary.totalItems}
         totalStockUnits={summary.totalStockUnits}
         lowStockItems={summary.lowStockItems}
-        linkedToWorkOrders={summary.linkedToWorkOrders}
         totalValueArs={totalValue.ars}
         totalValueUsd={totalValue.usd}
       />
