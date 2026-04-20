@@ -17,6 +17,8 @@
     "@capacitor/core": "^8.1.0",
     "@sentry/react": "^10.40.0",
     "@tailwindcss/vite": "^4.1.18",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "jspdf": "^4.1.0",
     "jsqr": "^1.4.0",
     "react": "^19.2.0",
