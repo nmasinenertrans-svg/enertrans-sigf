@@ -355,11 +355,18 @@ export interface RepairRecord {
   invoiceFileUrl?: string
 }
 
+export const inventoryUnits = ['UNIDAD', 'LITRO', 'KG', 'METRO'] as const
+export type InventoryUnit = (typeof inventoryUnits)[number]
+
 export interface InventoryItem {
   id: string
   sku: string
+  externalBarcode?: string
   productName: string
   stock: number
+  unit: InventoryUnit
+  unitPrice?: number
+  currency?: 'ARS' | 'USD'
   movementHistory: string[]
   linkedWorkOrderIds: string[]
 }

@@ -1,7 +1,12 @@
-﻿export interface InventoryItemFormData {
+import type { InventoryUnit } from '../../types/domain'
+
+export interface InventoryItemFormData {
   sku: string
   productName: string
   stock: number
+  unit: InventoryUnit
+  unitPrice: string
+  currency: 'ARS' | 'USD'
 }
 
 export type InventoryItemFormField = keyof InventoryItemFormData
@@ -17,13 +22,18 @@ export interface PendingBarcodeRegistration {
   barcode: string
   quantity: number
   productName: string
+  suggestedSku: string
 }
 
 export interface InventoryViewItem {
   id: string
   sku: string
+  externalBarcode?: string
   productName: string
   stock: number
+  unit: InventoryUnit
+  unitPrice?: number
+  currency?: 'ARS' | 'USD'
   movementHistory: string[]
   linkedWorkOrderIds: string[]
 }
