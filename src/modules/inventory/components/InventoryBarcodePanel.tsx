@@ -13,7 +13,7 @@ const minBarcodeLength = 3
 export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanelProps) => {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const readerRef = useRef<import('@zxing/browser').BrowserMultiFormatReader | null>(null)
+  const scanControlsRef = useRef<{ stop: () => void } | null>(null)
 
   const [barcodeInput, setBarcodeInput] = useState('')
   const [quantityInput, setQuantityInput] = useState(1)
@@ -23,9 +23,9 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
   const hasCameraSupport = Boolean(navigator.mediaDevices?.getUserMedia)
 
   const stopCamera = () => {
-    if (readerRef.current) {
-      readerRef.current.reset()
-      readerRef.current = null
+    if (scanControlsRef.current) {
+      scanControlsRef.current.stop()
+      scanControlsRef.current = null
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop())
@@ -85,9 +85,8 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
 
     const { BrowserMultiFormatReader } = await import('@zxing/browser')
     const reader = new BrowserMultiFormatReader()
-    readerRef.current = reader
 
-    reader.decodeFromVideoElement(video, (result, err) => {
+    const controls = await reader.decodeFromVideoElement(video, (result, err) => {
       if (result) {
         const value = result.getText().trim()
         if (value.length >= minBarcodeLength) {
@@ -95,9 +94,9 @@ export const InventoryBarcodePanel = ({ onSubmitBarcode }: InventoryBarcodePanel
           stopCamera()
         }
       }
-      // err is expected when no barcode found in frame — ignore
       void err
     })
+    scanControlsRef.current = controls
   }
 
   return (
