@@ -138,10 +138,11 @@ export const validateExternalRequestFormData = (
   return errors
 }
 
-export const toExternalRequest = (formData: ExternalRequestFormData, unitCode: string): ExternalRequest => {
+export const toExternalRequest = (formData: ExternalRequestFormData, unitCode: string, existingRequests?: ExternalRequest[]): ExternalRequest => {
   const partsItems = normalizePartItems(formData.partsItems)
   const partsTotal = Number(partsItems.reduce((total, item) => total + item.lineTotal, 0).toFixed(2))
   const hasAttachment = Boolean(formData.providerFileUrl?.trim())
+  const existingCodes = existingRequests?.map((r) => r.code).filter(Boolean) as string[] | undefined
 
   return {
     id: createId(),
@@ -150,7 +151,7 @@ export const toExternalRequest = (formData: ExternalRequestFormData, unitCode: s
     description: formData.description.trim(),
     tasks: parseTasks(formData.tasksInput),
     createdAt: new Date().toISOString(),
-    code: getNextSequenceCode('externalRequest', 'NDP', normalizeUnitCode(unitCode)),
+    code: getNextSequenceCode('externalRequest', 'NDP', normalizeUnitCode(unitCode), existingCodes),
     currency: formData.currency,
     partsItems,
     partsTotal,

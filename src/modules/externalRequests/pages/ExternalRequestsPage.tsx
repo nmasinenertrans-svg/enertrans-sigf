@@ -260,6 +260,7 @@ export const ExternalRequestsPage = () => {
         providerFileUrl,
       },
       unitCode,
+      externalRequests,
     )
 
     setExternalRequests([request, ...externalRequests])

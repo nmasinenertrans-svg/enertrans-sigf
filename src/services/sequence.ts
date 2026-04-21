@@ -28,7 +28,7 @@ export const formatSequenceCode = (prefix: string, value: number, unitCode?: str
   return `${prefix}-${pad(value)}`
 }
 
-export const getNextSequenceCode = (key: string, prefix: string, unitCode?: string): string => {
+export const getNextSequenceCode = (key: string, prefix: string, unitCode?: string, existingCodes?: string[]): string => {
   if (typeof window === 'undefined') {
     return formatSequenceCode(prefix, 0, unitCode)
   }
@@ -37,13 +37,18 @@ export const getNextSequenceCode = (key: string, prefix: string, unitCode?: stri
   let next = 1
 
   try {
+    const maxFromExisting = existingCodes
+      ? existingCodes.reduce((max, code) => {
+          const n = parseSequenceNumber(code)
+          return n !== null && n > max ? n : max
+        }, 0)
+      : 0
+
     const raw = window.localStorage.getItem(storageKey)
-    if (raw) {
-      const parsed = Number(raw)
-      if (!Number.isNaN(parsed) && parsed >= 0) {
-        next = parsed + 1
-      }
-    }
+    const fromStorage = raw ? Number(raw) : 0
+    const base = Math.max(fromStorage, maxFromExisting)
+    next = base + 1
+
     window.localStorage.setItem(storageKey, String(next))
   } catch {
     // ignore
