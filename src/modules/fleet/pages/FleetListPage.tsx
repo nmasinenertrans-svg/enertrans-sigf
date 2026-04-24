@@ -9,6 +9,7 @@ import { usePermissions } from '../../../core/auth/usePermissions'
 import { FleetUnitCard } from '../components/FleetUnitCard'
 import {
   createEmptyFleetFormData,
+  detectCylindersFromModel,
   fleetUnitTypeLabelMap,
   getOperationalStatusLabel,
   normalizeFleetUnits,
@@ -129,6 +130,8 @@ export const FleetListPage = () => {
   const [bulkSpecsSearch, setBulkSpecsSearch] = useState('')
   const [bulkSpecsSource, setBulkSpecsSource] = useState<FleetUnit | null>(null)
   const [isBulkApplying, setIsBulkApplying] = useState(false)
+  const [isAutoDetectingCylinders, setIsAutoDetectingCylinders] = useState(false)
+  const [autoDetectResult, setAutoDetectResult] = useState('')
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrScanning, setIsQrScanning] = useState(false)
   const [qrInput, setQrInput] = useState('')
@@ -509,6 +512,34 @@ export const FleetListPage = () => {
     }
   }
 
+  const handleAutoDetectCylinders = async () => {
+    const targets = normalizedUnits.filter((u) => !u.engineCylinders && detectCylindersFromModel(u.model))
+    if (targets.length === 0) {
+      setAutoDetectResult('No hay unidades para actualizar.')
+      return
+    }
+    setIsAutoDetectingCylinders(true)
+    setAutoDetectResult('')
+    let updated = 0
+    for (const unit of targets) {
+      const cylinders = detectCylindersFromModel(unit.model)
+      if (!cylinders) continue
+      try {
+        await apiRequest(`/fleet/${unit.id}`, { method: 'PATCH', body: { engineCylinders: cylinders } })
+        updated++
+      } catch {
+        // continue with remaining units
+      }
+    }
+    setFleetUnits(normalizedUnits.map((u) => {
+      const cylinders = detectCylindersFromModel(u.model)
+      if (!u.engineCylinders && cylinders) return { ...u, engineCylinders: cylinders }
+      return u
+    }))
+    setAutoDetectResult(`${updated} de ${targets.length} unidades actualizadas.`)
+    setIsAutoDetectingCylinders(false)
+  }
+
   return (
     <section className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -562,6 +593,16 @@ export const FleetListPage = () => {
               Cargar unidad demo
             </button>
           ) : null}
+          {canEdit && !selectionMode ? (
+            <button
+              type="button"
+              onClick={() => void handleAutoDetectCylinders()}
+              disabled={isAutoDetectingCylinders}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+            >
+              {isAutoDetectingCylinders ? 'Detectando...' : 'Auto-detectar cilindros'}
+            </button>
+          ) : null}
           {can('FLEET', 'create') ? (
             <Link
               to={ROUTE_PATHS.fleet.create}
@@ -572,6 +613,10 @@ export const FleetListPage = () => {
           ) : null}
         </div>
       </header>
+
+      {autoDetectResult ? (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800">{autoDetectResult}</p>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-4">
         <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
