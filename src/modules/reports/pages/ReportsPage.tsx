@@ -411,6 +411,7 @@ export const ReportsPage = () => {
   const [occupancyClientFilter, setOccupancyClientFilter] = useState('ALL')
   const [occupancyTypeFilter, setOccupancyTypeFilter] = useState<'ALL' | FleetUnit['unitType']>('ALL')
   const [occupancyStatusFilter, setOccupancyStatusFilter] = useState<'ALL' | FleetOperationalStatus>('ALL')
+  const [occupancyCylindersFilter, setOccupancyCylindersFilter] = useState<'ALL' | '4' | '6'>('ALL')
   const [showAllOccupancyRows, setShowAllOccupancyRows] = useState(false)
   const [activeOccupancyRowLabel, setActiveOccupancyRowLabel] = useState<string | null>(null)
   const [activeOccupancyBreakdownLabel, setActiveOccupancyBreakdownLabel] = useState<string | null>(null)
@@ -535,9 +536,12 @@ export const ReportsPage = () => {
         if (occupancyStatusFilter !== 'ALL' && unit.operationalStatus !== occupancyStatusFilter) {
           return false
         }
+        if (occupancyCylindersFilter !== 'ALL' && (unit.engineCylinders ?? 0) !== Number(occupancyCylindersFilter)) {
+          return false
+        }
         return true
       }),
-    [reportFleetUnits, occupancyClientFilter, occupancyStatusFilter, occupancyTypeFilter],
+    [reportFleetUnits, occupancyClientFilter, occupancyStatusFilter, occupancyTypeFilter, occupancyCylindersFilter],
   )
 
   const occupancyPivot = useMemo(() => {
@@ -854,18 +858,6 @@ export const ReportsPage = () => {
       { label: 'Sin contrato', value: withoutContract, color: '#e2e8f0' },
       ...contractSlices,
     ].filter((s) => s.value > 0).sort((a, b) => b.value - a.value)
-  }, [reportFleetUnits])
-
-  const truckCylindersStats = useMemo(() => {
-    const trucks = reportFleetUnits.filter((u) => TRUCK_TYPES.includes(u.unitType))
-    const with4 = trucks.filter((u) => u.engineCylinders === 4)
-    const with6 = trucks.filter((u) => u.engineCylinders === 6)
-    const unknown = trucks.filter((u) => !u.engineCylinders)
-    const avgKm4 = with4.length ? Math.round(with4.reduce((s, u) => s + (u.currentKilometers ?? 0), 0) / with4.length) : 0
-    const avgKm6 = with6.length ? Math.round(with6.reduce((s, u) => s + (u.currentKilometers ?? 0), 0) / with6.length) : 0
-    const avgHours4 = with4.length ? Math.round(with4.reduce((s, u) => s + (u.currentEngineHours ?? 0), 0) / with4.length) : 0
-    const avgHours6 = with6.length ? Math.round(with6.reduce((s, u) => s + (u.currentEngineHours ?? 0), 0) / with6.length) : 0
-    return { with4, with6, unknown, avgKm4, avgKm6, avgHours4, avgHours6 }
   }, [reportFleetUnits])
 
   const fleetCompositionUnitMap = useMemo(() => {
@@ -1197,7 +1189,7 @@ export const ReportsPage = () => {
 
     cursorY += chartCardHeight + 22
 
-    const noFiltersApplied = occupancyClientFilter === 'ALL' && occupancyTypeFilter === 'ALL' && occupancyStatusFilter === 'ALL'
+    const noFiltersApplied = occupancyClientFilter === 'ALL' && occupancyTypeFilter === 'ALL' && occupancyStatusFilter === 'ALL' && occupancyCylindersFilter === 'ALL'
 
     if (noFiltersApplied) {
       doc.addPage()
@@ -1469,7 +1461,7 @@ export const ReportsPage = () => {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
               Agrupar por
               <select
@@ -1541,6 +1533,18 @@ export const ReportsPage = () => {
                     {getOperationalStatusLabel(status)}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Cilindros
+              <select
+                value={occupancyCylindersFilter}
+                onChange={(event) => setOccupancyCylindersFilter(event.target.value as typeof occupancyCylindersFilter)}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              >
+                <option value="ALL">Todos</option>
+                <option value="4">4 cilindros</option>
+                <option value="6">6 cilindros</option>
               </select>
             </label>
           </div>
@@ -1923,46 +1927,6 @@ export const ReportsPage = () => {
               </div>
             </div>
           ) : null}
-        </article>
-
-        {/* ── Cilindros y km de camiones ── */}
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-900">Camiones — cilindros y kilometraje</h3>
-          <p className="mt-1 text-xs text-slate-500">{truckCylindersStats.with4.length + truckCylindersStats.with6.length} camiones con datos cargados.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">4 cilindros</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{truckCylindersStats.with4.length} <span className="text-sm font-normal text-slate-500">unidades</span></p>
-              {truckCylindersStats.avgKm4 > 0 && <p className="mt-1 text-xs text-slate-600">Km prom.: {truckCylindersStats.avgKm4.toLocaleString('es-AR')}</p>}
-              {truckCylindersStats.avgHours4 > 0 && <p className="text-xs text-slate-600">Hs motor prom.: {truckCylindersStats.avgHours4.toLocaleString('es-AR')}</p>}
-              <div className="mt-2 flex flex-wrap gap-1">
-                {truckCylindersStats.with4.map((u) => (
-                  <span key={u.id} className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">{u.internalCode}</span>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">6 cilindros</p>
-              <p className="mt-1 text-2xl font-bold text-slate-900">{truckCylindersStats.with6.length} <span className="text-sm font-normal text-slate-500">unidades</span></p>
-              {truckCylindersStats.avgKm6 > 0 && <p className="mt-1 text-xs text-slate-600">Km prom.: {truckCylindersStats.avgKm6.toLocaleString('es-AR')}</p>}
-              {truckCylindersStats.avgHours6 > 0 && <p className="text-xs text-slate-600">Hs motor prom.: {truckCylindersStats.avgHours6.toLocaleString('es-AR')}</p>}
-              <div className="mt-2 flex flex-wrap gap-1">
-                {truckCylindersStats.with6.map((u) => (
-                  <span key={u.id} className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">{u.internalCode}</span>
-                ))}
-              </div>
-            </div>
-            {truckCylindersStats.unknown.length > 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Sin datos de cilindros ({truckCylindersStats.unknown.length})</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {truckCylindersStats.unknown.map((u) => (
-                    <span key={u.id} className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">{u.internalCode}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
         </article>
 
         {/* ── Camiones por contrato ── */}
