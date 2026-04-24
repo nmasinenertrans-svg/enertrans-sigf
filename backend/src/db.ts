@@ -290,6 +290,7 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       `ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsStatusNote" TEXT NOT NULL DEFAULT '';`,
     )
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
+    await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "engineCylinders" INTEGER;`)
   }
 
   // Clientes: crea tabla si falta.
