@@ -6,7 +6,7 @@ import {
   type FleetOperationalStatus,
   type FleetUnitType,
 } from '../../../types/domain'
-import { fleetOperationalStatusLabelMap, fleetUnitTypeLabelMap } from '../services/fleetService'
+import { detectCylindersFromModel, fleetOperationalStatusLabelMap, fleetUnitTypeLabelMap } from '../services/fleetService'
 
 interface FleetUnitFormProps {
   title: string
@@ -252,6 +252,50 @@ export const FleetUnitForm = ({
             className={inputClassName}
             placeholder="Ej: 12000"
           />
+        </FormRow>
+
+        <FormRow label="Kilometros actuales" errorMessage={errors.currentKilometers}>
+          <input
+            type="number"
+            min={0}
+            value={formData.currentKilometers === 0 ? '' : formData.currentKilometers}
+            onChange={(event) => onFieldChange('currentKilometers', parseNumberInput(event.target.value))}
+            className={inputClassName}
+            placeholder="Ej: 150000"
+          />
+        </FormRow>
+
+        <FormRow label="Horas de motor" errorMessage={errors.currentEngineHours}>
+          <input
+            type="number"
+            min={0}
+            value={formData.currentEngineHours === 0 ? '' : formData.currentEngineHours}
+            onChange={(event) => onFieldChange('currentEngineHours', parseNumberInput(event.target.value))}
+            className={inputClassName}
+            placeholder="Ej: 3200"
+          />
+        </FormRow>
+
+        <FormRow label="Cilindros">
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min={0}
+              value={formData.engineCylinders === 0 ? '' : formData.engineCylinders}
+              onChange={(event) => onFieldChange('engineCylinders', parseNumberInput(event.target.value))}
+              className={inputClassName}
+              placeholder="Ej: 6"
+            />
+            {detectCylindersFromModel(formData.model) && formData.engineCylinders === 0 ? (
+              <button
+                type="button"
+                onClick={() => onFieldChange('engineCylinders', detectCylindersFromModel(formData.model) ?? 0)}
+                className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Auto ({detectCylindersFromModel(formData.model)})
+              </button>
+            ) : null}
+          </div>
         </FormRow>
 
         <div

@@ -170,6 +170,7 @@ export interface FleetUnit {
   currentKilometers: number
   currentEngineHours: number
   currentHydroHours: number
+  engineCylinders?: number
   lubricants: FleetUnitLubricants
   filters: FleetUnitFilters
   documents: FleetUnitDocuments

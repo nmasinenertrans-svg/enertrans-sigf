@@ -786,6 +786,24 @@ export const FleetDetailPage = () => {
             <dt className="text-xs uppercase tracking-wide text-slate-500">Tipo de unidad</dt>
             <dd className="mt-1 font-semibold text-slate-900">{getFleetUnitTypeLabel(selectedUnit.unitType)}</dd>
           </div>
+          {selectedUnit.currentKilometers > 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Km actuales</dt>
+              <dd className="mt-1 font-semibold text-slate-900">{selectedUnit.currentKilometers.toLocaleString('es-AR')} km</dd>
+            </div>
+          ) : null}
+          {selectedUnit.currentEngineHours > 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Horas de motor</dt>
+              <dd className="mt-1 font-semibold text-slate-900">{selectedUnit.currentEngineHours.toLocaleString('es-AR')} hs</dd>
+            </div>
+          ) : null}
+          {selectedUnit.engineCylinders ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <dt className="text-xs uppercase tracking-wide text-slate-500">Cilindros</dt>
+              <dd className="mt-1 font-semibold text-slate-900">{selectedUnit.engineCylinders} cil.</dd>
+            </div>
+          ) : null}
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
             <dt className="text-xs uppercase tracking-wide text-slate-500">Estado operativo</dt>
             <dd className="mt-2">

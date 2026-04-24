@@ -121,6 +121,7 @@ export const FleetListPage = () => {
     parseUnitTypeFilter(searchParams.get('unitType')),
   )
   const [locationFilter, setLocationFilter] = useState(() => searchParams.get('location') ?? 'ALL')
+  const [cylindersFilter, setCylindersFilter] = useState<'ALL' | '4' | '6'>('ALL')
   const [unitPendingDelete, setUnitPendingDelete] = useState<FleetUnit | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -219,6 +220,9 @@ export const FleetListPage = () => {
           return false
         }
       }
+      if (cylindersFilter !== 'ALL' && (unit.engineCylinders ?? 0) !== Number(cylindersFilter)) {
+        return false
+      }
       if (documentTypeFilter !== 'ALL' && documentStatusFilter !== 'ALL') {
         if (documentTypeFilter === 'hoist' && unit.documents?.hoistNotApplicable) {
           return false
@@ -243,7 +247,7 @@ export const FleetListPage = () => {
         .toLowerCase()
       return haystack.includes(normalizedSearch)
     })
-  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, unitTypeFilter, locationFilter, documentTypeFilter, documentStatusFilter, searchParams])
+  }, [normalizedUnits, searchTerm, statusFilter, clientFilter, unitTypeFilter, locationFilter, documentTypeFilter, documentStatusFilter, cylindersFilter, searchParams])
 
   const stopQrCamera = () => {
     if (qrIntervalRef.current !== null) {
@@ -672,6 +676,18 @@ export const FleetListPage = () => {
                   {loc}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            Cilindros
+            <select
+              value={cylindersFilter}
+              onChange={(event) => setCylindersFilter(event.target.value as typeof cylindersFilter)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+            >
+              <option value="ALL">Todos</option>
+              <option value="4">4 cilindros</option>
+              <option value="6">6 cilindros</option>
             </select>
           </label>
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 md:col-span-2 xl:col-span-6">

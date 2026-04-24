@@ -35,6 +35,7 @@ export interface FleetFormData {
   currentKilometers: number
   currentEngineHours: number
   currentHydroHours: number
+  engineCylinders: number
   lubricants: FleetUnitLubricants
   filters: FleetUnitFilters
   documents: FleetUnitDocuments

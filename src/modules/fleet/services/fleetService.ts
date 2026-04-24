@@ -14,6 +14,28 @@ import type { FleetFormData, FleetFormErrors } from '../types'
 const MIN_WEIGHT_KG = 0
 const MAX_TEXT_LENGTH = 120
 
+const TRUCK_CYLINDERS_MAP: Record<string, number> = {
+  'atego 1721': 4,
+  'atego 1726': 6,
+  'atego 1729': 6,
+  'atego 2426': 6,
+  'atego 2730': 6,
+  'tector 150e21': 4,
+  'tector 170e28': 6,
+  'cargo 1723': 6,
+  'cargo 1729': 6,
+  '17.280 lr': 6,
+  '17280 lr': 6,
+}
+
+export const detectCylindersFromModel = (model: string): number | undefined => {
+  const normalized = model.trim().toLowerCase()
+  for (const [key, cylinders] of Object.entries(TRUCK_CYLINDERS_MAP)) {
+    if (normalized.includes(key)) return cylinders
+  }
+  return undefined
+}
+
 const fallbackOperationalStatus: FleetOperationalStatus = fleetOperationalStatuses[0]
 const fallbackUnitType: FleetUnitType = fleetUnitTypes[0]
 
@@ -202,6 +224,7 @@ const normalizeFormData = (formData: FleetFormData): FleetFormData => {
     currentKilometers: Number.isFinite(formData.currentKilometers) ? formData.currentKilometers : 0,
     currentEngineHours: Number.isFinite(formData.currentEngineHours) ? formData.currentEngineHours : 0,
     currentHydroHours: Number.isFinite(formData.currentHydroHours) ? formData.currentHydroHours : 0,
+    engineCylinders: Number.isFinite(formData.engineCylinders) && formData.engineCylinders > 0 ? formData.engineCylinders : 0,
     lubricants: normalizeLubricants(formData.lubricants),
     filters: normalizeFilters(formData.filters),
     documents: { ...normalizedDocuments, hoistNotApplicable },
@@ -237,6 +260,7 @@ export const createEmptyFleetFormData = (): FleetFormData => ({
   currentKilometers: 0,
   currentEngineHours: 0,
   currentHydroHours: 0,
+  engineCylinders: 0,
   lubricants: createEmptyLubricants(),
   filters: createEmptyFilters(),
   documents: createEmptyDocuments(),
@@ -274,6 +298,7 @@ export const mapFleetUnitToFormData = (unit: FleetUnit): FleetFormData => {
     currentKilometers: normalizedUnit.currentKilometers ?? 0,
     currentEngineHours: normalizedUnit.currentEngineHours ?? 0,
     currentHydroHours: normalizedUnit.currentHydroHours ?? 0,
+    engineCylinders: normalizedUnit.engineCylinders ?? detectCylindersFromModel(normalizedUnit.model) ?? 0,
     lubricants: normalizedUnit.lubricants,
     filters: normalizedUnit.filters,
     documents: normalizedUnit.documents,
@@ -581,6 +606,7 @@ export const normalizeFleetUnit = (unit: FleetUnit): FleetUnit => {
     currentKilometers: Number.isFinite(unit.currentKilometers) ? unit.currentKilometers : 0,
     currentEngineHours: Number.isFinite(unit.currentEngineHours) ? unit.currentEngineHours : 0,
     currentHydroHours: Number.isFinite(unit.currentHydroHours) ? unit.currentHydroHours : 0,
+    engineCylinders: unit.engineCylinders,
     lubricants: normalizeLubricants(unit.lubricants),
     filters: normalizeFilters(unit.filters),
     documents: { ...normalizedDocuments, hoistNotApplicable },
