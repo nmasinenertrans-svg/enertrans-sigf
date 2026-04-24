@@ -286,6 +286,7 @@ const fleetSchema = z.object({
   currentKilometers: z.number().int().nonnegative().optional().default(0),
   currentEngineHours: z.number().int().nonnegative().optional().default(0),
   currentHydroHours: z.number().int().nonnegative().optional().default(0),
+  engineCylinders: z.number().int().nonnegative().optional().nullable(),
   lubricants: z.any().optional().default({}),
   filters: z.any().optional().default({}),
   documents: z.any().optional().default({}),
@@ -410,6 +411,7 @@ const sanitizeFleetPatchData = (rawBody: Record<string, unknown>): Partial<z.inf
   setInt('currentKilometers')
   setInt('currentEngineHours')
   setInt('currentHydroHours')
+  setInt('engineCylinders')
 
   setBoolean('hasHydroCrane')
   setBoolean('hasSemiTrailer')

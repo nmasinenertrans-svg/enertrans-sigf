@@ -194,6 +194,7 @@ model FleetUnit {
   currentKilometers        Int      @default(0)
   currentEngineHours       Int      @default(0)
   currentHydroHours        Int      @default(0)
+  engineCylinders          Int?
   lubricants               Json
   filters                  Json
   documents                Json
