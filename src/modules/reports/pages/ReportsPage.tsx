@@ -409,7 +409,8 @@ export const ReportsPage = () => {
   const [occupancyGroupBy, setOccupancyGroupBy] = useState<OccupancyDimension>('CLIENT')
   const [occupancyBreakdownBy, setOccupancyBreakdownBy] = useState<OccupancyDimension>('TYPE')
   const [occupancyClientFilter, setOccupancyClientFilter] = useState('ALL')
-  const [occupancyTypeFilter, setOccupancyTypeFilter] = useState<'ALL' | FleetUnit['unitType']>('ALL')
+  const [occupancyTypeFilter, setOccupancyTypeFilter] = useState<FleetUnit['unitType'][]>([])
+  const [occupancyTypeOpen, setOccupancyTypeOpen] = useState(false)
   const [occupancyStatusFilter, setOccupancyStatusFilter] = useState<'ALL' | FleetOperationalStatus>('ALL')
   const [occupancyCylindersFilter, setOccupancyCylindersFilter] = useState<'ALL' | '4' | '6'>('ALL')
   const [showAllOccupancyRows, setShowAllOccupancyRows] = useState(false)
@@ -530,7 +531,7 @@ export const ReportsPage = () => {
         if (occupancyClientFilter !== 'ALL' && getOccupancyDimensionValue(unit, 'CLIENT') !== occupancyClientFilter) {
           return false
         }
-        if (occupancyTypeFilter !== 'ALL' && unit.unitType !== occupancyTypeFilter) {
+        if (occupancyTypeFilter.length > 0 && !occupancyTypeFilter.includes(unit.unitType)) {
           return false
         }
         if (occupancyStatusFilter !== 'ALL' && unit.operationalStatus !== occupancyStatusFilter) {
@@ -541,7 +542,7 @@ export const ReportsPage = () => {
         }
         return true
       }),
-    [reportFleetUnits, occupancyClientFilter, occupancyStatusFilter, occupancyTypeFilter, occupancyCylindersFilter],
+    [reportFleetUnits, occupancyClientFilter, occupancyStatusFilter, occupancyTypeFilter, occupancyCylindersFilter], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   const occupancyPivot = useMemo(() => {
@@ -1189,7 +1190,7 @@ export const ReportsPage = () => {
 
     cursorY += chartCardHeight + 22
 
-    const noFiltersApplied = occupancyClientFilter === 'ALL' && occupancyTypeFilter === 'ALL' && occupancyStatusFilter === 'ALL' && occupancyCylindersFilter === 'ALL'
+    const noFiltersApplied = occupancyClientFilter === 'ALL' && occupancyTypeFilter.length === 0 && occupancyStatusFilter === 'ALL' && occupancyCylindersFilter === 'ALL'
 
     if (noFiltersApplied) {
       doc.addPage()
@@ -1505,21 +1506,49 @@ export const ReportsPage = () => {
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <div className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
               Tipo
-              <select
-                value={occupancyTypeFilter}
-                onChange={(event) => setOccupancyTypeFilter(event.target.value as 'ALL' | FleetUnit['unitType'])}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-              >
-                <option value="ALL">Todos</option>
-                {fleetUnitTypes.map((unitType) => (
-                  <option key={unitType} value={unitType}>
-                    {getFleetUnitTypeLabel(unitType)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOccupancyTypeOpen((v) => !v)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-900 outline-none focus:border-amber-400"
+                >
+                  <span className="truncate">
+                    {occupancyTypeFilter.length === 0
+                      ? 'Todos'
+                      : occupancyTypeFilter.length === 1
+                        ? getFleetUnitTypeLabel(occupancyTypeFilter[0])
+                        : `${occupancyTypeFilter.length} tipos`}
+                  </span>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">▾</span>
+                </button>
+                {occupancyTypeOpen && (
+                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
+                    <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={occupancyTypeFilter.length === 0}
+                        onChange={() => { setOccupancyTypeFilter([]); setOccupancyTypeOpen(false) }}
+                      />
+                      Todos
+                    </label>
+                    {fleetUnitTypes.map((unitType) => (
+                      <label key={unitType} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-normal hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={occupancyTypeFilter.includes(unitType)}
+                          onChange={() => setOccupancyTypeFilter((prev) =>
+                            prev.includes(unitType) ? prev.filter((t) => t !== unitType) : [...prev, unitType]
+                          )}
+                        />
+                        {getFleetUnitTypeLabel(unitType)}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
             <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
               Estado
               <select
