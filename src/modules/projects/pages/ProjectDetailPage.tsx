@@ -5,8 +5,9 @@ import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
-import type { FleetProject, FleetProjectItem, FleetProjectStatus } from '../../../types/domain'
+import type { FleetProject, FleetProjectItem, FleetProjectStatus, WorkOrder, ExternalRequest } from '../../../types/domain'
 import { fleetProjectStatuses, fleetProjectItemStatuses } from '../../../types/domain'
+import { apiRequest } from '../../../services/api/apiClient'
 import {
   fetchProject,
   updateProject,
@@ -14,6 +15,10 @@ import {
   createProjectItem,
   updateProjectItem,
   deleteProjectItem,
+  linkWorkOrder,
+  unlinkWorkOrder,
+  linkExternalRequest,
+  unlinkExternalRequest,
 } from '../services/projectsService'
 import {
   PROJECT_TYPE_LABELS,
@@ -64,13 +69,24 @@ export const ProjectDetailPage = () => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editingItemTitle, setEditingItemTitle] = useState('')
 
+  const [unitWorkOrders, setUnitWorkOrders] = useState<WorkOrder[]>([])
+  const [unitExternalRequests, setUnitExternalRequests] = useState<ExternalRequest[]>([])
+  const [woSearchOpen, setWoSearchOpen] = useState(false)
+  const [ndpSearchOpen, setNdpSearchOpen] = useState(false)
+
   const load = useCallback(
     async (getMounted: () => boolean) => {
       if (!projectId || !can('FLEET', 'view')) return
       try {
-        const p = await fetchProject(projectId)
+        const [p, wos, ndps] = await Promise.all([
+          fetchProject(projectId),
+          apiRequest<WorkOrder[]>('/work-orders'),
+          apiRequest<ExternalRequest[]>('/external-requests'),
+        ])
         if (!getMounted()) return
         setProject(p)
+        setUnitWorkOrders(Array.isArray(wos) ? wos : [])
+        setUnitExternalRequests(Array.isArray(ndps) ? ndps : [])
       } catch {
         setAppError('Error al cargar el proyecto')
       }
@@ -177,6 +193,40 @@ export const ProjectDetailPage = () => {
     } catch {
       setAppError('Error al eliminar tarea')
     }
+  }
+
+  const handleLinkWorkOrder = async (woId: string) => {
+    if (!project) return
+    try {
+      const updated = await linkWorkOrder(project.id, woId)
+      setProject(updated)
+      setWoSearchOpen(false)
+    } catch { setAppError('Error al vincular OT') }
+  }
+
+  const handleUnlinkWorkOrder = async (woId: string) => {
+    if (!project) return
+    try {
+      const updated = await unlinkWorkOrder(project.id, woId)
+      setProject(updated)
+    } catch { setAppError('Error al desvincular OT') }
+  }
+
+  const handleLinkExternalRequest = async (erId: string) => {
+    if (!project) return
+    try {
+      const updated = await linkExternalRequest(project.id, erId)
+      setProject(updated)
+      setNdpSearchOpen(false)
+    } catch { setAppError('Error al vincular NDP') }
+  }
+
+  const handleUnlinkExternalRequest = async (erId: string) => {
+    if (!project) return
+    try {
+      const updated = await unlinkExternalRequest(project.id, erId)
+      setProject(updated)
+    } catch { setAppError('Error al desvincular NDP') }
   }
 
   if (isLoading) {
@@ -567,6 +617,154 @@ export const ProjectDetailPage = () => {
           </ul>
         </div>
       </div>
+
+      {/* Linked work orders */}
+      <LinkedSection
+        title="Órdenes de Trabajo vinculadas"
+        linkedIds={project.linkedWorkOrderIds}
+        allItems={unitWorkOrders.filter((wo) => wo.unitId === project.unitId)}
+        getId={(wo) => wo.id}
+        renderItem={(wo) => (
+          <span className="flex items-center gap-2">
+            <span className="font-semibold text-slate-800">{wo.code || wo.id.slice(0, 8)}</span>
+            <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${wo.status === 'CLOSED' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : wo.status === 'IN_PROGRESS' ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-slate-300 bg-slate-50 text-slate-600'}`}>
+              {wo.status === 'OPEN' ? 'Abierta' : wo.status === 'IN_PROGRESS' ? 'En progreso' : 'Cerrada'}
+            </span>
+          </span>
+        )}
+        renderCandidate={(wo) => `${wo.code || wo.id.slice(0, 8)} — ${wo.status}`}
+        searchOpen={woSearchOpen}
+        setSearchOpen={setWoSearchOpen}
+        onLink={(id) => void handleLinkWorkOrder(id)}
+        onUnlink={(id) => void handleUnlinkWorkOrder(id)}
+        canEdit={canEdit}
+      />
+
+      {/* Linked external requests */}
+      <LinkedSection
+        title="Notas de Pedido Externo vinculadas"
+        linkedIds={project.linkedExternalRequestIds}
+        allItems={unitExternalRequests.filter((er) => er.unitId === project.unitId)}
+        getId={(er) => er.id}
+        renderItem={(er) => (
+          <span className="flex items-center gap-2">
+            <span className="font-semibold text-slate-800">{er.code}</span>
+            {er.companyName && <span className="text-slate-500">{er.companyName}</span>}
+            {er.eligibilityStatus && (
+              <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${er.eligibilityStatus === 'READY_FOR_REPAIR' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'}`}>
+                {er.eligibilityStatus === 'READY_FOR_REPAIR' ? 'Con adjunto' : 'Sin adjunto'}
+              </span>
+            )}
+            {er.ocCode && <span className="rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">OC {er.ocCode}</span>}
+          </span>
+        )}
+        renderCandidate={(er) => `${er.code}${er.companyName ? ` — ${er.companyName}` : ''}`}
+        searchOpen={ndpSearchOpen}
+        setSearchOpen={setNdpSearchOpen}
+        onLink={(id) => void handleLinkExternalRequest(id)}
+        onUnlink={(id) => void handleUnlinkExternalRequest(id)}
+        canEdit={canEdit}
+      />
     </section>
+  )
+}
+
+function LinkedSection<T>({
+  title,
+  linkedIds,
+  allItems,
+  getId,
+  renderItem,
+  renderCandidate,
+  searchOpen,
+  setSearchOpen,
+  onLink,
+  onUnlink,
+  canEdit,
+}: {
+  title: string
+  linkedIds: string[]
+  allItems: T[]
+  getId: (item: T) => string
+  renderItem: (item: T) => React.ReactNode
+  renderCandidate: (item: T) => string
+  searchOpen: boolean
+  setSearchOpen: (v: boolean) => void
+  onLink: (id: string) => void
+  onUnlink: (id: string) => void
+  canEdit: boolean
+}) {
+  const [search, setSearch] = useState('')
+  const linked = allItems.filter((item) => linkedIds.includes(getId(item)))
+  const candidates = allItems.filter(
+    (item) => !linkedIds.includes(getId(item)) &&
+      (!search.trim() || renderCandidate(item).toLowerCase().includes(search.trim().toLowerCase()))
+  ).slice(0, 20)
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-bold text-slate-900">{title}</h3>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => { setSearchOpen(!searchOpen); setSearch('') }}
+            className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            {searchOpen ? 'Cancelar' : '+ Vincular'}
+          </button>
+        )}
+      </div>
+
+      {searchOpen && canEdit && (
+        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar..."
+            autoFocus
+            className="mb-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-amber-400"
+          />
+          {candidates.length === 0 && (
+            <p className="text-xs text-slate-400">{allItems.length === 0 ? 'No hay items para esta unidad.' : 'No hay coincidencias.'}</p>
+          )}
+          <ul className="max-h-40 overflow-y-auto space-y-1">
+            {candidates.map((item) => (
+              <li key={getId(item)}>
+                <button
+                  type="button"
+                  onClick={() => onLink(getId(item))}
+                  className="w-full rounded px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-white hover:shadow-sm"
+                >
+                  {renderCandidate(item)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {linked.length === 0 && !searchOpen && (
+        <p className="text-sm text-slate-400">Sin vínculos. {canEdit ? 'Usá "+ Vincular" para agregar.' : ''}</p>
+      )}
+
+      <ul className="space-y-2">
+        {linked.map((item) => (
+          <li key={getId(item)} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+            <div className="min-w-0 flex-1 text-sm">{renderItem(item)}</div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => onUnlink(getId(item))}
+                className="shrink-0 text-xs text-slate-300 hover:text-rose-500"
+                title="Desvincular"
+              >
+                ✕
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

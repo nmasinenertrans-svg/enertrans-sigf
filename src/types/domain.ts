@@ -670,6 +670,8 @@ export interface FleetProject {
   startedAt: string | null
   completedAt: string | null
   modificationNotes: string
+  linkedWorkOrderIds: string[]
+  linkedExternalRequestIds: string[]
   createdAt: string
   updatedAt: string
   items: FleetProjectItem[]

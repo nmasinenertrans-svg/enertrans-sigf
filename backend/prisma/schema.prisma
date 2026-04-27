@@ -625,9 +625,11 @@ model FleetProject {
   targetDate        DateTime?
   startedAt         DateTime?
   completedAt       DateTime?
-  modificationNotes String             @default("")
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  modificationNotes        String             @default("")
+  linkedWorkOrderIds       Json               @default("[]")
+  linkedExternalRequestIds Json               @default("[]")
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
   unit       FleetUnit          @relation(fields: [unitId], references: [id])
   assignedTo User?              @relation("FleetProjectAssignedTo", fields: [assignedToUserId], references: [id])

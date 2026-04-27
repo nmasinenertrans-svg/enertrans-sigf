@@ -116,6 +116,8 @@ const mapProject = (p: any) => ({
   startedAt: p.startedAt ? (p.startedAt as Date).toISOString() : null,
   completedAt: p.completedAt ? (p.completedAt as Date).toISOString() : null,
   modificationNotes: (p.modificationNotes as string) ?? '',
+  linkedWorkOrderIds: Array.isArray(p.linkedWorkOrderIds) ? (p.linkedWorkOrderIds as string[]) : [],
+  linkedExternalRequestIds: Array.isArray(p.linkedExternalRequestIds) ? (p.linkedExternalRequestIds as string[]) : [],
   createdAt: (p.createdAt as Date).toISOString(),
   updatedAt: (p.updatedAt as Date).toISOString(),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -344,6 +346,86 @@ router.delete('/:projectId/items/:itemId', async (req, res) => {
   } catch (error) {
     console.error('Projects items DELETE error:', error)
     return res.status(500).json({ message: 'Error al eliminar tarea' })
+  }
+})
+
+// POST /projects/:id/work-orders/:woId — link
+router.post('/:id/work-orders/:woId', async (req, res) => {
+  try {
+    const projectId = String(req.params.id)
+    const woId = String(req.params.woId)
+    const project = await prisma.fleetProject.findUnique({ where: { id: projectId } })
+    if (!project) return res.status(404).json({ message: 'Proyecto no encontrado' })
+    const current = Array.isArray(project.linkedWorkOrderIds) ? (project.linkedWorkOrderIds as string[]) : []
+    const updated = await prisma.fleetProject.update({
+      where: { id: projectId },
+      data: { linkedWorkOrderIds: current.includes(woId) ? current : [...current, woId], updatedAt: new Date() },
+      include: projectInclude,
+    })
+    return res.json(mapProject(updated))
+  } catch (error) {
+    console.error('Projects link WO error:', error)
+    return res.status(500).json({ message: 'Error al vincular orden de trabajo' })
+  }
+})
+
+// DELETE /projects/:id/work-orders/:woId — unlink
+router.delete('/:id/work-orders/:woId', async (req, res) => {
+  try {
+    const projectId = String(req.params.id)
+    const woId = String(req.params.woId)
+    const project = await prisma.fleetProject.findUnique({ where: { id: projectId } })
+    if (!project) return res.status(404).json({ message: 'Proyecto no encontrado' })
+    const current = Array.isArray(project.linkedWorkOrderIds) ? (project.linkedWorkOrderIds as string[]) : []
+    const updated = await prisma.fleetProject.update({
+      where: { id: projectId },
+      data: { linkedWorkOrderIds: current.filter((id) => id !== woId), updatedAt: new Date() },
+      include: projectInclude,
+    })
+    return res.json(mapProject(updated))
+  } catch (error) {
+    console.error('Projects unlink WO error:', error)
+    return res.status(500).json({ message: 'Error al desvincular orden de trabajo' })
+  }
+})
+
+// POST /projects/:id/external-requests/:erId — link
+router.post('/:id/external-requests/:erId', async (req, res) => {
+  try {
+    const projectId = String(req.params.id)
+    const erId = String(req.params.erId)
+    const project = await prisma.fleetProject.findUnique({ where: { id: projectId } })
+    if (!project) return res.status(404).json({ message: 'Proyecto no encontrado' })
+    const current = Array.isArray(project.linkedExternalRequestIds) ? (project.linkedExternalRequestIds as string[]) : []
+    const updated = await prisma.fleetProject.update({
+      where: { id: projectId },
+      data: { linkedExternalRequestIds: current.includes(erId) ? current : [...current, erId], updatedAt: new Date() },
+      include: projectInclude,
+    })
+    return res.json(mapProject(updated))
+  } catch (error) {
+    console.error('Projects link NDP error:', error)
+    return res.status(500).json({ message: 'Error al vincular nota de pedido' })
+  }
+})
+
+// DELETE /projects/:id/external-requests/:erId — unlink
+router.delete('/:id/external-requests/:erId', async (req, res) => {
+  try {
+    const projectId = String(req.params.id)
+    const erId = String(req.params.erId)
+    const project = await prisma.fleetProject.findUnique({ where: { id: projectId } })
+    if (!project) return res.status(404).json({ message: 'Proyecto no encontrado' })
+    const current = Array.isArray(project.linkedExternalRequestIds) ? (project.linkedExternalRequestIds as string[]) : []
+    const updated = await prisma.fleetProject.update({
+      where: { id: projectId },
+      data: { linkedExternalRequestIds: current.filter((id) => id !== erId), updatedAt: new Date() },
+      include: projectInclude,
+    })
+    return res.json(mapProject(updated))
+  } catch (error) {
+    console.error('Projects unlink NDP error:', error)
+    return res.status(500).json({ message: 'Error al desvincular nota de pedido' })
   }
 })
 
