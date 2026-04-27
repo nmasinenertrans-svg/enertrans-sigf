@@ -9,6 +9,7 @@ const navigationItems: Array<{ path: string; label: string; module: PermissionMo
   { path: ROUTE_PATHS.maintenance, label: 'Plan de Mantenimiento', module: 'MAINTENANCE', flagKey: 'showMaintenanceModule' },
   { path: ROUTE_PATHS.audits, label: 'Inspecciones', module: 'AUDITS', flagKey: 'showAuditsModule' },
   { path: ROUTE_PATHS.tasks, label: 'Tareas', module: 'TASKS', flagKey: 'showTasksModule' },
+  { path: ROUTE_PATHS.projects.list, label: 'Proyectos de Modificación', module: 'FLEET' },
   { path: ROUTE_PATHS.clients, label: 'Clientes', module: 'FLEET', flagKey: 'showClientsModule' },
   { path: ROUTE_PATHS.deliveries, label: 'Entregas/Devoluciones', module: 'FLEET', flagKey: 'showDeliveriesModule' },
   { path: ROUTE_PATHS.movements, label: 'Remitos', module: 'FLEET', flagKey: 'showMovementsModule' },

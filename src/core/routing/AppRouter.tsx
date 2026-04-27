@@ -23,6 +23,8 @@ import { ReportsPage } from '../../modules/reports/pages/ReportsPage'
 import { SuppliersPage } from '../../modules/suppliers/pages/SuppliersPage'
 import { SupplierDetailPage } from '../../modules/suppliers/pages/SupplierDetailPage'
 import { CrmPage } from '../../modules/crm/pages/CrmPage'
+import { ProjectsPage } from '../../modules/projects/pages/ProjectsPage'
+import { ProjectDetailPage } from '../../modules/projects/pages/ProjectDetailPage'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
@@ -266,6 +268,22 @@ export const AppRouter = () => (
           element={
             <RequirePermission module="MAINTENANCE_MODE" action="view">
               <MaintenanceModePage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.projects.list}
+          element={
+            <RequirePermission module="FLEET" action="view">
+              <ProjectsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.projects.detail}
+          element={
+            <RequirePermission module="FLEET" action="view">
+              <ProjectDetailPage />
             </RequirePermission>
           }
         />

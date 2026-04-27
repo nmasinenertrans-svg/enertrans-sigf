@@ -27,6 +27,10 @@
   users: '/users',
   profile: '/profile',
   maintenanceMode: '/maintenance-mode',
+  projects: {
+    list: '/projects',
+    detail: '/projects/:projectId',
+  },
 } as const
 
 const unitIdPlaceholder = ':unitId'
@@ -38,3 +42,7 @@ export const buildFleetEditPath = (unitId: string): string => ROUTE_PATHS.fleet.
 
 export const buildSupplierDetailPath = (supplierId: string): string =>
   ROUTE_PATHS.supplierDetail.replace(supplierIdPlaceholder, supplierId)
+
+const projectIdPlaceholder = ':projectId'
+export const buildProjectDetailPath = (projectId: string): string =>
+  ROUTE_PATHS.projects.detail.replace(projectIdPlaceholder, projectId)

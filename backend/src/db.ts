@@ -140,6 +140,8 @@ const COMPAT_TABLE_NAMES = [
   'CrmActivity',
   'CrmDealUnit',
   'ExternalRequest',
+  'FleetProject',
+  'FleetProjectItem',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -291,6 +293,49 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     )
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "engineCylinders" INTEGER;`)
+
+    // Proyectos de modificación de flota
+    await safeExecuteCompatSql(`
+      CREATE TABLE IF NOT EXISTS "FleetProject" (
+        "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+        "title" TEXT NOT NULL,
+        "projectType" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'PENDING',
+        "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
+        "unitId" TEXT NOT NULL,
+        "description" TEXT NOT NULL DEFAULT '',
+        "estimatedCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "actualCost" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "currency" TEXT NOT NULL DEFAULT 'ARS',
+        "assignedToUserId" TEXT,
+        "createdByUserId" TEXT NOT NULL,
+        "targetDate" TIMESTAMP(3),
+        "startedAt" TIMESTAMP(3),
+        "completedAt" TIMESTAMP(3),
+        "modificationNotes" TEXT NOT NULL DEFAULT '',
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "FleetProject_pkey" PRIMARY KEY ("id")
+      );
+    `)
+    await safeExecuteCompatSql(`
+      CREATE TABLE IF NOT EXISTS "FleetProjectItem" (
+        "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+        "projectId" TEXT NOT NULL,
+        "title" TEXT NOT NULL,
+        "description" TEXT NOT NULL DEFAULT '',
+        "status" TEXT NOT NULL DEFAULT 'PENDING',
+        "assignedToUserId" TEXT,
+        "completedAt" TIMESTAMP(3),
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "FleetProjectItem_pkey" PRIMARY KEY ("id")
+      );
+    `)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_unitId_idx" ON "FleetProject"("unitId");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_status_idx" ON "FleetProject"("status");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_assignedToUserId_idx" ON "FleetProject"("assignedToUserId");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProjectItem_projectId_idx" ON "FleetProjectItem"("projectId");`)
   }
 
   // Clientes: crea tabla si falta.

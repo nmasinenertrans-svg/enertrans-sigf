@@ -615,3 +615,62 @@ export interface TaskRecord {
   closedAt?: string | null
   events: TaskEventRecord[]
 }
+
+export const fleetProjectTypes = [
+  'HYDROCRANE_CHANGE',
+  'THIRD_AXLE',
+  'BOX_EXTENSION',
+  'BODY_MODIFICATION',
+  'ENGINE_OVERHAUL',
+  'TRANSMISSION',
+  'SUSPENSION',
+  'ELECTRICAL',
+  'BRAKE_SYSTEM',
+  'OTHER',
+] as const
+export type FleetProjectType = (typeof fleetProjectTypes)[number]
+
+export const fleetProjectStatuses = ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELED'] as const
+export type FleetProjectStatus = (typeof fleetProjectStatuses)[number]
+
+export const fleetProjectItemStatuses = ['PENDING', 'IN_PROGRESS', 'DONE', 'SKIPPED'] as const
+export type FleetProjectItemStatus = (typeof fleetProjectItemStatuses)[number]
+
+export interface FleetProjectItem {
+  id: string
+  projectId: string
+  title: string
+  description: string
+  status: FleetProjectItemStatus
+  assignedToUserId: string | null
+  assignedToUserName: string
+  completedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FleetProject {
+  id: string
+  title: string
+  projectType: FleetProjectType
+  status: FleetProjectStatus
+  priority: TaskPriority
+  unitId: string
+  unitInternalCode: string
+  unitLabel: string
+  description: string
+  estimatedCost: number
+  actualCost: number
+  currency: string
+  assignedToUserId: string | null
+  assignedToUserName: string
+  createdByUserId: string
+  createdByUserName: string
+  targetDate: string | null
+  startedAt: string | null
+  completedAt: string | null
+  modificationNotes: string
+  createdAt: string
+  updatedAt: string
+  items: FleetProjectItem[]
+}
