@@ -636,7 +636,6 @@ model FleetProject {
 
   @@index([status])
   @@index([unitId])
-  @@index([assignedToUserId])
 }
 
 model FleetProjectItem {
