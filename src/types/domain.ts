@@ -662,8 +662,7 @@ export interface FleetProject {
   estimatedCost: number
   actualCost: number
   currency: string
-  assignedToUserId: string | null
-  assignedToUserName: string
+  externalRequestId: string | null
   createdByUserId: string
   createdByUserName: string
   targetDate: string | null

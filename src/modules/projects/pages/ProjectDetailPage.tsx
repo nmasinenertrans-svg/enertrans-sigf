@@ -120,7 +120,6 @@ export const ProjectDetailPage = () => {
         ...editForm,
         estimatedCost: Number(editForm.estimatedCost) || 0,
         actualCost: Number(editForm.actualCost) || 0,
-        assignedToUserId: editForm.assignedToUserId || null,
         targetDate: editForm.targetDate || null,
       })
       setProject(updated)
@@ -323,32 +322,17 @@ export const ProjectDetailPage = () => {
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Estado</label>
-                  <select
-                    value={editForm.status ?? 'PENDING'}
-                    onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as FleetProjectStatus }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
-                  >
-                    {fleetProjectStatuses.map((s) => (
-                      <option key={s} value={s}>{PROJECT_STATUS_LABELS[s]}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Responsable</label>
-                  <select
-                    value={editForm.assignedToUserId ?? ''}
-                    onChange={(e) => setEditForm((f) => ({ ...f, assignedToUserId: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
-                  >
-                    <option value="">Sin asignar</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>{u.fullName}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Estado</label>
+                <select
+                  value={editForm.status ?? 'PENDING'}
+                  onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as FleetProjectStatus }))}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
+                >
+                  {fleetProjectStatuses.map((s) => (
+                    <option key={s} value={s}>{PROJECT_STATUS_LABELS[s]}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-700">Fecha objetivo</label>
@@ -420,14 +404,22 @@ export const ProjectDetailPage = () => {
           ) : (
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="mb-4 font-bold text-slate-900">Detalles</h3>
+              {/* Origin NDP */}
+              {project.externalRequestId && (() => {
+                const originNdp = unitExternalRequests.find((er) => er.id === project.externalRequestId)
+                return originNdp ? (
+                  <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-600">Nota de Pedido de Origen</p>
+                    <p className="font-bold text-emerald-900">{originNdp.code}</p>
+                    {originNdp.companyName && <p className="text-sm text-emerald-700">{originNdp.companyName}</p>}
+                    {originNdp.description && <p className="mt-1 text-xs text-emerald-600 line-clamp-2">{originNdp.description}</p>}
+                  </div>
+                ) : null
+              })()}
               <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 <div>
                   <dt className="text-xs font-semibold text-slate-500">Unidad</dt>
                   <dd className="font-semibold text-slate-900">{project.unitLabel}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-semibold text-slate-500">Responsable</dt>
-                  <dd className="text-slate-700">{project.assignedToUserName || '—'}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-semibold text-slate-500">Fecha objetivo</dt>

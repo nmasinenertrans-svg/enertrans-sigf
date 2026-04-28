@@ -185,7 +185,6 @@ model User {
   crmActivitiesCreated CrmActivity[] @relation("CrmActivityCreatedBy")
   crmDealUnitsCreated CrmDealUnit[]  @relation("CrmDealUnitCreatedBy")
   fleetProjectsCreated      FleetProject[]     @relation("FleetProjectCreatedBy")
-  fleetProjectsAssigned     FleetProject[]     @relation("FleetProjectAssignedTo")
   fleetProjectItemsAssigned FleetProjectItem[] @relation("FleetProjectItemAssignedTo")
 }
 
@@ -620,11 +619,11 @@ model FleetProject {
   estimatedCost     Float              @default(0)
   actualCost        Float              @default(0)
   currency          String             @default("ARS")
-  assignedToUserId  String?
   createdByUserId   String
   targetDate        DateTime?
   startedAt         DateTime?
   completedAt       DateTime?
+  externalRequestId        String?
   modificationNotes        String             @default("")
   linkedWorkOrderIds       Json               @default("[]")
   linkedExternalRequestIds Json               @default("[]")
@@ -632,7 +631,6 @@ model FleetProject {
   updatedAt                DateTime           @updatedAt
 
   unit       FleetUnit          @relation(fields: [unitId], references: [id])
-  assignedTo User?              @relation("FleetProjectAssignedTo", fields: [assignedToUserId], references: [id])
   createdBy  User               @relation("FleetProjectCreatedBy", fields: [createdByUserId], references: [id])
   items      FleetProjectItem[]
 

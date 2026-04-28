@@ -5,18 +5,16 @@ import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
 import { ROUTE_PATHS, buildProjectDetailPath } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
-import type { FleetProject, FleetUnit } from '../../../types/domain'
+import type { FleetProject, ExternalRequest } from '../../../types/domain'
 import { fleetProjectStatuses } from '../../../types/domain'
 import { fetchProjects, createProject } from '../services/projectsService'
 import { apiRequest } from '../../../services/api/apiClient'
 import {
-  createEmptyProjectForm,
   PROJECT_TYPE_LABELS,
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_COLORS,
   PRIORITY_LABELS,
   PRIORITY_COLORS,
-  type ProjectFormData,
 } from '../types'
 
 const formatDate = (iso: string | null): string => {
@@ -31,31 +29,57 @@ const itemsProgress = (project: FleetProject): string => {
   return `${done}/${total}`
 }
 
+interface ProjectForm {
+  externalRequestId: string
+  title: string
+  projectType: string
+  status: string
+  priority: string
+  description: string
+  estimatedCost: string
+  currency: 'ARS' | 'USD'
+  targetDate: string
+  modificationNotes: string
+}
+
+const emptyForm = (): ProjectForm => ({
+  externalRequestId: '',
+  title: '',
+  projectType: '',
+  status: 'PENDING',
+  priority: 'MEDIUM',
+  description: '',
+  estimatedCost: '0',
+  currency: 'ARS',
+  targetDate: '',
+  modificationNotes: '',
+})
+
 export const ProjectsPage = () => {
   const { can } = usePermissions()
-  const { state: { users }, actions: { setAppError } } = useAppContext()
+  const { actions: { setAppError } } = useAppContext()
 
   const [projects, setProjects] = useState<FleetProject[]>([])
-  const [fleetUnits, setFleetUnits] = useState<FleetUnit[]>([])
+  const [externalRequests, setExternalRequests] = useState<ExternalRequest[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<ProjectFormData>(createEmptyProjectForm())
+  const [form, setForm] = useState<ProjectForm>(emptyForm())
   const [saving, setSaving] = useState(false)
-  const [unitSearch, setUnitSearch] = useState('')
-  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false)
+  const [ndpSearch, setNdpSearch] = useState('')
+  const [ndpDropdownOpen, setNdpDropdownOpen] = useState(false)
 
   const { isLoading } = useAsyncLoader(
     async (getMounted) => {
       if (!can('FLEET', 'view')) return
       try {
-        const [projs, units] = await Promise.all([
+        const [projs, ndps] = await Promise.all([
           fetchProjects(),
-          apiRequest<FleetUnit[]>('/fleet'),
+          apiRequest<ExternalRequest[]>('/external-requests'),
         ])
         if (!getMounted()) return
         setProjects(Array.isArray(projs) ? projs : [])
-        setFleetUnits(Array.isArray(units) ? units : [])
+        setExternalRequests(Array.isArray(ndps) ? ndps : [])
       } catch {
         setAppError('Error al cargar proyectos')
       }
@@ -81,20 +105,34 @@ export const ProjectsPage = () => {
     })
   }, [projects, statusFilter, searchQuery])
 
-  const filteredUnits = useMemo(() => {
-    const q = unitSearch.trim().toLowerCase()
-    if (!q) return fleetUnits.slice(0, 30)
-    return fleetUnits.filter((u) =>
-      u.internalCode.toLowerCase().includes(q) ||
-      `${u.brand} ${u.model}`.toLowerCase().includes(q),
-    ).slice(0, 30)
-  }, [fleetUnits, unitSearch])
+  const selectedNdp = externalRequests.find((er) => er.id === form.externalRequestId)
 
-  const selectedUnit = fleetUnits.find((u) => u.id === form.unitId)
+  const filteredNdps = useMemo(() => {
+    const q = ndpSearch.trim().toLowerCase()
+    const unlinked = externalRequests.filter((er) => !projects.some((p) => p.externalRequestId === er.id))
+    if (!q) return unlinked.slice(0, 30)
+    return unlinked.filter((er) =>
+      er.code.toLowerCase().includes(q) ||
+      er.description.toLowerCase().includes(q) ||
+      (er.companyName ?? '').toLowerCase().includes(q),
+    ).slice(0, 30)
+  }, [externalRequests, ndpSearch, projects])
+
+  const handleNdpSelect = (ndp: ExternalRequest) => {
+    setForm((f) => ({
+      ...f,
+      externalRequestId: ndp.id,
+      title: f.title || ndp.description,
+    }))
+    setNdpSearch('')
+    setNdpDropdownOpen(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim() || !form.projectType || !form.unitId) return
+    if (!form.title.trim() || !form.projectType || !form.externalRequestId) return
+    const ndp = externalRequests.find((er) => er.id === form.externalRequestId)
+    if (!ndp) return
     setSaving(true)
     try {
       const created = await createProject({
@@ -102,18 +140,16 @@ export const ProjectsPage = () => {
         projectType: form.projectType,
         status: form.status,
         priority: form.priority,
-        unitId: form.unitId,
+        unitId: ndp.unitId,
+        externalRequestId: form.externalRequestId,
         description: form.description.trim(),
         estimatedCost: Number(form.estimatedCost) || 0,
-        actualCost: Number(form.actualCost) || 0,
         currency: form.currency,
-        assignedToUserId: form.assignedToUserId || null,
         targetDate: form.targetDate || null,
         modificationNotes: form.modificationNotes.trim(),
       })
       setProjects((prev) => [created, ...prev])
-      setForm(createEmptyProjectForm())
-      setUnitSearch('')
+      setForm(emptyForm())
       setShowForm(false)
     } catch {
       setAppError('Error al crear proyecto')
@@ -130,7 +166,7 @@ export const ProjectsPage = () => {
         <div>
           <BackLink to={ROUTE_PATHS.dashboard} label="Inicio" />
           <h2 className="text-2xl font-bold text-slate-900">Proyectos de Modificación</h2>
-          <p className="mt-1 text-sm text-slate-500">Cambios de configuración y adaptaciones de unidades</p>
+          <p className="mt-1 text-sm text-slate-500">Seguimiento de trabajos tercerizados de adaptación de unidades</p>
         </div>
         {canEdit && (
           <button
@@ -143,7 +179,7 @@ export const ProjectsPage = () => {
         )}
       </header>
 
-      {/* Status summary pills */}
+      {/* Status summary */}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -170,57 +206,73 @@ export const ProjectsPage = () => {
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
             <h3 className="mb-4 text-base font-bold text-slate-900">Nuevo proyecto</h3>
             <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
+
+              {/* NDP selector — first */}
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Nota de Pedido Externo *</label>
+                {selectedNdp ? (
+                  <div className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm">
+                    <div>
+                      <span className="font-semibold text-emerald-800">{selectedNdp.code}</span>
+                      {selectedNdp.companyName && <span className="ml-2 text-emerald-700">{selectedNdp.companyName}</span>}
+                      <p className="text-xs text-emerald-600 truncate">{selectedNdp.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, externalRequestId: '' }))}
+                      className="ml-2 text-xs text-emerald-600 hover:text-rose-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      value={ndpSearch}
+                      onChange={(e) => { setNdpSearch(e.target.value); setNdpDropdownOpen(true) }}
+                      onFocus={() => setNdpDropdownOpen(true)}
+                      placeholder="Buscar por código, empresa o descripción..."
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
+                    />
+                    {ndpDropdownOpen && (
+                      <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                        {filteredNdps.length === 0 && (
+                          <p className="px-3 py-2 text-xs text-slate-400">No hay notas de pedido disponibles.</p>
+                        )}
+                        {filteredNdps.map((er) => (
+                          <button
+                            key={er.id}
+                            type="button"
+                            onClick={() => handleNdpSelect(er)}
+                            className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                          >
+                            <span className="text-sm font-semibold text-slate-800">{er.code}</span>
+                            {er.companyName && <span className="ml-2 text-xs text-slate-500">{er.companyName}</span>}
+                            <p className="truncate text-xs text-slate-500">{er.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-700">Título *</label>
                 <input
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   placeholder="Ej: Cambio de hidrogrúa XCMG"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                 />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700">Unidad *</label>
-                <div className="relative">
-                  <input
-                    value={unitSearch || selectedUnit ? (selectedUnit ? `${selectedUnit.brand} ${selectedUnit.model} — ${selectedUnit.internalCode}` : unitSearch) : unitSearch}
-                    onChange={(e) => {
-                      setUnitSearch(e.target.value)
-                      setForm((f) => ({ ...f, unitId: '' }))
-                      setUnitDropdownOpen(true)
-                    }}
-                    onFocus={() => setUnitDropdownOpen(true)}
-                    placeholder="Buscar unidad..."
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                  />
-                  {unitDropdownOpen && filteredUnits.length > 0 && (
-                    <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                      {filteredUnits.map((u) => (
-                        <button
-                          key={u.id}
-                          type="button"
-                          onClick={() => {
-                            setForm((f) => ({ ...f, unitId: u.id }))
-                            setUnitSearch('')
-                            setUnitDropdownOpen(false)
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                        >
-                          <span className="font-semibold">{u.internalCode}</span> — {u.brand} {u.model}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-700">Tipo de modificación *</label>
                 <select
                   value={form.projectType}
-                  onChange={(e) => setForm((f) => ({ ...f, projectType: e.target.value as ProjectFormData['projectType'] }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  onChange={(e) => setForm((f) => ({ ...f, projectType: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                 >
                   <option value="">Seleccionar...</option>
                   {Object.entries(PROJECT_TYPE_LABELS).map(([k, v]) => (
@@ -234,8 +286,8 @@ export const ProjectsPage = () => {
                   <label className="mb-1 block text-xs font-semibold text-slate-700">Estado</label>
                   <select
                     value={form.status}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ProjectFormData['status'] }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                   >
                     {fleetProjectStatuses.map((s) => (
                       <option key={s} value={s}>{PROJECT_STATUS_LABELS[s]}</option>
@@ -246,8 +298,8 @@ export const ProjectsPage = () => {
                   <label className="mb-1 block text-xs font-semibold text-slate-700">Prioridad</label>
                   <select
                     value={form.priority}
-                    onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as ProjectFormData['priority'] }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                    onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                   >
                     {Object.entries(PRIORITY_LABELS).map(([k, v]) => (
                       <option key={k} value={k}>{v}</option>
@@ -257,38 +309,24 @@ export const ProjectsPage = () => {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700">Responsable</label>
-                <select
-                  value={form.assignedToUserId}
-                  onChange={(e) => setForm((f) => ({ ...f, assignedToUserId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                >
-                  <option value="">Sin asignar</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>{u.fullName}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-700">Fecha objetivo</label>
                 <input
                   type="date"
                   value={form.targetDate}
                   onChange={(e) => setForm((f) => ({ ...f, targetDate: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700">Presupuesto estimado</label>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700">Presupuesto</label>
                   <input
                     type="number"
                     min="0"
                     value={form.estimatedCost}
                     onChange={(e) => setForm((f) => ({ ...f, estimatedCost: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                   />
                 </div>
                 <div>
@@ -296,7 +334,7 @@ export const ProjectsPage = () => {
                   <select
                     value={form.currency}
                     onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value as 'ARS' | 'USD' }))}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                   >
                     <option value="ARS">ARS</option>
                     <option value="USD">USD</option>
@@ -309,15 +347,14 @@ export const ProjectsPage = () => {
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  rows={3}
-                  placeholder="Detalles del proyecto..."
-                  className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  rows={2}
+                  className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={saving || !form.title.trim() || !form.projectType || !form.unitId}
+                disabled={saving || !form.title.trim() || !form.projectType || !form.externalRequestId}
                 className="w-full rounded-lg bg-amber-400 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50"
               >
                 {saving ? 'Guardando...' : 'Crear proyecto'}
@@ -326,24 +363,21 @@ export const ProjectsPage = () => {
           </section>
         )}
 
-        {/* Projects list */}
+        {/* List */}
         <section className={`space-y-3 ${showForm && canEdit ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
           <div className="flex items-center gap-3">
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar por título o unidad..."
-              className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+              className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
             />
             <span className="whitespace-nowrap text-sm text-slate-500">{filtered.length} proyecto{filtered.length !== 1 ? 's' : ''}</span>
           </div>
 
           {isLoading && (
-            <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-              Cargando proyectos...
-            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Cargando proyectos...</div>
           )}
-
           {!isLoading && filtered.length === 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
               {projects.length === 0 ? 'No hay proyectos creados.' : 'No hay proyectos que coincidan con los filtros.'}
@@ -351,6 +385,7 @@ export const ProjectsPage = () => {
           )}
 
           {filtered.map((project) => {
+            const ndp = externalRequests.find((er) => er.id === project.externalRequestId)
             const progress = itemsProgress(project)
             return (
               <Link
@@ -374,18 +409,14 @@ export const ProjectsPage = () => {
                       )}
                     </div>
                     <h3 className="mt-1 truncate text-base font-bold text-slate-900">{project.title}</h3>
-                    <p className="text-sm text-slate-600">{project.unitLabel || project.unitInternalCode}</p>
+                    <p className="text-sm text-slate-600">{project.unitLabel}</p>
+                    {ndp && (
+                      <p className="text-xs text-slate-400">NDP {ndp.code}{ndp.companyName ? ` · ${ndp.companyName}` : ''}</p>
+                    )}
                   </div>
                   <div className="shrink-0 text-right text-xs text-slate-500">
-                    {progress && (
-                      <div className="mb-1 font-semibold text-slate-700">Tareas {progress}</div>
-                    )}
-                    {project.targetDate && (
-                      <div>Objetivo: {formatDate(project.targetDate)}</div>
-                    )}
-                    {project.assignedToUserName && (
-                      <div className="mt-1">{project.assignedToUserName}</div>
-                    )}
+                    {progress && <div className="mb-1 font-semibold text-slate-700">Tareas {progress}</div>}
+                    {project.targetDate && <div>Objetivo: {formatDate(project.targetDate)}</div>}
                   </div>
                 </div>
                 {project.estimatedCost > 0 && (

@@ -332,6 +332,7 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
         CONSTRAINT "FleetProjectItem_pkey" PRIMARY KEY ("id")
       );
     `)
+    await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ADD COLUMN IF NOT EXISTS "externalRequestId" TEXT;`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ADD COLUMN IF NOT EXISTS "linkedWorkOrderIds" JSONB NOT NULL DEFAULT '[]'::jsonb;`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ADD COLUMN IF NOT EXISTS "linkedExternalRequestIds" JSONB NOT NULL DEFAULT '[]'::jsonb;`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_unitId_idx" ON "FleetProject"("unitId");`)

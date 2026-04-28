@@ -32,7 +32,7 @@ const createProjectSchema = z.object({
   estimatedCost: z.number().nonnegative().optional().default(0),
   actualCost: z.number().nonnegative().optional().default(0),
   currency: z.string().optional().default('ARS'),
-  assignedToUserId: z.string().nullable().optional(),
+  externalRequestId: z.string().nullable().optional(),
   targetDate: z.string().nullable().optional(),
   modificationNotes: z.string().optional().default(''),
 })
@@ -47,7 +47,7 @@ const updateProjectSchema = z.object({
   estimatedCost: z.number().nonnegative().optional(),
   actualCost: z.number().nonnegative().optional(),
   currency: z.string().optional(),
-  assignedToUserId: z.string().nullable().optional(),
+  externalRequestId: z.string().nullable().optional(),
   targetDate: z.string().nullable().optional(),
   modificationNotes: z.string().optional(),
 })
@@ -72,7 +72,6 @@ const itemInclude = {
 
 const projectInclude = {
   unit: { select: { id: true, internalCode: true, brand: true, model: true } },
-  assignedTo: { select: { id: true, fullName: true } },
   createdBy: { select: { id: true, fullName: true } },
   items: {
     orderBy: { createdAt: 'asc' as const },
@@ -108,8 +107,7 @@ const mapProject = (p: any) => ({
   estimatedCost: (p.estimatedCost as number) ?? 0,
   actualCost: (p.actualCost as number) ?? 0,
   currency: (p.currency as string) ?? 'ARS',
-  assignedToUserId: (p.assignedToUserId as string | null) ?? null,
-  assignedToUserName: (p.assignedTo?.fullName as string) ?? '',
+  externalRequestId: (p.externalRequestId as string | null) ?? null,
   createdByUserId: p.createdByUserId as string,
   createdByUserName: (p.createdBy?.fullName as string) ?? '',
   targetDate: p.targetDate ? (p.targetDate as Date).toISOString() : null,
@@ -161,17 +159,12 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   const actorId = req.userId
   if (!actorId) return res.status(401).json({ message: 'No autenticado' })
 
-  const { assignedToUserId, targetDate, ...rest } = parsed.data
-
-  const resolvedAssignedTo = assignedToUserId
-    ? ((await prisma.user.findUnique({ where: { id: assignedToUserId }, select: { id: true } }))?.id ?? null)
-    : null
+  const { targetDate, ...rest } = parsed.data
 
   try {
     const project = await prisma.fleetProject.create({
       data: {
         ...rest,
-        assignedToUserId: resolvedAssignedTo,
         createdByUserId: actorId,
         targetDate: targetDate ? new Date(targetDate) : null,
         startedAt: rest.status === 'IN_PROGRESS' ? new Date() : null,
@@ -191,19 +184,12 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
   const parsed = updateProjectSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ message: 'Datos inválidos' })
 
-  const { assignedToUserId, targetDate, status, ...rest } = parsed.data
+  const { targetDate, status, ...rest } = parsed.data
 
   try {
     const paramId = String(req.params.id)
     const current = await prisma.fleetProject.findUnique({ where: { id: paramId } })
     if (!current) return res.status(404).json({ message: 'Proyecto no encontrado' })
-
-    const resolvedAssignedTo =
-      assignedToUserId !== undefined
-        ? assignedToUserId
-          ? ((await prisma.user.findUnique({ where: { id: assignedToUserId }, select: { id: true } }))?.id ?? null)
-          : null
-        : undefined
 
     const startedAt =
       status === 'IN_PROGRESS' && !current.startedAt ? new Date() : undefined
@@ -219,7 +205,6 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       data: {
         ...rest,
         ...(status !== undefined && { status }),
-        ...(resolvedAssignedTo !== undefined && { assignedToUserId: resolvedAssignedTo }),
         ...(targetDate !== undefined && { targetDate: targetDate ? new Date(targetDate) : null }),
         ...(startedAt !== undefined && { startedAt }),
         ...(completedAt !== undefined && { completedAt }),
