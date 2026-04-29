@@ -32,7 +32,7 @@ const itemsProgress = (project: FleetProject): string => {
 interface ProjectForm {
   externalRequestId: string
   title: string
-  projectType: string
+  projectTypes: string[]
   status: string
   priority: string
   description: string
@@ -45,7 +45,7 @@ interface ProjectForm {
 const emptyForm = (): ProjectForm => ({
   externalRequestId: '',
   title: '',
-  projectType: '',
+  projectTypes: [],
   status: 'PENDING',
   priority: 'MEDIUM',
   description: '',
@@ -128,16 +128,25 @@ export const ProjectsPage = () => {
     setNdpDropdownOpen(false)
   }
 
+  const toggleProjectType = (type: string) => {
+    setForm((f) => ({
+      ...f,
+      projectTypes: f.projectTypes.includes(type)
+        ? f.projectTypes.filter((t) => t !== type)
+        : [...f.projectTypes, type],
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim() || !form.projectType || !form.externalRequestId) return
+    if (!form.title.trim() || form.projectTypes.length === 0 || !form.externalRequestId) return
     const ndp = externalRequests.find((er) => er.id === form.externalRequestId)
     if (!ndp) return
     setSaving(true)
     try {
       const created = await createProject({
         title: form.title.trim(),
-        projectType: form.projectType,
+        projectTypes: form.projectTypes,
         status: form.status,
         priority: form.priority,
         unitId: ndp.unitId,
@@ -268,17 +277,22 @@ export const ProjectsPage = () => {
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700">Tipo de modificación *</label>
-                <select
-                  value={form.projectType}
-                  onChange={(e) => setForm((f) => ({ ...f, projectType: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
-                >
-                  <option value="">Seleccionar...</option>
-                  {Object.entries(PROJECT_TYPE_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Tipo de modificación * <span className="font-normal text-slate-400">(puede elegir varios)</span></label>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(PROJECT_TYPE_LABELS).map(([k, v]) => {
+                    const active = form.projectTypes.includes(k)
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => toggleProjectType(k)}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${active ? 'border-violet-500 bg-violet-500 text-white' : 'border-slate-300 bg-white text-slate-600 hover:border-violet-300 hover:bg-violet-50'}`}
+                      >
+                        {v}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -354,7 +368,7 @@ export const ProjectsPage = () => {
 
               <button
                 type="submit"
-                disabled={saving || !form.title.trim() || !form.projectType || !form.externalRequestId}
+                disabled={saving || !form.title.trim() || form.projectTypes.length === 0 || !form.externalRequestId}
                 className="w-full rounded-lg bg-amber-400 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50"
               >
                 {saving ? 'Guardando...' : 'Crear proyecto'}
@@ -402,11 +416,11 @@ export const ProjectsPage = () => {
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${PRIORITY_COLORS[project.priority]}`}>
                         {PRIORITY_LABELS[project.priority]}
                       </span>
-                      {project.projectType && (
-                        <span className="inline-flex rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
-                          {PROJECT_TYPE_LABELS[project.projectType]}
+                      {project.projectTypes.map((t) => (
+                        <span key={t} className="inline-flex rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                          {PROJECT_TYPE_LABELS[t as keyof typeof PROJECT_TYPE_LABELS] ?? t}
                         </span>
-                      )}
+                      ))}
                     </div>
                     <h3 className="mt-1 truncate text-base font-bold text-slate-900">{project.title}</h3>
                     <p className="text-sm text-slate-600">{project.unitLabel}</p>

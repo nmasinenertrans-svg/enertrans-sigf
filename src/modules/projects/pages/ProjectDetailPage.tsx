@@ -257,9 +257,11 @@ export const ProjectDetailPage = () => {
             <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${PRIORITY_COLORS[project.priority]}`}>
               {PRIORITY_LABELS[project.priority]}
             </span>
-            <span className="inline-flex rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
-              {PROJECT_TYPE_LABELS[project.projectType]}
-            </span>
+            {project.projectTypes.map((t) => (
+              <span key={t} className="inline-flex rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
+                {PROJECT_TYPE_LABELS[t as keyof typeof PROJECT_TYPE_LABELS] ?? t}
+              </span>
+            ))}
           </div>
           <h2 className="mt-1 text-2xl font-bold text-slate-900">{project.title}</h2>
           <p className="text-sm text-slate-600">{project.unitLabel}</p>
@@ -311,16 +313,30 @@ export const ProjectDetailPage = () => {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700">Tipo de modificación</label>
-                <select
-                  value={editForm.projectType ?? ''}
-                  onChange={(e) => setEditForm((f) => ({ ...f, projectType: e.target.value as FleetProject['projectType'] }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
-                >
-                  {Object.entries(PROJECT_TYPE_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Tipo de modificación <span className="font-normal text-slate-400">(puede elegir varios)</span></label>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(PROJECT_TYPE_LABELS).map(([k, v]) => {
+                    const active = (editForm.projectTypes ?? []).includes(k as FleetProject['projectTypes'][number])
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setEditForm((f) => {
+                          const current = (f.projectTypes ?? []) as string[]
+                          return {
+                            ...f,
+                            projectTypes: current.includes(k)
+                              ? current.filter((t) => t !== k) as FleetProject['projectTypes']
+                              : [...current, k] as FleetProject['projectTypes'],
+                          }
+                        })}
+                        className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${active ? 'border-violet-500 bg-violet-500 text-white' : 'border-slate-300 bg-white text-slate-600 hover:border-violet-300 hover:bg-violet-50'}`}
+                      >
+                        {v}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-700">Estado</label>

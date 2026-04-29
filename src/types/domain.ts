@@ -652,7 +652,7 @@ export interface FleetProjectItem {
 export interface FleetProject {
   id: string
   title: string
-  projectType: FleetProjectType
+  projectTypes: FleetProjectType[]
   status: FleetProjectStatus
   priority: TaskPriority
   unitId: string

@@ -2,7 +2,7 @@ import type { FleetProjectType, FleetProjectStatus, FleetProjectItemStatus, Task
 
 export interface ProjectFormData {
   title: string
-  projectType: FleetProjectType | ''
+  projectTypes: FleetProjectType[]
   status: FleetProjectStatus
   priority: TaskPriority
   unitId: string
@@ -10,7 +10,6 @@ export interface ProjectFormData {
   estimatedCost: string
   actualCost: string
   currency: 'ARS' | 'USD'
-  assignedToUserId: string
   targetDate: string
   modificationNotes: string
 }
@@ -23,7 +22,7 @@ export interface ItemFormData {
 
 export const createEmptyProjectForm = (): ProjectFormData => ({
   title: '',
-  projectType: '',
+  projectTypes: [],
   status: 'PENDING',
   priority: 'MEDIUM',
   unitId: '',
@@ -31,7 +30,6 @@ export const createEmptyProjectForm = (): ProjectFormData => ({
   estimatedCost: '0',
   actualCost: '0',
   currency: 'ARS',
-  assignedToUserId: '',
   targetDate: '',
   modificationNotes: '',
 })

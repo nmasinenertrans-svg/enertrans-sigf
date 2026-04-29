@@ -134,33 +134,6 @@ enum CrmDealUnitStatus {
   LIBERADA
 }
 
-enum FleetProjectType {
-  HYDROCRANE_CHANGE
-  THIRD_AXLE
-  BOX_EXTENSION
-  BODY_MODIFICATION
-  ENGINE_OVERHAUL
-  TRANSMISSION
-  SUSPENSION
-  ELECTRICAL
-  BRAKE_SYSTEM
-  OTHER
-}
-
-enum FleetProjectStatus {
-  PENDING
-  IN_PROGRESS
-  ON_HOLD
-  COMPLETED
-  CANCELED
-}
-
-enum FleetProjectItemStatus {
-  PENDING
-  IN_PROGRESS
-  DONE
-  SKIPPED
-}
 
 model User {
   id                  String   @id @default(uuid())
@@ -611,8 +584,8 @@ model CrmDealUnit {
 model FleetProject {
   id                String             @id @default(uuid())
   title             String
-  projectType       FleetProjectType
-  status            FleetProjectStatus @default(PENDING)
+  projectTypes      Json               @default("[]")
+  status            String             @default("PENDING")
   priority          TaskPriority       @default(MEDIUM)
   unitId            String
   description       String             @default("")
@@ -643,7 +616,7 @@ model FleetProjectItem {
   projectId        String
   title            String
   description      String                 @default("")
-  status           FleetProjectItemStatus @default(PENDING)
+  status           String                 @default("PENDING")
   assignedToUserId String?
   completedAt      DateTime?
   createdAt        DateTime               @default(now())

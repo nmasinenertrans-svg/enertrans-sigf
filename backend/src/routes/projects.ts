@@ -24,7 +24,7 @@ const itemStatuses = ['PENDING', 'IN_PROGRESS', 'DONE', 'SKIPPED'] as const
 
 const createProjectSchema = z.object({
   title: z.string().min(1),
-  projectType: z.enum(projectTypes),
+  projectTypes: z.array(z.enum(projectTypes)).min(1),
   status: z.enum(projectStatuses).optional().default('PENDING'),
   priority: z.enum(priorities).optional().default('MEDIUM'),
   unitId: z.string().min(1),
@@ -39,7 +39,7 @@ const createProjectSchema = z.object({
 
 const updateProjectSchema = z.object({
   title: z.string().min(1).optional(),
-  projectType: z.enum(projectTypes).optional(),
+  projectTypes: z.array(z.enum(projectTypes)).min(1).optional(),
   status: z.enum(projectStatuses).optional(),
   priority: z.enum(priorities).optional(),
   unitId: z.string().min(1).optional(),
@@ -97,7 +97,7 @@ const mapItem = (item: any) => ({
 const mapProject = (p: any) => ({
   id: p.id as string,
   title: p.title as string,
-  projectType: p.projectType as string,
+  projectTypes: Array.isArray(p.projectTypes) ? (p.projectTypes as string[]) : [],
   status: p.status as string,
   priority: p.priority as string,
   unitId: p.unitId as string,
