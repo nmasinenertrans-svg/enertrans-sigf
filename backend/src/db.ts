@@ -299,7 +299,7 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       CREATE TABLE IF NOT EXISTS "FleetProject" (
         "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
         "title" TEXT NOT NULL,
-        "projectType" TEXT NOT NULL,
+        "projectType" TEXT NOT NULL DEFAULT 'OTHER',
         "status" TEXT NOT NULL DEFAULT 'PENDING',
         "priority" TEXT NOT NULL DEFAULT 'MEDIUM',
         "unitId" TEXT NOT NULL,
@@ -336,6 +336,8 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ADD COLUMN IF NOT EXISTS "linkedWorkOrderIds" JSONB NOT NULL DEFAULT '[]'::jsonb;`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ADD COLUMN IF NOT EXISTS "linkedExternalRequestIds" JSONB NOT NULL DEFAULT '[]'::jsonb;`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ADD COLUMN IF NOT EXISTS "projectTypes" JSONB NOT NULL DEFAULT '[]'::jsonb;`)
+    await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ALTER COLUMN "projectType" SET DEFAULT 'OTHER';`)
+    await safeExecuteCompatSql(`ALTER TABLE "FleetProject" ALTER COLUMN "projectType" DROP NOT NULL;`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_unitId_idx" ON "FleetProject"("unitId");`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_status_idx" ON "FleetProject"("status");`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProjectItem_projectId_idx" ON "FleetProjectItem"("projectId");`)
