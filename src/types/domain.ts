@@ -6,11 +6,17 @@ export type UserRole = (typeof userRoles)[number]
 
 export const permissionModules = [
   'FLEET',
+  'PROJECTS',
+  'CLIENTS',
+  'DELIVERIES',
+  'MOVEMENTS',
   'MAINTENANCE',
   'AUDITS',
   'WORK_ORDERS',
+  'EXTERNAL_REQUESTS',
   'TASKS',
   'REPAIRS',
+  'SUPPLIERS',
   'CRM',
   'INVENTORY',
   'REPORTS',

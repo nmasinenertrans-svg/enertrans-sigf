@@ -71,7 +71,7 @@ export const ProjectsPage = () => {
 
   const { isLoading } = useAsyncLoader(
     async (getMounted) => {
-      if (!can('FLEET', 'view')) return
+      if (!can('PROJECTS', 'view')) return
       try {
         const [projs, ndps] = await Promise.all([
           fetchProjects(),
@@ -87,7 +87,7 @@ export const ProjectsPage = () => {
     [can, setAppError],
   )
 
-  const canEdit = can('FLEET', 'edit')
+  const canEdit = can('PROJECTS', 'edit')
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { ALL: projects.length }
@@ -167,7 +167,7 @@ export const ProjectsPage = () => {
     }
   }
 
-  if (!can('FLEET', 'view')) return null
+  if (!can('PROJECTS', 'view')) return null
 
   return (
     <section className="space-y-5">

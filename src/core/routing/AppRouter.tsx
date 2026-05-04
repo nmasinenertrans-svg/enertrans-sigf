@@ -145,7 +145,7 @@ export const AppRouter = () => (
           path={ROUTE_PATHS.movements}
           element={
             <RequireFeatureFlag flag="showMovementsModule">
-              <RequirePermission module="FLEET" action="view">
+              <RequirePermission module="MOVEMENTS" action="view">
                 <MovementsPage />
               </RequirePermission>
             </RequireFeatureFlag>
@@ -155,7 +155,7 @@ export const AppRouter = () => (
           path={ROUTE_PATHS.clients}
           element={
             <RequireFeatureFlag flag="showClientsModule">
-              <RequirePermission module="FLEET" action="view">
+              <RequirePermission module="CLIENTS" action="view">
                 <ClientsPage />
               </RequirePermission>
             </RequireFeatureFlag>
@@ -165,7 +165,7 @@ export const AppRouter = () => (
           path={ROUTE_PATHS.deliveries}
           element={
             <RequireFeatureFlag flag="showDeliveriesModule">
-              <RequirePermission module="FLEET" action="view">
+              <RequirePermission module="DELIVERIES" action="view">
                 <DeliveriesPage />
               </RequirePermission>
             </RequireFeatureFlag>
@@ -185,7 +185,7 @@ export const AppRouter = () => (
           path={ROUTE_PATHS.externalRequests}
           element={
             <RequireFeatureFlag flag="showExternalRequestsModule">
-              <RequirePermission module="WORK_ORDERS" action="view">
+              <RequirePermission module="EXTERNAL_REQUESTS" action="view">
                 <ExternalRequestsPage />
               </RequirePermission>
             </RequireFeatureFlag>
@@ -205,7 +205,7 @@ export const AppRouter = () => (
           path={ROUTE_PATHS.suppliers}
           element={
             <RequireFeatureFlag flag="showSuppliersModule">
-              <RequirePermission module="REPAIRS" action="view">
+              <RequirePermission module="SUPPLIERS" action="view">
                 <SuppliersPage />
               </RequirePermission>
             </RequireFeatureFlag>
@@ -215,7 +215,7 @@ export const AppRouter = () => (
           path={ROUTE_PATHS.supplierDetail}
           element={
             <RequireFeatureFlag flag="showSuppliersModule">
-              <RequirePermission module="REPAIRS" action="view">
+              <RequirePermission module="SUPPLIERS" action="view">
                 <SupplierDetailPage />
               </RequirePermission>
             </RequireFeatureFlag>
@@ -274,7 +274,7 @@ export const AppRouter = () => (
         <Route
           path={ROUTE_PATHS.projects.list}
           element={
-            <RequirePermission module="FLEET" action="view">
+            <RequirePermission module="PROJECTS" action="view">
               <ProjectsPage />
             </RequirePermission>
           }
@@ -282,7 +282,7 @@ export const AppRouter = () => (
         <Route
           path={ROUTE_PATHS.projects.detail}
           element={
-            <RequirePermission module="FLEET" action="view">
+            <RequirePermission module="PROJECTS" action="view">
               <ProjectDetailPage />
             </RequirePermission>
           }

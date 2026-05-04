@@ -11,11 +11,17 @@ const buildEmptyPermissions = (): UserPermissions => getRolePermissions('AUDITOR
 
 const permissionModuleLabelMap: Record<PermissionModule, string> = {
   FLEET: 'Flota',
+  PROJECTS: 'Proyectos de Modificación',
+  CLIENTS: 'Clientes',
+  DELIVERIES: 'Entregas / Devoluciones',
+  MOVEMENTS: 'Remitos',
   MAINTENANCE: 'Plan de mantenimiento',
   AUDITS: 'Inspecciones',
-  WORK_ORDERS: 'Ordenes de trabajo',
+  WORK_ORDERS: 'Órdenes de trabajo',
+  EXTERNAL_REQUESTS: 'Notas de Pedido Externo',
   TASKS: 'Tareas',
   REPAIRS: 'Reparaciones',
+  SUPPLIERS: 'Proveedores',
   CRM: 'CRM Comercial',
   INVENTORY: 'Inventario',
   REPORTS: 'Reportes',

@@ -76,7 +76,7 @@ export const ProjectDetailPage = () => {
 
   const load = useCallback(
     async (getMounted: () => boolean) => {
-      if (!projectId || !can('FLEET', 'view')) return
+      if (!projectId || !can('PROJECTS', 'view')) return
       try {
         const [p, wos, ndps] = await Promise.all([
           fetchProject(projectId),
@@ -96,7 +96,7 @@ export const ProjectDetailPage = () => {
 
   const { isLoading } = useAsyncLoader(load, [load])
 
-  const canEdit = can('FLEET', 'edit')
+  const canEdit = can('PROJECTS', 'edit')
 
   const handleStatusChange = async (status: FleetProjectStatus) => {
     if (!project) return

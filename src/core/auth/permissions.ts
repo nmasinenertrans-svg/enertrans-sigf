@@ -55,11 +55,17 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
 
   if (role === 'COORDINADOR') {
     allowModule(permissions, 'FLEET', ['view', 'create', 'edit'])
+    allowModule(permissions, 'PROJECTS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'CLIENTS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'DELIVERIES', ['view', 'create', 'edit'])
+    allowModule(permissions, 'MOVEMENTS', ['view', 'create', 'edit'])
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'AUDITS', ['view', 'create'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'EXTERNAL_REQUESTS', ['view', 'create', 'edit'])
     allowModule(permissions, 'TASKS', ['view'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'SUPPLIERS', ['view', 'create', 'edit'])
     allowModule(permissions, 'CRM', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view', 'create', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
@@ -77,6 +83,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
   if (role === 'MECANICO') {
     allowModule(permissions, 'FLEET', ['view'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'EXTERNAL_REQUESTS', ['view'])
     allowModule(permissions, 'TASKS', ['view', 'edit'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
