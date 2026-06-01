@@ -25,6 +25,7 @@ import { SupplierDetailPage } from '../../modules/suppliers/pages/SupplierDetail
 import { CrmPage } from '../../modules/crm/pages/CrmPage'
 import { ProjectsPage } from '../../modules/projects/pages/ProjectsPage'
 import { ProjectDetailPage } from '../../modules/projects/pages/ProjectDetailPage'
+import { PostventaPage } from '../../modules/postventa/pages/PostventaPage'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
@@ -284,6 +285,14 @@ export const AppRouter = () => (
           element={
             <RequirePermission module="PROJECTS" action="view">
               <ProjectDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.postventa}
+          element={
+            <RequirePermission module="POSTVENTA" action="view">
+              <PostventaPage />
             </RequirePermission>
           }
         />

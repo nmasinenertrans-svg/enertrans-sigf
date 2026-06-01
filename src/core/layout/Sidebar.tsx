@@ -21,6 +21,7 @@ const navigationItems: Array<{ path: string; label: string; module: PermissionMo
   { path: ROUTE_PATHS.inventory, label: 'Inventario', module: 'INVENTORY', flagKey: 'showInventoryModule' },
   { path: ROUTE_PATHS.reports, label: 'Reportes', module: 'REPORTS', flagKey: 'showReportsModule' },
   { path: ROUTE_PATHS.users, label: 'Usuarios', module: 'USERS', flagKey: 'showUsersModule' },
+  { path: ROUTE_PATHS.postventa, label: 'Postventa', module: 'POSTVENTA' },
   { path: ROUTE_PATHS.maintenanceMode, label: 'Mantenimiento app', module: 'MAINTENANCE_MODE' },
 ]
 

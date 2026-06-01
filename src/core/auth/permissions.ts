@@ -69,6 +69,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     allowModule(permissions, 'CRM', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view', 'create', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
+    allowModule(permissions, 'POSTVENTA', ['view', 'create', 'edit', 'delete'])
     return permissions
   }
 

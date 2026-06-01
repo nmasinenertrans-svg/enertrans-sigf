@@ -2,16 +2,23 @@
 
 export type PermissionModule =
   | 'FLEET'
+  | 'PROJECTS'
+  | 'CLIENTS'
+  | 'DELIVERIES'
+  | 'MOVEMENTS'
   | 'MAINTENANCE'
   | 'AUDITS'
   | 'WORK_ORDERS'
+  | 'EXTERNAL_REQUESTS'
   | 'TASKS'
   | 'REPAIRS'
+  | 'SUPPLIERS'
   | 'CRM'
   | 'INVENTORY'
   | 'REPORTS'
   | 'USERS'
   | 'MAINTENANCE_MODE'
+  | 'POSTVENTA'
 
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete'
 
@@ -20,16 +27,23 @@ export type UserPermissions = Record<PermissionModule, ModulePermissionSet>
 
 const permissionModules: PermissionModule[] = [
   'FLEET',
+  'PROJECTS',
+  'CLIENTS',
+  'DELIVERIES',
+  'MOVEMENTS',
   'MAINTENANCE',
   'AUDITS',
   'WORK_ORDERS',
+  'EXTERNAL_REQUESTS',
   'TASKS',
   'REPAIRS',
+  'SUPPLIERS',
   'CRM',
   'INVENTORY',
   'REPORTS',
   'USERS',
   'MAINTENANCE_MODE',
+  'POSTVENTA',
 ]
 
 const permissionActions: PermissionAction[] = ['view', 'create', 'edit', 'delete']
@@ -80,14 +94,21 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
 
   if (role === 'COORDINADOR') {
     allowModule(permissions, 'FLEET', ['view', 'create', 'edit'])
+    allowModule(permissions, 'PROJECTS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'CLIENTS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'DELIVERIES', ['view', 'create', 'edit'])
+    allowModule(permissions, 'MOVEMENTS', ['view', 'create', 'edit'])
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'AUDITS', ['view', 'create'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'EXTERNAL_REQUESTS', ['view', 'create', 'edit'])
     allowModule(permissions, 'TASKS', ['view'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'SUPPLIERS', ['view', 'create', 'edit'])
     allowModule(permissions, 'CRM', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view', 'create', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
+    allowModule(permissions, 'POSTVENTA', ['view', 'create', 'edit', 'delete'])
     return permissions
   }
 
@@ -102,6 +123,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
   if (role === 'MECANICO') {
     allowModule(permissions, 'FLEET', ['view'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'EXTERNAL_REQUESTS', ['view'])
     allowModule(permissions, 'TASKS', ['view', 'edit'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])

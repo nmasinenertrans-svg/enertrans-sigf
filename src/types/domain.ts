@@ -22,6 +22,7 @@ export const permissionModules = [
   'REPORTS',
   'USERS',
   'MAINTENANCE_MODE',
+  'POSTVENTA',
 ] as const
 export type PermissionModule = (typeof permissionModules)[number]
 
@@ -680,4 +681,21 @@ export interface FleetProject {
   createdAt: string
   updatedAt: string
   items: FleetProjectItem[]
+}
+
+export interface PostventaEvent {
+  id: string
+  title: string
+  startDate: string // YYYY-MM-DD
+  endDate: string | null // YYYY-MM-DD
+  notes: string
+  unitId: string | null
+  unitLabel: string | null
+  externalVehicle: string | null
+  workOrderId: string | null
+  color: string
+  createdByUserId: string
+  createdByUserName: string
+  createdAt: string
+  updatedAt: string
 }

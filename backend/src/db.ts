@@ -142,6 +142,7 @@ const COMPAT_TABLE_NAMES = [
   'ExternalRequest',
   'FleetProject',
   'FleetProjectItem',
+  'PostventaEvent',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -341,6 +342,27 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_unitId_idx" ON "FleetProject"("unitId");`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProject_status_idx" ON "FleetProject"("status");`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetProjectItem_projectId_idx" ON "FleetProjectItem"("projectId");`)
+
+    // Postventa calendar events
+    await safeExecuteCompatSql(`
+      CREATE TABLE IF NOT EXISTS "PostventaEvent" (
+        "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+        "title" TEXT NOT NULL,
+        "startDate" TIMESTAMP(3) NOT NULL,
+        "endDate" TIMESTAMP(3),
+        "notes" TEXT NOT NULL DEFAULT '',
+        "unitId" TEXT,
+        "externalVehicle" TEXT,
+        "workOrderId" TEXT,
+        "color" TEXT NOT NULL DEFAULT 'amber',
+        "createdByUserId" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "PostventaEvent_pkey" PRIMARY KEY ("id")
+      );
+    `)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "PostventaEvent_startDate_idx" ON "PostventaEvent"("startDate");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "PostventaEvent_unitId_idx" ON "PostventaEvent"("unitId");`)
   }
 
   // Clientes: crea tabla si falta.

@@ -31,6 +31,7 @@
     list: '/projects',
     detail: '/projects/:projectId',
   },
+  postventa: '/postventa',
 } as const
 
 const unitIdPlaceholder = ':unitId'

@@ -159,6 +159,7 @@ model User {
   crmDealUnitsCreated CrmDealUnit[]  @relation("CrmDealUnitCreatedBy")
   fleetProjectsCreated      FleetProject[]     @relation("FleetProjectCreatedBy")
   fleetProjectItemsAssigned FleetProjectItem[] @relation("FleetProjectItemAssignedTo")
+  postventaEventsCreated    PostventaEvent[]   @relation("PostventaEventCreatedBy")
 }
 
 model FleetUnit {
@@ -217,9 +218,31 @@ model FleetUnit {
   deliveryOperations       DeliveryOperation[]
   crmDealLinks             CrmDealUnit[]
   fleetProjects            FleetProject[]
+  postventaEvents          PostventaEvent[]
 
   @@index([clientId])
   @@index([logisticsStatus])
+}
+
+model PostventaEvent {
+  id              String    @id @default(uuid())
+  title           String
+  startDate       DateTime
+  endDate         DateTime?
+  notes           String    @default("")
+  unitId          String?
+  externalVehicle String?
+  workOrderId     String?
+  color           String    @default("amber")
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  unit      FleetUnit? @relation(fields: [unitId], references: [id])
+  createdBy User       @relation("PostventaEventCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([startDate])
+  @@index([unitId])
 }
 
 model MaintenancePlan {
