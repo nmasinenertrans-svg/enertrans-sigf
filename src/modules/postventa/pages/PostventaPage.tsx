@@ -145,6 +145,9 @@ export const PostventaPage = () => {
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
 
+  const [unitSearch, setUnitSearch] = useState('')
+  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false)
+
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<PostventaEvent | null>(null)
   const [form, setForm] = useState<EventForm>(emptyForm())
@@ -182,15 +185,34 @@ export const PostventaPage = () => {
   const prevMonth = () => { if (month === 0) { setYear(y => y - 1); setMonth(11) } else setMonth(m => m - 1) }
   const nextMonth = () => { if (month === 11) { setYear(y => y + 1); setMonth(0) } else setMonth(m => m + 1) }
 
+  const selectedUnit = useMemo(
+    () => fleetUnits.find((u) => u.id === form.unitId) ?? null,
+    [fleetUnits, form.unitId],
+  )
+
+  const filteredUnits = useMemo(() => {
+    const q = unitSearch.trim().toLowerCase()
+    if (!q) return fleetUnits.slice(0, 20)
+    return fleetUnits.filter((u) =>
+      u.internalCode.toLowerCase().includes(q) ||
+      u.brand.toLowerCase().includes(q) ||
+      u.model.toLowerCase().includes(q),
+    ).slice(0, 20)
+  }, [fleetUnits, unitSearch])
+
   const openCreate = (date?: string) => {
     setEditingEvent(null)
     setForm(emptyForm(date))
+    setUnitSearch('')
+    setUnitDropdownOpen(false)
     setShowForm(true)
     setSelectedEvent(null)
   }
 
   const openEdit = (ev: PostventaEvent) => {
     setEditingEvent(ev)
+    setUnitSearch('')
+    setUnitDropdownOpen(false)
     setForm({
       title: ev.title,
       startDate: ev.startDate,
@@ -520,18 +542,49 @@ export const PostventaPage = () => {
                     ))}
                   </div>
                   {form.vehicleMode === 'fleet' ? (
-                    <select
-                      value={form.unitId}
-                      onChange={(e) => setForm(f => ({ ...f, unitId: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-amber-400"
-                    >
-                      <option value="">Sin unidad específica</option>
-                      {fleetUnits.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.brand} {u.model} — {u.internalCode}
-                        </option>
-                      ))}
-                    </select>
+                    selectedUnit ? (
+                      <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
+                        <div>
+                          <span className="font-bold text-amber-900">{selectedUnit.internalCode}</span>
+                          <span className="ml-2 text-amber-700">{selectedUnit.brand} {selectedUnit.model}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setForm(f => ({ ...f, unitId: '' })); setUnitSearch('') }}
+                          className="ml-2 text-amber-600 hover:text-rose-600"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          value={unitSearch}
+                          onChange={(e) => { setUnitSearch(e.target.value); setUnitDropdownOpen(true) }}
+                          onFocus={() => setUnitDropdownOpen(true)}
+                          placeholder="Buscar por dominio, marca o modelo..."
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-amber-400"
+                        />
+                        {unitDropdownOpen && (
+                          <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                            {filteredUnits.length === 0 && (
+                              <p className="px-3 py-2 text-xs text-slate-400">Sin resultados.</p>
+                            )}
+                            {filteredUnits.map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => { setForm(f => ({ ...f, unitId: u.id })); setUnitDropdownOpen(false); setUnitSearch('') }}
+                                className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                              >
+                                <span className="font-semibold text-slate-900">{u.internalCode}</span>
+                                <span className="ml-2 text-xs text-slate-500">{u.brand} {u.model}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
                   ) : (
                     <input
                       value={form.externalVehicle}
