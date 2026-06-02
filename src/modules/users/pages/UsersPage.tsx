@@ -28,6 +28,7 @@ const permissionModuleLabelMap: Record<PermissionModule, string> = {
   USERS: 'Usuarios',
   MAINTENANCE_MODE: 'Mantenimiento app',
   POSTVENTA: 'Postventa / Calendario',
+  CHECKLIST_V2: '[BETA] Check List Vehicular',
 }
 
 const normalizePermissions = (permissions: UserPermissions | undefined, role: UserRole): UserPermissions => {

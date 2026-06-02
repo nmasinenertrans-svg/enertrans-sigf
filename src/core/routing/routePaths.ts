@@ -32,6 +32,7 @@
     detail: '/projects/:projectId',
   },
   postventa: '/postventa',
+  checklistV2: '/checklist-v2',
 } as const
 
 const unitIdPlaceholder = ':unitId'

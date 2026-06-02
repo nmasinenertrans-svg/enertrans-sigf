@@ -23,6 +23,7 @@ export const permissionModules = [
   'USERS',
   'MAINTENANCE_MODE',
   'POSTVENTA',
+  'CHECKLIST_V2',
 ] as const
 export type PermissionModule = (typeof permissionModules)[number]
 
