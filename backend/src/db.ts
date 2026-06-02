@@ -132,6 +132,8 @@ export let prisma = new PrismaClient({
 const COMPAT_TABLE_NAMES = [
   'User',
   'FleetUnit',
+  'WorkOrder',
+  'AuditRecord',
   'RepairRecord',
   'Supplier',
   'ClientAccount',
