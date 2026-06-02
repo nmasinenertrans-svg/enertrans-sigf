@@ -295,7 +295,8 @@ export interface AuditRecord {
   code: string
   auditKind: 'AUDIT' | 'REAUDIT'
   id: string
-  unitId: string
+  unitId: string | null
+  externalVehicle?: string | null
   auditorUserId: string
   auditorName: string
   performedAt: string
@@ -331,7 +332,8 @@ export interface WorkOrder {
   code: string
   pendingReaudit: boolean
   id: string
-  unitId: string
+  unitId: string | null
+  externalVehicle?: string | null
   status: WorkOrderStatus
   createdAt?: string
   taskList: WorkOrderDeviation[]

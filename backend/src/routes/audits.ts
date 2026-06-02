@@ -13,7 +13,8 @@ const auditSchema = z.object({
   id: z.string().uuid().optional(),
   code: z.string().optional(),
   auditKind: z.enum(['AUDIT', 'REAUDIT']).optional(),
-  unitId: z.string().min(1),
+  unitId: z.string().nullable().optional(),
+  externalVehicle: z.string().nullable().optional(),
   auditorUserId: z.string().min(1),
   auditorName: z.string().min(1),
   performedAt: z.string().min(1),
@@ -270,7 +271,8 @@ router.post('/', async (req, res) => {
   }
 
   const manualAuditMode = await isManualAuditModeEnabled()
-  const auditKind = manualAuditMode ? 'AUDIT' : parsed.data.auditKind ?? (await resolveAuditKind(parsed.data.unitId))
+  const isExternalVehicle = !parsed.data.unitId
+  const auditKind = manualAuditMode || isExternalVehicle ? 'AUDIT' : parsed.data.auditKind ?? (await resolveAuditKind(parsed.data.unitId!))
   const performedAtDate = new Date(parsed.data.performedAt)
 
   if (Number.isNaN(performedAtDate.getTime())) {
@@ -282,7 +284,7 @@ router.post('/', async (req, res) => {
 
   const duplicateCandidates = await prisma.auditRecord.findMany({
     where: {
-      unitId: parsed.data.unitId,
+      unitId: parsed.data.unitId ?? null,
       auditorUserId: parsed.data.auditorUserId,
       result: parsed.data.result,
       auditKind,
@@ -311,10 +313,9 @@ router.post('/', async (req, res) => {
     return res.status(200).json(duplicate)
   }
 
-  const unit = await prisma.fleetUnit.findUnique({
-    where: { id: parsed.data.unitId },
-    select: { internalCode: true },
-  })
+  const unit = parsed.data.unitId
+    ? await prisma.fleetUnit.findUnique({ where: { id: parsed.data.unitId }, select: { internalCode: true } })
+    : null
   const unitCode = unit?.internalCode ?? ''
   // Server must be the source of truth for audit codes.
   // Frontend/local sequence can drift (PWA/offline/cache/reset) and cause collisions.
@@ -324,7 +325,8 @@ router.post('/', async (req, res) => {
     id: parsed.data.id,
     code,
     auditKind,
-    unitId: parsed.data.unitId,
+    unitId: parsed.data.unitId ?? null,
+    externalVehicle: parsed.data.externalVehicle ?? null,
     auditorUserId: parsed.data.auditorUserId,
     auditorName: parsed.data.auditorName,
     performedAt: performedAtDate,
@@ -344,14 +346,16 @@ router.post('/', async (req, res) => {
   try {
     const item = await prisma.auditRecord.create({ data })
 
-    await prisma.fleetUnit.update({
-      where: { id: item.unitId },
-      data: {
-        currentKilometers: parsed.data.unitKilometers,
-        currentEngineHours: parsed.data.engineHours,
-        currentHydroHours: parsed.data.hydroHours,
-      },
-    })
+    if (item.unitId) {
+      await prisma.fleetUnit.update({
+        where: { id: item.unitId },
+        data: {
+          currentKilometers: parsed.data.unitKilometers,
+          currentEngineHours: parsed.data.engineHours,
+          currentHydroHours: parsed.data.hydroHours,
+        },
+      })
+    }
 
     if (item.result === 'REJECTED') {
       if (!manualAuditMode) {
@@ -361,7 +365,8 @@ router.post('/', async (req, res) => {
             id: parsed.data.workOrderId,
             code: workOrderCode,
             pendingReaudit: false,
-            unitId: item.unitId,
+            unitId: item.unitId ?? null,
+            externalVehicle: item.externalVehicle ?? null,
             status: 'OPEN',
             taskList: extractBadItems(parsed.data.checklist),
             spareParts: [],
@@ -371,10 +376,12 @@ router.post('/', async (req, res) => {
         })
       }
 
-      await prisma.fleetUnit.update({
-        where: { id: item.unitId },
-        data: { operationalStatus: 'OUT_OF_SERVICE' },
-      })
+      if (item.unitId) {
+        await prisma.fleetUnit.update({
+          where: { id: item.unitId },
+          data: { operationalStatus: 'OUT_OF_SERVICE' },
+        })
+      }
     } else {
       if (!manualAuditMode && parsed.data.workOrderId) {
         await prisma.workOrder.updateMany({
@@ -382,24 +389,22 @@ router.post('/', async (req, res) => {
           data: { pendingReaudit: false },
         })
       }
-      if (!manualAuditMode) {
+      if (!manualAuditMode && item.unitId) {
         await prisma.workOrder.updateMany({
           where: { unitId: item.unitId, pendingReaudit: true },
           data: { pendingReaudit: false },
         })
       }
-      const openWorkOrders = await prisma.workOrder.findFirst({
-        where: {
-          unitId: item.unitId,
-          status: { in: ['OPEN', 'IN_PROGRESS'] },
-        },
-      })
-
-      if (!openWorkOrders) {
-        await prisma.fleetUnit.update({
-          where: { id: item.unitId },
-          data: { operationalStatus: 'OPERATIONAL' },
+      if (item.unitId) {
+        const openWorkOrders = await prisma.workOrder.findFirst({
+          where: { unitId: item.unitId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
         })
+        if (!openWorkOrders) {
+          await prisma.fleetUnit.update({
+            where: { id: item.unitId },
+            data: { operationalStatus: 'OPERATIONAL' },
+          })
+        }
       }
     }
 

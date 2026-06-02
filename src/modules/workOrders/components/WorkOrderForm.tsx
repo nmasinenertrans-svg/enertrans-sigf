@@ -56,24 +56,47 @@ export const WorkOrderForm = ({
           onSubmit()
         }}
       >
-        <FormRow label="Unidad" errorMessage={errors.unitId}>
-          <input
-            className={inputClassName}
-            value={unitSearch}
-            onChange={(event) => setUnitSearch(event.target.value)}
-            placeholder="Buscar por patente/codigo, cliente, marca o modelo..."
-          />
-          <select className={inputClassName} value={formData.unitId} onChange={(event) => onFieldChange('unitId', event.target.value)}>
-            <option value="">Seleccionar unidad</option>
-            {filteredUnits.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.internalCode} - {unit.ownerCompany}
-              </option>
+        <FormRow label="Vehículo" errorMessage={errors.unitId}>
+          <div className="flex gap-1 mb-2">
+            {(['fleet', 'external'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => { onFieldChange('vehicleMode', mode); setUnitSearch('') }}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${formData.vehicleMode === mode ? 'border-amber-400 bg-amber-400 text-slate-900' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                {mode === 'fleet' ? 'Flota' : 'Externo'}
+              </button>
             ))}
-          </select>
-          {unitSearch.trim() && filteredUnits.length === 0 ? (
-            <span className="text-xs font-semibold text-slate-500">No hay unidades que coincidan con la busqueda.</span>
-          ) : null}
+          </div>
+          {formData.vehicleMode === 'fleet' ? (
+            <>
+              <input
+                className={inputClassName}
+                value={unitSearch}
+                onChange={(event) => setUnitSearch(event.target.value)}
+                placeholder="Buscar por patente/codigo, cliente, marca o modelo..."
+              />
+              <select className={inputClassName} value={formData.unitId} onChange={(event) => onFieldChange('unitId', event.target.value)}>
+                <option value="">Seleccionar unidad</option>
+                {filteredUnits.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.internalCode} - {unit.ownerCompany}
+                  </option>
+                ))}
+              </select>
+              {unitSearch.trim() && filteredUnits.length === 0 ? (
+                <span className="text-xs font-semibold text-slate-500">No hay unidades que coincidan con la busqueda.</span>
+              ) : null}
+            </>
+          ) : (
+            <input
+              className={inputClassName}
+              value={formData.externalVehicle}
+              onChange={(event) => onFieldChange('externalVehicle', event.target.value)}
+              placeholder="Ej: Ford F-100 — dominio ABC123"
+            />
+          )}
         </FormRow>
 
         <FormRow label="Tareas (una por línea)" errorMessage={errors.tasksInput}>

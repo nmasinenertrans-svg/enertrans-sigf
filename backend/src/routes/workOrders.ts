@@ -20,7 +20,8 @@ const workOrderSchema = z.object({
   id: z.string().uuid().optional(),
   code: z.string().optional(),
   pendingReaudit: z.boolean().optional().default(false),
-  unitId: z.string().min(1),
+  unitId: z.string().nullable().optional(),
+  externalVehicle: z.string().nullable().optional(),
   status: z.enum(['OPEN', 'IN_PROGRESS', 'CLOSED']).optional().default('OPEN'),
   taskList: z.array(z.any()).optional().default([]),
   spareParts: z.array(z.string()).optional().default([]),
@@ -60,16 +61,15 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
-  const unit = await prisma.fleetUnit.findUnique({
-    where: { id: parsed.data.unitId },
-    select: { internalCode: true },
-  })
+  const unit = parsed.data.unitId
+    ? await prisma.fleetUnit.findUnique({ where: { id: parsed.data.unitId }, select: { internalCode: true } })
+    : null
   const unitCode = unit?.internalCode ?? ''
   const duplicateFrom = new Date(Date.now() - WORK_ORDER_DUPLICATE_WINDOW_MS)
 
   const duplicateCandidates = await prisma.workOrder.findMany({
     where: {
-      unitId: parsed.data.unitId,
+      unitId: parsed.data.unitId ?? null,
       createdAt: { gte: duplicateFrom },
     },
     orderBy: { createdAt: 'desc' },
@@ -95,6 +95,8 @@ router.post('/', async (req, res) => {
     const item = await prisma.workOrder.create({
       data: {
         ...parsed.data,
+        unitId: parsed.data.unitId ?? null,
+        externalVehicle: parsed.data.externalVehicle ?? null,
         status: 'OPEN',
         code,
       },

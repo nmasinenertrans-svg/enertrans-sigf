@@ -1,7 +1,9 @@
 ﻿import type { WorkOrderDeviation, WorkOrderStatus } from '../../types/domain'
 
 export interface WorkOrderFormData {
+  vehicleMode: 'fleet' | 'external'
   unitId: string
+  externalVehicle: string
   status: WorkOrderStatus
   tasksInput: string
   sparePartsInput: string
@@ -19,7 +21,8 @@ export interface WorkOrderViewItem {
   id: string
   code: string
   pendingReaudit: boolean
-  unitId: string
+  unitId: string | null
+  externalVehicle: string | null
   unitLabel: string
   status: WorkOrderStatus
   statusLabel: string

@@ -626,6 +626,7 @@ export const AuditsPage = () => {
         id: createdAudit.id,
         auditKind: createdAudit.auditKind,
         unitId: createdAudit.unitId,
+        externalVehicle: createdAudit.externalVehicle ?? null,
         auditorUserId: createdAudit.auditorUserId,
         auditorName: createdAudit.auditorName,
         performedAt: createdAudit.performedAt,
@@ -938,31 +939,57 @@ export const AuditsPage = () => {
                   </button>
                 ) : null}
 
-                <label className="mt-4 flex flex-col gap-2">
-                  <span className="text-sm font-semibold text-slate-700">Unidad</span>
-                  <select
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                    value={formData.unitId}
-                    disabled={isReauditMode}
-                    onChange={(event) => {
-                      setFormData((previousFormData) => ({
-                        ...previousFormData,
-                        unitId: event.target.value,
-                        auditMode: 'INDEPENDENT',
-                        externalRequestId: '',
-                      }))
-                      setErrors((previousErrors) => ({ ...previousErrors, unitId: undefined }))
-                    }}
-                  >
-                    <option value="">Seleccionar unidad</option>
-                    {fleetUnits.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.internalCode} - {unit.ownerCompany}
-                      </option>
-                    ))}
-                  </select>
+                <div className="mt-4 flex flex-col gap-2">
+                  <span className="text-sm font-semibold text-slate-700">Vehículo</span>
+                  {!isReauditMode && (
+                    <div className="flex gap-1">
+                      {(['fleet', 'external'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setFormData((prev) => ({ ...prev, vehicleMode: mode, unitId: '', externalVehicle: '' }))}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${formData.vehicleMode === mode ? 'border-amber-400 bg-amber-400 text-slate-900' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'}`}
+                        >
+                          {mode === 'fleet' ? 'Flota' : 'Externo'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {formData.vehicleMode === 'fleet' ? (
+                    <select
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                      value={formData.unitId}
+                      disabled={isReauditMode}
+                      onChange={(event) => {
+                        setFormData((previousFormData) => ({
+                          ...previousFormData,
+                          unitId: event.target.value,
+                          auditMode: 'INDEPENDENT',
+                          externalRequestId: '',
+                        }))
+                        setErrors((previousErrors) => ({ ...previousErrors, unitId: undefined }))
+                      }}
+                    >
+                      <option value="">Seleccionar unidad</option>
+                      {fleetUnits.map((unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.internalCode} - {unit.ownerCompany}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                      value={formData.externalVehicle}
+                      onChange={(event) => {
+                        setFormData((prev) => ({ ...prev, externalVehicle: event.target.value }))
+                        setErrors((prev) => ({ ...prev, unitId: undefined }))
+                      }}
+                      placeholder="Ej: Ford F-100 — dominio ABC123"
+                    />
+                  )}
                   {errors.unitId ? <span className="text-xs font-semibold text-rose-700">{errors.unitId}</span> : null}
-                </label>
+                </div>
 
                 {!isReauditMode && !manualAuditMode ? (
                   <label className="mt-4 flex flex-col gap-2">

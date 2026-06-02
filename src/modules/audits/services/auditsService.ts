@@ -116,7 +116,9 @@ const createStandardChecklist = (): AuditChecklistSectionDraft[] => [
 ]
 
 export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
+  vehicleMode: 'fleet',
   unitId,
+  externalVehicle: '',
   auditMode: 'INDEPENDENT',
   manualResult: 'APPROVED',
   externalRequestId: '',
@@ -166,10 +168,16 @@ export const evaluateAuditResult = (sections: AuditChecklistSection[]): 'APPROVE
 export const validateAuditFormData = (formData: AuditFormData, unitList: FleetUnit[]): AuditFormErrors => {
   const validationErrors: AuditFormErrors = {}
 
-  if (!formData.unitId) {
-    validationErrors.unitId = 'Debes seleccionar una unidad.'
-  } else if (!unitList.some((unit) => unit.id === formData.unitId)) {
-    validationErrors.unitId = 'La unidad seleccionada no existe.'
+  if (formData.vehicleMode === 'fleet') {
+    if (!formData.unitId) {
+      validationErrors.unitId = 'Debes seleccionar una unidad.'
+    } else if (!unitList.some((unit) => unit.id === formData.unitId)) {
+      validationErrors.unitId = 'La unidad seleccionada no existe.'
+    }
+  } else {
+    if (!formData.externalVehicle.trim()) {
+      validationErrors.unitId = 'Debes ingresar el vehículo externo.'
+    }
   }
 
   if (formData.observations.length > MAX_OBSERVATION_LENGTH) {
@@ -342,8 +350,9 @@ export const toAuditRecord = (
     ]
   }
 
-  const auditKind = manualAuditMode ? 'AUDIT' : resolveAuditKind(formData.unitId, workOrders)
-  const pendingOrder = manualAuditMode
+  const isExternalVehicle = formData.vehicleMode === 'external'
+  const auditKind = manualAuditMode || isExternalVehicle ? 'AUDIT' : resolveAuditKind(formData.unitId, workOrders)
+  const pendingOrder = manualAuditMode || isExternalVehicle
     ? undefined
     : workOrders.find((order) => order.unitId === formData.unitId && order.pendingReaudit)
   const overrideSequence = !manualAuditMode && auditKind === 'REAUDIT' ? parseSequenceNumber(pendingOrder?.code) : null
@@ -370,7 +379,8 @@ export const toAuditRecord = (
     id: createId(),
     code,
     auditKind,
-    unitId: formData.unitId,
+    unitId: isExternalVehicle ? null : formData.unitId,
+    externalVehicle: isExternalVehicle ? formData.externalVehicle.trim() : null,
     auditorUserId,
     auditorName,
     performedAt: new Date().toISOString(),

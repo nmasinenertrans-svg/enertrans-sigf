@@ -264,11 +264,12 @@ model MaintenancePlan {
 }
 
 model AuditRecord {
-  id             String   @id @default(uuid())
-  code           String   @unique
-  auditKind      String   @default("AUDIT")
-  unitId         String
-  auditorUserId  String
+  id              String   @id @default(uuid())
+  code            String   @unique
+  auditKind       String   @default("AUDIT")
+  unitId          String?
+  externalVehicle String?
+  auditorUserId   String
   auditorName    String
   workOrderId    String?
   performedAt    DateTime
@@ -282,15 +283,16 @@ model AuditRecord {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  unit    FleetUnit @relation(fields: [unitId], references: [id])
-  auditor User      @relation(fields: [auditorUserId], references: [id])
+  unit    FleetUnit? @relation(fields: [unitId], references: [id])
+  auditor User       @relation(fields: [auditorUserId], references: [id])
 }
 
 model WorkOrder {
   id                     String   @id @default(uuid())
   code                   String   @unique
   pendingReaudit         Boolean  @default(false)
-  unitId                 String
+  unitId                 String?
+  externalVehicle        String?
   status                 WorkOrderStatus
   taskList               Json
   spareParts             Json
@@ -299,7 +301,7 @@ model WorkOrder {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  unit FleetUnit @relation(fields: [unitId], references: [id])
+  unit FleetUnit? @relation(fields: [unitId], references: [id])
 }
 
 model RepairRecord {

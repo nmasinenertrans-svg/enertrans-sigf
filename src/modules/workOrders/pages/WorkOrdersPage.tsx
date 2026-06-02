@@ -384,7 +384,9 @@ export const WorkOrdersPage = () => {
         return
       }
 
-      const unitCode = fleetUnits.find((unit) => unit.id === formData.unitId)?.internalCode ?? ''
+      const unitCode = formData.vehicleMode === 'fleet'
+        ? (fleetUnits.find((unit) => unit.id === formData.unitId)?.internalCode ?? '')
+        : ''
       const createdWorkOrder = toWorkOrder(formData, unitCode)
       setWorkOrders([createdWorkOrder, ...workOrders])
       setInventoryItems(updateInventoryLinks(inventoryItems, createdWorkOrder.id, [], createdWorkOrder.linkedInventorySkuList))

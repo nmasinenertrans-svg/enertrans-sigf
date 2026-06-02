@@ -77,7 +77,9 @@ export const workOrderStatusClassMap: Record<WorkOrderStatus, string> = {
 }
 
 export const createEmptyWorkOrderFormData = (unitId: string): WorkOrderFormData => ({
+  vehicleMode: 'fleet',
   unitId,
+  externalVehicle: '',
   status: fallbackWorkOrderStatus,
   tasksInput: '',
   sparePartsInput: '',
@@ -86,7 +88,9 @@ export const createEmptyWorkOrderFormData = (unitId: string): WorkOrderFormData 
 })
 
 export const toWorkOrderFormData = (workOrder: WorkOrder): WorkOrderFormData => ({
-  unitId: workOrder.unitId,
+  vehicleMode: workOrder.unitId ? 'fleet' : 'external',
+  unitId: workOrder.unitId ?? '',
+  externalVehicle: workOrder.externalVehicle ?? '',
   status: workOrder.status,
   tasksInput: serializeList(normalizeTaskList(workOrder.taskList).map((task) => task.item)),
   sparePartsInput: serializeList(workOrder.spareParts),
@@ -100,10 +104,16 @@ export const validateWorkOrderFormData = (
 ): WorkOrderFormErrors => {
   const validationErrors: WorkOrderFormErrors = {}
 
-  if (!formData.unitId) {
-    validationErrors.unitId = 'Debes seleccionar una unidad.'
-  } else if (!fleetUnits.some((unit) => unit.id === formData.unitId)) {
-    validationErrors.unitId = 'La unidad seleccionada no existe.'
+  if (formData.vehicleMode === 'fleet') {
+    if (!formData.unitId) {
+      validationErrors.unitId = 'Debes seleccionar una unidad.'
+    } else if (!fleetUnits.some((unit) => unit.id === formData.unitId)) {
+      validationErrors.unitId = 'La unidad seleccionada no existe.'
+    }
+  } else {
+    if (!formData.externalVehicle.trim()) {
+      validationErrors.unitId = 'Debes ingresar el vehículo externo.'
+    }
   }
 
   if (parseListInput(formData.tasksInput).length < MIN_TASK_ITEMS) {
@@ -121,7 +131,8 @@ export const validateWorkOrderFormData = (
 
 export const toWorkOrder = (formData: WorkOrderFormData, unitCode: string): WorkOrder => ({
   id: createId(),
-  unitId: formData.unitId,
+  unitId: formData.vehicleMode === 'fleet' ? formData.unitId : null,
+  externalVehicle: formData.vehicleMode === 'external' ? formData.externalVehicle.trim() : null,
   status: 'OPEN',
   createdAt: new Date().toISOString(),
   taskList: buildTaskListFromInput(formData.tasksInput),
@@ -134,7 +145,8 @@ export const toWorkOrder = (formData: WorkOrderFormData, unitCode: string): Work
 
 export const mergeWorkOrderFromForm = (workOrder: WorkOrder, formData: WorkOrderFormData): WorkOrder => ({
   ...workOrder,
-  unitId: formData.unitId,
+  unitId: formData.vehicleMode === 'fleet' ? formData.unitId : null,
+  externalVehicle: formData.vehicleMode === 'external' ? formData.externalVehicle.trim() : null,
   status: formData.status,
   taskList: buildTaskListFromInput(formData.tasksInput),
   spareParts: parseListInput(formData.sparePartsInput),
@@ -144,14 +156,17 @@ export const mergeWorkOrderFromForm = (workOrder: WorkOrder, formData: WorkOrder
 
 export const buildWorkOrderView = (workOrders: WorkOrder[], fleetUnits: FleetUnit[]): WorkOrderViewItem[] =>
   workOrders.map((workOrder) => {
-    const unit = fleetUnits.find((fleetUnit) => fleetUnit.id === workOrder.unitId)
+    const unit = workOrder.unitId ? fleetUnits.find((fleetUnit) => fleetUnit.id === workOrder.unitId) : null
 
     return {
       id: workOrder.id,
       code: workOrder.code ?? 'OT-LEGACY',
       pendingReaudit: workOrder.pendingReaudit ?? false,
       unitId: workOrder.unitId,
-      unitLabel: unit ? `${unit.internalCode} - ${unit.ownerCompany}` : 'Unidad no disponible',
+      externalVehicle: workOrder.externalVehicle ?? null,
+      unitLabel: unit
+        ? `${unit.internalCode} - ${unit.ownerCompany}`
+        : (workOrder.externalVehicle ?? 'Vehículo externo'),
       status: workOrder.status,
       statusLabel: workOrderStatusLabelMap[workOrder.status],
       taskList: normalizeTaskList(workOrder.taskList),
