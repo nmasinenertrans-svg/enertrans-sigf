@@ -296,10 +296,26 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     )
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "engineCylinders" INTEGER;`)
-    await safeExecuteCompatSql(`ALTER TABLE "WorkOrder" ADD COLUMN IF NOT EXISTS "externalVehicle" TEXT;`)
-    await safeExecuteCompatSql(`ALTER TABLE "WorkOrder" ALTER COLUMN "unitId" DROP NOT NULL;`)
-    await safeExecuteCompatSql(`ALTER TABLE "AuditRecord" ADD COLUMN IF NOT EXISTS "externalVehicle" TEXT;`)
-    await safeExecuteCompatSql(`ALTER TABLE "AuditRecord" ALTER COLUMN "unitId" DROP NOT NULL;`)
+
+    // WorkOrder y AuditRecord: schema-qualified directo para evitar problemas de qualifyCompatSql
+    const sq = quoteIdentifier(getNormalizedActiveSchema())
+    for (const [tbl, col, type] of [
+      ['WorkOrder', 'externalVehicle', 'TEXT'] as const,
+      ['AuditRecord', 'externalVehicle', 'TEXT'] as const,
+    ]) {
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE ${sq}."${tbl}" ADD COLUMN IF NOT EXISTS "${col}" ${type}`)
+      } catch (err) {
+        console.warn(`[DB] ADD COLUMN ${tbl}.${col}:`, err)
+      }
+    }
+    for (const tbl of ['WorkOrder', 'AuditRecord'] as const) {
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE ${sq}."${tbl}" ALTER COLUMN "unitId" DROP NOT NULL`)
+      } catch (err) {
+        console.warn(`[DB] DROP NOT NULL ${tbl}.unitId:`, err)
+      }
+    }
 
     // Proyectos de modificación de flota
     await safeExecuteCompatSql(`
