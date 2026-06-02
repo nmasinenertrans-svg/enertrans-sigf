@@ -351,7 +351,7 @@ export const toAuditRecord = (
   }
 
   const isExternalVehicle = formData.vehicleMode === 'external'
-  const auditKind = manualAuditMode || isExternalVehicle ? 'AUDIT' : resolveAuditKind(formData.unitId, workOrders)
+  const auditKind = manualAuditMode || isExternalVehicle ? 'AUDIT' : resolveAuditKind(formData.unitId ?? '', workOrders)
   const pendingOrder = manualAuditMode || isExternalVehicle
     ? undefined
     : workOrders.find((order) => order.unitId === formData.unitId && order.pendingReaudit)
