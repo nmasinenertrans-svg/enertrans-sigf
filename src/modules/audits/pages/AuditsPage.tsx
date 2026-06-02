@@ -11,8 +11,11 @@ import { AuditPhotoPicker } from '../components/AuditPhotoPicker'
 import { exportAuditPdf } from '../services/auditPdfService'
 import {
   buildAuditHistoryView,
+  buildChecklistSectionsFromNew,
+  CAMION_ITEMS,
   createChecklistFromDeviations,
   createEmptyAuditFormData,
+  HIDROGUA_SECTIONS,
   createWorkOrderFromAudit,
   readImageAsCompressedDataUrl,
   readFileAsDataUrl,
@@ -992,25 +995,44 @@ export const AuditsPage = () => {
                 </div>
 
                 {!isReauditMode && !manualAuditMode ? (
-                  <label className="mt-4 flex flex-col gap-2">
-                    <span className="text-sm font-semibold text-slate-700">Tipo de inspeccion</span>
-                    <select
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                      value={formData.auditMode}
-                      onChange={(event) => {
-                        const nextMode = event.target.value as AuditFormData['auditMode']
-                        setFormData((previousFormData) => ({
-                          ...previousFormData,
-                          auditMode: nextMode,
-                          externalRequestId: nextMode === 'EXTERNAL_REQUEST' ? previousFormData.externalRequestId : '',
-                        }))
-                        setErrors((previousErrors) => ({ ...previousErrors, auditMode: undefined, externalRequestId: undefined }))
-                      }}
-                    >
-                      <option value="INDEPENDENT">Inspeccion independiente</option>
-                      <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
-                    </select>
-                  </label>
+                  <>
+                    <label className="mt-4 flex flex-col gap-2">
+                      <span className="text-sm font-semibold text-slate-700">Tipo de inspeccion</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                        value={formData.auditMode}
+                        onChange={(event) => {
+                          const nextMode = event.target.value as AuditFormData['auditMode']
+                          setFormData((previousFormData) => ({
+                            ...previousFormData,
+                            auditMode: nextMode,
+                            externalRequestId: nextMode === 'EXTERNAL_REQUEST' ? previousFormData.externalRequestId : '',
+                          }))
+                          setErrors((previousErrors) => ({ ...previousErrors, auditMode: undefined, externalRequestId: undefined }))
+                        }}
+                      >
+                        <option value="INDEPENDENT">Inspeccion independiente</option>
+                        <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
+                      </select>
+                    </label>
+                    {formData.auditMode === 'INDEPENDENT' && (
+                      <div className="mt-4">
+                        <span className="text-sm font-semibold text-slate-700">Tipo de vehículo</span>
+                        <div className="mt-2 flex gap-2">
+                          {(['CAMION', 'HIDROGUA'] as const).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setFormData((prev) => ({ ...prev, checklistType: t }))}
+                              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${formData.checklistType === t ? 'border-amber-400 bg-amber-400 text-slate-900' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+                            >
+                              {t === 'CAMION' ? 'Camión' : 'Hidrogrúa'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : null}
 
                 {!isReauditMode && !manualAuditMode && formData.auditMode === 'EXTERNAL_REQUEST' ? (
@@ -1209,12 +1231,34 @@ export const AuditsPage = () => {
         <div className="space-y-4 xl:col-span-2">
           {canCreate && isFormOpen && formData.auditMode === 'INDEPENDENT' && !manualAuditMode ? (
             <>
-              <AuditChecklistEditor
-                sections={formData.checklistSections}
-                onItemStatusChange={handleItemStatusChange}
-                onItemObservationChange={handleItemObservationChange}
-              />
-
+              {formData.checklistType ? (
+                <NewChecklistTable
+                  checklistType={formData.checklistType}
+                  items={formData.newChecklistItems}
+                  certEnteCert={formData.certEnteCert}
+                  certNro={formData.certNro}
+                  certVenc={formData.certVenc}
+                  certCapacidad={formData.certCapacidad}
+                  cedulaVenc={formData.cedulaVenc}
+                  tituloVenc={formData.tituloVenc}
+                  vtvVenc={formData.vtvVenc}
+                  seguroNroPol={formData.seguroNroPol}
+                  seguroVenc={formData.seguroVenc}
+                  onItemChange={(code, field, val) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      newChecklistItems: { ...prev.newChecklistItems, [code]: { ...prev.newChecklistItems[code], [field]: val } },
+                    }))
+                  }
+                  onFieldChange={(field, val) => setFormData((prev) => ({ ...prev, [field]: val }))}
+                />
+              ) : (
+                <AuditChecklistEditor
+                  sections={formData.checklistSections}
+                  onItemStatusChange={handleItemStatusChange}
+                  onItemObservationChange={handleItemObservationChange}
+                />
+              )}
               {errors.checklistSections ? (
                 <p className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700">
                   {errors.checklistSections}
@@ -1387,6 +1431,167 @@ export const AuditsPage = () => {
         </div>
       ) : null}
     </section>
+  )
+}
+
+// ─── NewChecklistTable ────────────────────────────────────────────────────────
+
+type CheckStatus = 'B' | 'R' | 'RV' | 'C' | 'NA' | 'O' | 'F' | ''
+
+const STATUS_OPTIONS: { value: CheckStatus; label: string; color: string }[] = [
+  { value: 'B', label: 'B', color: 'bg-emerald-500 text-white' },
+  { value: 'R', label: 'R', color: 'bg-rose-500 text-white' },
+  { value: 'RV', label: 'RV', color: 'bg-amber-400 text-slate-900' },
+  { value: 'C', label: 'C', color: 'bg-orange-500 text-white' },
+  { value: 'NA', label: 'NA', color: 'bg-slate-400 text-white' },
+  { value: 'O', label: 'O', color: 'bg-sky-500 text-white' },
+  { value: 'F', label: 'F', color: 'bg-red-700 text-white' },
+]
+const STATUS_LABEL: Record<string, string> = {
+  B: 'Bien', R: 'Reparar', RV: 'Revisar', C: 'Cambiar', NA: 'No Aplica', O: 'Observación', F: 'Falta',
+}
+
+function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {STATUS_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(value === opt.value ? '' : opt.value)}
+          title={STATUS_LABEL[opt.value]}
+          className={`rounded px-1.5 py-0.5 text-xs font-bold transition-opacity ${opt.color} ${value === opt.value ? 'opacity-100 ring-2 ring-offset-1 ring-slate-400' : 'opacity-40 hover:opacity-80'}`}
+        >
+          {opt.value}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function DocField({ label, vencValue, onVencChange, extraValue, extraLabel, onExtraChange }: {
+  label: string; vencValue: string; onVencChange: (v: string) => void
+  extraValue?: string; extraLabel?: string; onExtraChange?: (v: string) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-bold uppercase text-slate-600">{label}</p>
+      {extraLabel && onExtraChange && (
+        <div>
+          <label className="text-xs text-slate-500">{extraLabel}</label>
+          <input value={extraValue ?? ''} onChange={(e) => onExtraChange(e.target.value)}
+            className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400" />
+        </div>
+      )}
+      <div>
+        <label className="text-xs text-slate-500">Vencimiento</label>
+        <input type="date" value={vencValue} onChange={(e) => onVencChange(e.target.value)}
+          className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-sm outline-none focus:border-amber-400" />
+      </div>
+    </div>
+  )
+}
+
+function NewChecklistTable({
+  checklistType, items, onItemChange, onFieldChange,
+  certEnteCert, certNro, certVenc, certCapacidad,
+  cedulaVenc, tituloVenc, vtvVenc, seguroNroPol, seguroVenc,
+}: {
+  checklistType: 'HIDROGUA' | 'CAMION'
+  items: Record<string, { estado: string; obs: string }>
+  onItemChange: (code: string, field: 'estado' | 'obs', val: string) => void
+  onFieldChange: (field: string, val: string) => void
+  certEnteCert: string; certNro: string; certVenc: string; certCapacidad: string
+  cedulaVenc: string; tituloVenc: string; vtvVenc: string; seguroNroPol: string; seguroVenc: string
+}) {
+  const allSections = checklistType === 'HIDROGUA' ? HIDROGUA_SECTIONS : null
+  const flatItems = checklistType === 'CAMION' ? CAMION_ITEMS : null
+
+  return (
+    <div className="space-y-4">
+      {/* Cert / Docs */}
+      {checklistType === 'HIDROGUA' && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-sm font-bold text-slate-900">Certificado</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              ['Ente Certificador', certEnteCert, 'certEnteCert'],
+              ['Nº Certificado', certNro, 'certNro'],
+              ['Vencimiento', certVenc, 'certVenc'],
+              ['Capacidad Certificada', certCapacidad, 'certCapacidad'],
+            ].map(([label, val, key]) => (
+              <div key={key} className="flex flex-col gap-0.5">
+                <label className="text-xs font-semibold text-slate-500">{label}</label>
+                <input value={val} onChange={(e) => onFieldChange(key, e.target.value)}
+                  className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-amber-400" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {checklistType === 'CAMION' && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-sm font-bold text-slate-900">Documentación</p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <DocField label="Cédula" vencValue={cedulaVenc} onVencChange={(v) => onFieldChange('cedulaVenc', v)} />
+            <DocField label="Título" vencValue={tituloVenc} onVencChange={(v) => onFieldChange('tituloVenc', v)} />
+            <DocField label="VTV / RTO" vencValue={vtvVenc} onVencChange={(v) => onFieldChange('vtvVenc', v)} />
+            <DocField label="Seguro" vencValue={seguroVenc} onVencChange={(v) => onFieldChange('seguroVenc', v)}
+              extraLabel="Nº Póliza" extraValue={seguroNroPol} onExtraChange={(v) => onFieldChange('seguroNroPol', v)} />
+          </div>
+        </div>
+      )}
+
+      {/* Checklist table */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200 bg-slate-700 px-4 py-2.5">
+          <p className="font-bold text-white text-sm">
+            {checklistType === 'HIDROGUA' ? 'Inspección Técnica de Componentes' : 'Inspección Técnica del Vehículo'}
+          </p>
+        </div>
+        <div className="grid grid-cols-[52px_1fr_200px_200px] border-b border-slate-200 bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <span>Cód.</span><span>Descripción</span><span className="text-center">Estado</span><span>Observaciones</span>
+        </div>
+
+        {allSections ? allSections.map((section) => (
+          <div key={section.name}>
+            <div className="bg-slate-100 px-3 py-1.5">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{section.name}</span>
+            </div>
+            {section.items.map((item) => (
+              <div key={item.code} className="grid grid-cols-[52px_1fr_200px_200px] items-center border-b border-slate-100 px-3 py-2 hover:bg-slate-50">
+                <span className="font-mono text-xs font-semibold text-slate-400">{item.code}</span>
+                <span className="pr-3 text-sm text-slate-700">{item.desc}</span>
+                <div className="flex justify-center">
+                  <StatusPicker value={items[item.code]?.estado ?? ''} onChange={(v) => onItemChange(item.code, 'estado', v)} />
+                </div>
+                <input value={items[item.code]?.obs ?? ''} onChange={(e) => onItemChange(item.code, 'obs', e.target.value)}
+                  placeholder="Obs..." className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-amber-400" />
+              </div>
+            ))}
+          </div>
+        )) : flatItems?.map((item) => (
+          <div key={item.code} className="grid grid-cols-[52px_1fr_200px_200px] items-center border-b border-slate-100 px-3 py-2 hover:bg-slate-50">
+            <span className="font-mono text-xs font-semibold text-slate-400">{item.code}</span>
+            <span className="pr-3 text-sm text-slate-700">{item.desc}</span>
+            <div className="flex justify-center">
+              <StatusPicker value={items[item.code]?.estado ?? ''} onChange={(v) => onItemChange(item.code, 'estado', v)} />
+            </div>
+            <input value={items[item.code]?.obs ?? ''} onChange={(e) => onItemChange(item.code, 'obs', e.target.value)}
+              placeholder="Obs..." className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-amber-400" />
+          </div>
+        ))}
+
+        {/* Referencias */}
+        <div className="flex flex-wrap gap-1.5 px-3 py-3 bg-slate-50 border-t border-slate-200">
+          {STATUS_OPTIONS.map((opt) => (
+            <span key={opt.value} className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold ${opt.color}`}>
+              {opt.value} <span className="font-normal opacity-90">{STATUS_LABEL[opt.value]}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 

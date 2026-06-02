@@ -17,6 +17,19 @@ export interface AuditFormData {
   vehicleMode: 'fleet' | 'external'
   unitId: string | null
   externalVehicle: string
+  checklistType: 'HIDROGUA' | 'CAMION' | null
+  newChecklistItems: Record<string, { estado: string; obs: string }>
+  // Documentación Camión
+  cedulaVenc: string
+  tituloVenc: string
+  vtvVenc: string
+  seguroNroPol: string
+  seguroVenc: string
+  // Certificado Hidrogrúa
+  certEnteCert: string
+  certNro: string
+  certVenc: string
+  certCapacidad: string
   auditMode: 'INDEPENDENT' | 'EXTERNAL_REQUEST'
   manualResult: 'APPROVED' | 'REJECTED'
   externalRequestId: string

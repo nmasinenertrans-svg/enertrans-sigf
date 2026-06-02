@@ -18,6 +18,126 @@ import { formatSequenceCode, getNextSequenceCode, parseSequenceNumber } from '..
 
 const MAX_OBSERVATION_LENGTH = 2000
 
+// ─── Checklist data ───────────────────────────────────────────────────────────
+
+export interface ChecklistItem { code: string; desc: string }
+export interface ChecklistSection { name: string; items: ChecklistItem[] }
+
+export const HIDROGUA_SECTIONS: ChecklistSection[] = [
+  { name: 'PLUMA', items: [
+    { code: 'C-01', desc: 'Ausencia de golpes severos, torceduras o rajaduras' },
+    { code: 'C-02', desc: 'Suavidad del accionamiento hidráulico de todos sus tramos' },
+    { code: 'C-03', desc: 'Cartelería de modelo, marca, carga máxima y certificación vigente' },
+    { code: 'C-04', desc: 'Ausencia de rajaduras, deformaciones significativas y/o desgastes excesivos' },
+    { code: 'C-05', desc: 'Seguro y resorte en buen estado y funcionando correctamente' },
+  ]},
+  { name: 'GANCHO', items: [
+    { code: 'C-06', desc: 'Sin marcas de modificación o reparación, amolado, soldadura, pintura nueva' },
+    { code: 'C-07', desc: 'Funcionamiento adecuado de crapodina, giro con carga sin trabarse' },
+    { code: 'C-08', desc: 'Presencia de precinto de certificación de Gancho y Grilletes' },
+    { code: 'C-09', desc: 'Marca, Modelo, Capacidad, en relieve legibles y en buen estado' },
+  ]},
+  { name: 'CILINDROS HIDRÁULICOS', items: [
+    { code: 'C-10', desc: 'Ausencia de pérdida de aceite hidráulico, estado de empaquetadura y buje' },
+    { code: 'C-11', desc: 'Pernos, seguros, Alemites, ruidos o golpes cuando opera' },
+    { code: 'C-12', desc: 'Horquilla sin rajaduras, deformaciones, o reparaciones sin certificar' },
+    { code: 'C-13', desc: 'Vástagos Rectos, sin deformaciones, golpes o rayones visibles' },
+    { code: 'C-14', desc: 'Válvula de Seguridad, No se baja el Pistón solo, sin pérdidas o golpes' },
+  ]},
+  { name: 'SUPERESTRUCTURA GIRATORIA', items: [
+    { code: 'C-15', desc: 'Suavidad en el movimiento' },
+    { code: 'C-16', desc: 'Ausencia de ruidos de cremallera o crapodina cuando opera, engrase' },
+    { code: 'C-17', desc: 'Pérdidas de aceite en Cremalleras o base de la estructura' },
+  ]},
+  { name: 'ESTABILIZADORES', items: [
+    { code: 'C-18', desc: 'Se extienden correctamente al 100%, poseen marca de final de carrera' },
+    { code: 'C-19', desc: 'Sin Golpes, Pérdidas, Rajaduras o marcas de reparación sin certificar' },
+    { code: 'C-20', desc: 'Placas de expansión adecuadas al equipo en capacidad y cantidad' },
+    { code: 'C-21', desc: 'Nivel de burbuja para estabilizar correctamente' },
+  ]},
+  { name: 'CHASIS, ANCLAJE, COMANDOS, MANGUERAS Y ACCESORIOS', items: [
+    { code: 'C-22', desc: 'Chasis sin Rajaduras o Deformaciones, Anclaje de Equipo Ajustado' },
+    { code: 'C-23', desc: 'Suavidad de accionamiento, Nivel de firmeza, posición adecuada' },
+    { code: 'C-24', desc: 'Nivel de aceite, visor, fugas en Mangueras, acoples, tapa del Depósito' },
+    { code: 'C-25', desc: 'Iluminación auxiliar, adecuada en cantidad y calidad' },
+    { code: 'C-26', desc: 'Extintor, estado, anclaje adecuado — Tipo/Cap/Venc' },
+    { code: 'C-27', desc: 'Tabla de carga, cartelería de advertencia del Riesgo' },
+    { code: 'C-28', desc: 'Alarma indicadora de accionamiento de Hidrogrúa' },
+  ]},
+  { name: 'OTROS', items: [
+    { code: 'C-29', desc: 'Especificar' },
+  ]},
+]
+
+export const CAMION_ITEMS: ChecklistItem[] = [
+  { code: 'A-01', desc: 'Nivel de Aceite' }, { code: 'A-02', desc: 'Nivel de Líquido de Freno' },
+  { code: 'A-03', desc: 'Nivel de Refrigerante/Anticongelante' }, { code: 'A-04', desc: 'Nivel de Líquido de Dirección' },
+  { code: 'A-05', desc: 'Motor — Pérdidas' }, { code: 'A-06', desc: 'Faros Luz (Alta / Baja / Posición)' },
+  { code: 'A-07', desc: 'Luces de Guiños (Delanteros / Traseros)' }, { code: 'A-08', desc: 'Luces Stop / Luz y Alarma de Retroceso' },
+  { code: 'A-09', desc: 'Bandas Retroreflectivas / Vel. Máxima' }, { code: 'A-10', desc: 'Tapa del Tanque de Combustible' },
+  { code: 'A-11', desc: 'Dirección / Tren Delantero / Amortiguación' }, { code: 'A-12', desc: 'Parabrisas' },
+  { code: 'A-13', desc: 'Limpiaparabrisas (Escobilla / Zorrino)' }, { code: 'A-14', desc: 'Ventanas / Estado / Funcionamiento / Cierre' },
+  { code: 'A-15', desc: 'Batería, Estado, Anclaje, Protección Externa' }, { code: 'A-16', desc: 'Espejos / Estado / Cantidad / Funcionamiento' },
+  { code: 'A-17', desc: 'Chapa de Patente Visible Del. y Post.' }, { code: 'A-18', desc: 'Identificación Empresa / Logo / Nº Interno' },
+  { code: 'A-19', desc: 'Cortinas / Estado / Cantidad / Limpieza' }, { code: 'A-20', desc: 'Bloqueo de Diferencial / Freno de Motor' },
+  { code: 'A-21', desc: 'Luces Interior (Tablero / Cabina)' }, { code: 'A-22', desc: 'Parasoles / Estado / Cantidad' },
+  { code: 'A-23', desc: 'Indicador de Combustible (Tablero)' }, { code: 'A-24', desc: 'Asientos / Apoyacabezas' },
+  { code: 'A-25', desc: 'Cinturones de Seguridad Chofer/Acomp.' }, { code: 'A-26', desc: 'Bocina' },
+  { code: 'A-27', desc: 'Velocímetro / Odómetro' }, { code: 'A-28', desc: 'Calefacción / Aire Acondicionado' },
+  { code: 'A-29', desc: 'Toma de Aire Interna / Pistola Sopletear' }, { code: 'A-30', desc: 'Reflectores Traseros Auxiliares / Cantidad / Estado' },
+  { code: 'A-31', desc: 'Busca Huellas / Rompe Niebla' }, { code: 'A-32', desc: 'Criques, Llaves — Tacos — Balizas Reglamentarias' },
+  { code: 'A-33', desc: 'Puertas / Cerradura' }, { code: 'A-34', desc: 'Estado de Limpieza Interior' },
+  { code: 'A-35', desc: 'Sistema de Frenos / Freno de Mano' }, { code: 'A-36', desc: 'Botiquín Prim. Auxilios / Chaleco Reflectivo' },
+  { code: 'A-37', desc: 'Extintores 1 kg — 5 kg — 10 kg Vencimiento' }, { code: 'A-38', desc: 'Fijación de Extintor dentro de Cabina' },
+  { code: 'A-39', desc: 'Equipo de Radio (Funcionamiento)' }, { code: 'A-40', desc: 'Paragolpes (Delantero / Traseros)' },
+  { code: 'A-41', desc: 'Tacógrafo / Funcionamiento / Modelo' }, { code: 'A-42', desc: 'Barra de Remolque / Perno de Remolque' },
+  { code: 'A-43', desc: 'Diferencial / Pérdidas / Temperatura / Ruidos' }, { code: 'A-44', desc: 'Cardán / Crucetas / Manchón Centro Cardán' },
+  { code: 'A-45', desc: 'Alineación y Balanceo' }, { code: 'A-46', desc: 'Estado de Cubiertas' },
+  { code: 'A-47', desc: 'Rueda de Auxilio / Soporte Rueda de Auxilio' }, { code: 'A-48', desc: 'Espárragos y Tuercas de Ruedas' },
+  { code: 'A-49', desc: 'Plato de Enganche / Tijera' }, { code: 'A-50', desc: 'Llave de Cabina / Crique / Traba de Cabina' },
+  { code: 'A-51', desc: 'Toma de Aire Externa' }, { code: 'A-52', desc: 'Estado de Mangueras y Acoples de Aire' },
+  { code: 'A-53', desc: 'Estado del Pulmón Aire de Freno (Fuelle)' }, { code: 'A-54', desc: 'Cadena Cond. Climáticas Adversas Fís./Líq.' },
+  { code: 'A-55', desc: 'Caja de Herramientas del Equipo' }, { code: 'A-56', desc: 'Grasera' },
+  { code: 'A-57', desc: 'Bomba de Toma de Fuerza' }, { code: 'A-58', desc: 'Estado Mangueras Hidráulicas / Fugas' },
+]
+
+const initNewChecklistItems = (codes: string[]): Record<string, { estado: string; obs: string }> =>
+  Object.fromEntries(codes.map((c) => [c, { estado: '', obs: '' }]))
+
+const mapNewStatusToAudit = (s: string): AuditChecklistStatus => {
+  if (s === 'B') return 'OK'
+  if (s === 'NA' || s === '') return 'NA'
+  return 'BAD'
+}
+
+export const buildChecklistSectionsFromNew = (
+  checklistType: 'HIDROGUA' | 'CAMION',
+  items: Record<string, { estado: string; obs: string }>,
+): AuditChecklistSection[] => {
+  if (checklistType === 'HIDROGUA') {
+    return HIDROGUA_SECTIONS.map((section) => ({
+      id: createId(),
+      title: section.name,
+      items: section.items.map((item) => ({
+        id: item.code,
+        label: `[${item.code}] ${item.desc}`,
+        status: mapNewStatusToAudit(items[item.code]?.estado ?? ''),
+        observation: items[item.code]?.obs ?? '',
+      })),
+    }))
+  }
+  return [{
+    id: createId(),
+    title: 'INSPECCIÓN TÉCNICA DEL VEHÍCULO',
+    items: CAMION_ITEMS.map((item) => ({
+      id: item.code,
+      label: `[${item.code}] ${item.desc}`,
+      status: mapNewStatusToAudit(items[item.code]?.estado ?? ''),
+      observation: items[item.code]?.obs ?? '',
+    })),
+  }]
+}
+
 const createId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
@@ -119,6 +239,13 @@ export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
   vehicleMode: 'fleet',
   unitId,
   externalVehicle: '',
+  checklistType: 'CAMION',
+  newChecklistItems: {
+    ...initNewChecklistItems(CAMION_ITEMS.map((i) => i.code)),
+    ...initNewChecklistItems(HIDROGUA_SECTIONS.flatMap((s) => s.items.map((i) => i.code))),
+  },
+  cedulaVenc: '', tituloVenc: '', vtvVenc: '', seguroNroPol: '', seguroVenc: '',
+  certEnteCert: '', certNro: '', certVenc: '', certCapacidad: '',
   auditMode: 'INDEPENDENT',
   manualResult: 'APPROVED',
   externalRequestId: '',
@@ -201,12 +328,18 @@ export const validateAuditFormData = (formData: AuditFormData, unitList: FleetUn
   }
 
   if (formData.auditMode === 'INDEPENDENT') {
-    const hasValidSections = formData.checklistSections.some(
-      (section) => section.title.trim() && section.items.some((item) => item.label.trim()),
-    )
-
-    if (!hasValidSections) {
-      validationErrors.checklistSections = 'El checklist debe tener al menos una seccion con un item valido.'
+    if (formData.checklistType) {
+      const hasAnyStatus = Object.values(formData.newChecklistItems).some((v) => v.estado !== '')
+      if (!hasAnyStatus) {
+        validationErrors.checklistSections = 'Debes completar al menos un ítem del checklist.'
+      }
+    } else {
+      const hasValidSections = formData.checklistSections.some(
+        (section) => section.title.trim() && section.items.some((item) => item.label.trim()),
+      )
+      if (!hasValidSections) {
+        validationErrors.checklistSections = 'El checklist debe tener al menos una seccion con un item valido.'
+      }
     }
   }
 
@@ -355,6 +488,11 @@ export const toAuditRecord = (
   const pendingOrder = manualAuditMode || isExternalVehicle
     ? undefined
     : workOrders.find((order) => order.unitId === formData.unitId && order.pendingReaudit)
+
+  // Convertir nuevo checklist al formato legacy si aplica
+  if (formData.checklistType && formData.auditMode === 'INDEPENDENT' && !manualAuditMode) {
+    checklistSections = buildChecklistSectionsFromNew(formData.checklistType, formData.newChecklistItems)
+  }
   const overrideSequence = !manualAuditMode && auditKind === 'REAUDIT' ? parseSequenceNumber(pendingOrder?.code) : null
   const code = buildAuditCode(auditKind, unitCode, overrideSequence)
 
