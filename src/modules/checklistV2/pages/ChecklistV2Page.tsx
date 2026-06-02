@@ -7,8 +7,7 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 type CheckStatus = 'B' | 'R' | 'RV' | 'C' | 'NA' | 'O' | 'F' | ''
 
 interface ItemState {
-  entrega: CheckStatus
-  recibe: CheckStatus
+  estado: CheckStatus
   obs: string
 }
 
@@ -162,7 +161,7 @@ const CAMION_ITEMS: CheckItem[] = [
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const initItems = (codes: string[]): Record<string, ItemState> =>
-  Object.fromEntries(codes.map((c) => [c, { entrega: '', recibe: '', obs: '' }]))
+  Object.fromEntries(codes.map((c) => [c, { estado: '', obs: '' }]))
 
 const allHidroguaCodes = HIDROGUA_SECTIONS.flatMap((s) => s.items.map((i) => i.code))
 const allCamionCodes = CAMION_ITEMS.map((i) => i.code)
@@ -214,30 +213,22 @@ export const ChecklistV2Page = () => {
     tipoMarcaModelo: '',
     horasTrabajo: '',
     kilometraje: '',
-    entregaUnidad: '',
-    recibeUnidad: '',
     ultimoService: '',
     proximoService: '',
+    responsable: '',
   })
 
-  // Camion docs
+  // Camion docs — Cédula, Título, VTV/RTO, Seguro
   const [docs, setDocs] = useState({
-    tarjetaVerde: '', tarjetaVerdeVenc: '',
-    cedulaTransporte: '', cedulaTransporteVenc: '',
-    permisosEspeciales: '', permisosEspecialesVenc: '',
-    ruta: '', rutaVenc: '',
-    seguro: '', seguroNroPol: '', seguroVenc: '',
-    patente: '', patenteVenc: '',
-    vtv: '', vtvVenc: '',
-    docChofer: '', docChoferCat: '', docChoferVenc: '',
+    cedulaVenc: '',
+    tituloVenc: '',
+    vtvVenc: '',
+    seguroNroPol: '', seguroVenc: '',
   })
 
-  // Hidrogua certs
-  const [certs, setCerts] = useState({
-    ent1: '', entVenc1: '', entNro1: '', entCap1: '',
-    rec1: '', recVenc1: '', recNro1: '', recCap1: '',
-    izajeAnioModelo: '', izajeManual: '', izajeNroCertVenc: '',
-    izajeNroSerie: '', izajeEnteCert: '', izajeCapMax: '',
+  // Hidrogua cert
+  const [cert, setCert] = useState({
+    enteCertificador: '', nroCertificado: '', vencimiento: '', capacidad: '',
   })
 
   // Item states
@@ -246,13 +237,11 @@ export const ChecklistV2Page = () => {
 
   const [obsGenerales, setObsGenerales] = useState('')
 
-  const updateHidro = (code: string, field: keyof ItemState, val: string) =>
-    setHidroItems((prev) => ({ ...prev, [code]: { ...prev[code], [field]: val } }))
-  const updateCamion = (code: string, field: keyof ItemState, val: string) =>
-    setCamionItems((prev) => ({ ...prev, [code]: { ...prev[code], [field]: val } }))
+  const updateItem = (setter: typeof setHidroItems) => (code: string, field: keyof ItemState, val: string) =>
+    setter((prev) => ({ ...prev, [code]: { ...prev[code], [field]: val } }))
 
   const items = type === 'hidrogua' ? hidroItems : camionItems
-  const update = type === 'hidrogua' ? updateHidro : updateCamion
+  const update = type === 'hidrogua' ? updateItem(setHidroItems) : updateItem(setCamionItems)
 
   return (
     <section className="space-y-5 pb-10">
@@ -292,63 +281,45 @@ export const ChecklistV2Page = () => {
           <FieldInput label={type === 'hidrogua' ? 'Horas de Trabajo' : 'Kilometraje'} value={type === 'hidrogua' ? header.horasTrabajo : header.kilometraje} onChange={(v) => setHeader((h) => type === 'hidrogua' ? { ...h, horasTrabajo: v } : { ...h, kilometraje: v })} />
           <FieldInput label={type === 'hidrogua' ? 'Fecha/Horas Último Service' : 'Fecha/Km Último Service'} value={header.ultimoService} onChange={(v) => setHeader((h) => ({ ...h, ultimoService: v }))} />
           <FieldInput label={type === 'hidrogua' ? 'Fecha/Horas Próximo Service' : 'Fecha/Km Próximo Service'} value={header.proximoService} onChange={(v) => setHeader((h) => ({ ...h, proximoService: v }))} />
-          <FieldInput label="Entrega Unidad" value={header.entregaUnidad} onChange={(v) => setHeader((h) => ({ ...h, entregaUnidad: v }))} />
-          <FieldInput label="Recibe Unidad" value={header.recibeUnidad} onChange={(v) => setHeader((h) => ({ ...h, recibeUnidad: v }))} />
+          <FieldInput label="Responsable" value={header.responsable} onChange={(v) => setHeader((h) => ({ ...h, responsable: v }))} />
         </div>
       </div>
 
-      {/* ── Hidrogua: certifications ── */}
+      {/* ── Hidrogua: certificado ── */}
       {type === 'hidrogua' && (
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-4 font-bold text-slate-900">Certificaciones</h3>
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            {[
-              { label: 'Entrega', prefix: 'ent1', vencKey: 'entVenc1', nroKey: 'entNro1', capKey: 'entCap1' },
-              { label: 'Recibe', prefix: 'rec1', vencKey: 'recVenc1', nroKey: 'recNro1', capKey: 'recCap1' },
-            ].map(({ label, vencKey, nroKey, capKey }) => (
-              <div key={label} className="rounded-lg border border-slate-100 p-3">
-                <p className="mb-2 text-xs font-bold text-slate-500 uppercase">{label}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <FieldInput label="Ente Certificador" value={certs[vencKey as keyof typeof certs]} onChange={(v) => setCerts((c) => ({ ...c, [vencKey]: v }))} />
-                  <FieldInput label="Vencimiento" value={certs[nroKey as keyof typeof certs]} onChange={(v) => setCerts((c) => ({ ...c, [nroKey]: v }))} placeholder="DD/MM/AAAA" />
-                  <FieldInput label="Nº Certificado" value={certs[capKey as keyof typeof certs]} onChange={(v) => setCerts((c) => ({ ...c, [capKey]: v }))} />
-                  <FieldInput label="Capacidad Certificada" value={certs[vencKey as keyof typeof certs]} onChange={(v) => setCerts((c) => ({ ...c, [vencKey]: v }))} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 mb-2 text-xs font-bold text-slate-500 uppercase">Equipo de Izaje</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <FieldInput label="Año / Modelo" value={certs.izajeAnioModelo} onChange={(v) => setCerts((c) => ({ ...c, izajeAnioModelo: v }))} />
-            <FieldInput label="Posee Manual Operador (S/N)" value={certs.izajeManual} onChange={(v) => setCerts((c) => ({ ...c, izajeManual: v }))} />
-            <FieldInput label="Nº Certificado / Vencimiento" value={certs.izajeNroCertVenc} onChange={(v) => setCerts((c) => ({ ...c, izajeNroCertVenc: v }))} />
-            <FieldInput label="Número de Serie" value={certs.izajeNroSerie} onChange={(v) => setCerts((c) => ({ ...c, izajeNroSerie: v }))} />
-            <FieldInput label="Ente Certificador" value={certs.izajeEnteCert} onChange={(v) => setCerts((c) => ({ ...c, izajeEnteCert: v }))} />
-            <FieldInput label="Capacidad Máxima de Carga" value={certs.izajeCapMax} onChange={(v) => setCerts((c) => ({ ...c, izajeCapMax: v }))} />
+          <h3 className="mb-4 font-bold text-slate-900">Certificado</h3>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <FieldInput label="Ente Certificador" value={cert.enteCertificador} onChange={(v) => setCert((c) => ({ ...c, enteCertificador: v }))} />
+            <FieldInput label="Nº Certificado" value={cert.nroCertificado} onChange={(v) => setCert((c) => ({ ...c, nroCertificado: v }))} />
+            <FieldInput label="Vencimiento" value={cert.vencimiento} onChange={(v) => setCert((c) => ({ ...c, vencimiento: v }))} placeholder="DD/MM/AAAA" />
+            <FieldInput label="Capacidad Certificada" value={cert.capacidad} onChange={(v) => setCert((c) => ({ ...c, capacidad: v }))} />
           </div>
         </div>
       )}
 
-      {/* ── Camion: documentation ── */}
+      {/* ── Camion: documentación simplificada ── */}
       {type === 'camion' && (
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="mb-4 font-bold text-slate-900">Documentación</h3>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              ['Tarjeta Verde (S/N)', 'tarjetaVerde', 'Vencimiento', 'tarjetaVerdeVenc'],
-              ['Cédula de Transporte (S/N)', 'cedulaTransporte', 'Vencimiento', 'cedulaTransporteVenc'],
-              ['Permisos Especiales (S/N)', 'permisosEspeciales', 'Vencimiento', 'permisosEspecialesVenc'],
-              ['Ruta (S/N)', 'ruta', 'Vencimiento', 'rutaVenc'],
-              ['Seguro Nº Póliza', 'seguroNroPol', 'Vencimiento', 'seguroVenc'],
-              ['Comp. Patente (S/N)', 'patente', 'Vencimiento', 'patenteVenc'],
-              ['VTV (S/N)', 'vtv', 'Vencimiento', 'vtvVenc'],
-              ['Doc. Chofer (S/N) Categoría', 'docChoferCat', 'Vencimiento', 'docChoferVenc'],
-            ].map(([l1, k1, l2, k2]) => (
-              <div key={k1} className="col-span-1 space-y-1">
-                <FieldInput label={l1} value={docs[k1 as keyof typeof docs]} onChange={(v) => setDocs((d) => ({ ...d, [k1]: v }))} />
-                <FieldInput label={l2} value={docs[k2 as keyof typeof docs]} onChange={(v) => setDocs((d) => ({ ...d, [k2]: v }))} placeholder="DD/MM/AAAA" />
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-600 uppercase">Cédula</p>
+              <FieldInput label="Vto." value={docs.cedulaVenc} onChange={(v) => setDocs((d) => ({ ...d, cedulaVenc: v }))} placeholder="DD/MM/AAAA" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-600 uppercase">Título</p>
+              <FieldInput label="Vto." value={docs.tituloVenc} onChange={(v) => setDocs((d) => ({ ...d, tituloVenc: v }))} placeholder="DD/MM/AAAA" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-600 uppercase">VTV / RTO</p>
+              <FieldInput label="Vto." value={docs.vtvVenc} onChange={(v) => setDocs((d) => ({ ...d, vtvVenc: v }))} placeholder="DD/MM/AAAA" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-600 uppercase">Seguro</p>
+              <FieldInput label="Nº Póliza" value={docs.seguroNroPol} onChange={(v) => setDocs((d) => ({ ...d, seguroNroPol: v }))} />
+              <FieldInput label="Vto." value={docs.seguroVenc} onChange={(v) => setDocs((d) => ({ ...d, seguroVenc: v }))} placeholder="DD/MM/AAAA" />
+            </div>
           </div>
         </div>
       )}
@@ -362,11 +333,10 @@ export const ChecklistV2Page = () => {
         </div>
 
         {/* Column headers */}
-        <div className="grid grid-cols-[56px_1fr_160px_160px_180px] gap-0 border-b border-slate-200 bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <div className="grid grid-cols-[56px_1fr_200px_220px] gap-0 border-b border-slate-200 bg-amber-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
           <span>Cód.</span>
           <span>Descripción</span>
-          <span className="text-center">Entrega</span>
-          <span className="text-center">Recibe</span>
+          <span className="text-center">Estado</span>
           <span>Observaciones</span>
         </div>
 
@@ -377,14 +347,11 @@ export const ChecklistV2Page = () => {
                 <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">{section.name}</span>
               </div>
               {section.items.map((item) => (
-                <div key={item.code} className="grid grid-cols-[56px_1fr_160px_160px_180px] gap-0 items-center border-b border-slate-100 px-3 py-2 hover:bg-slate-50">
+                <div key={item.code} className="grid grid-cols-[56px_1fr_200px_220px] gap-0 items-center border-b border-slate-100 px-3 py-2 hover:bg-slate-50">
                   <span className="text-xs font-mono font-semibold text-slate-500">{item.code}</span>
                   <span className="text-sm text-slate-700 pr-3">{item.desc}</span>
                   <div className="flex justify-center">
-                    <StatusPicker value={items[item.code]?.entrega ?? ''} onChange={(v) => update(item.code, 'entrega', v)} />
-                  </div>
-                  <div className="flex justify-center">
-                    <StatusPicker value={items[item.code]?.recibe ?? ''} onChange={(v) => update(item.code, 'recibe', v)} />
+                    <StatusPicker value={items[item.code]?.estado ?? ''} onChange={(v) => update(item.code, 'estado', v)} />
                   </div>
                   <input
                     value={items[item.code]?.obs ?? ''}
@@ -398,14 +365,11 @@ export const ChecklistV2Page = () => {
           ))
         ) : (
           CAMION_ITEMS.map((item) => (
-            <div key={item.code} className="grid grid-cols-[56px_1fr_160px_160px_180px] gap-0 items-center border-b border-slate-100 px-3 py-2 hover:bg-slate-50">
+            <div key={item.code} className="grid grid-cols-[56px_1fr_200px_220px] gap-0 items-center border-b border-slate-100 px-3 py-2 hover:bg-slate-50">
               <span className="text-xs font-mono font-semibold text-slate-500">{item.code}</span>
               <span className="text-sm text-slate-700 pr-3">{item.desc}</span>
               <div className="flex justify-center">
-                <StatusPicker value={items[item.code]?.entrega ?? ''} onChange={(v) => update(item.code, 'entrega', v)} />
-              </div>
-              <div className="flex justify-center">
-                <StatusPicker value={items[item.code]?.recibe ?? ''} onChange={(v) => update(item.code, 'recibe', v)} />
+                <StatusPicker value={items[item.code]?.estado ?? ''} onChange={(v) => update(item.code, 'estado', v)} />
               </div>
               <input
                 value={items[item.code]?.obs ?? ''}
