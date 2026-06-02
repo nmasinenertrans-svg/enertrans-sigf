@@ -256,7 +256,8 @@ export const AuditsPage = () => {
       return
     }
 
-    setFormData(draft.formData)
+    const defaults = createEmptyAuditFormData(draft.formData.unitId ?? '')
+    setFormData({ ...defaults, ...draft.formData })
     setDraftChecked(true)
   }, [isFormOpen, isReauditMode, draftChecked])
 
@@ -1503,6 +1504,7 @@ function NewChecklistTable({
   certEnteCert: string; certNro: string; certVenc: string; certCapacidad: string
   cedulaVenc: string; tituloVenc: string; vtvVenc: string; seguroNroPol: string; seguroVenc: string
 }) {
+  const safeItems = items ?? {}
   const allSections = checklistType === 'HIDROGUA' ? HIDROGUA_SECTIONS : null
   const flatItems = checklistType === 'CAMION' ? CAMION_ITEMS : null
 
@@ -1562,9 +1564,9 @@ function NewChecklistTable({
                 <span className="font-mono text-xs font-semibold text-slate-400">{item.code}</span>
                 <span className="pr-3 text-sm text-slate-700">{item.desc}</span>
                 <div className="flex justify-center">
-                  <StatusPicker value={items[item.code]?.estado ?? ''} onChange={(v) => onItemChange(item.code, 'estado', v)} />
+                  <StatusPicker value={safeItems[item.code]?.estado ?? ''} onChange={(v) => onItemChange(item.code, 'estado', v)} />
                 </div>
-                <input value={items[item.code]?.obs ?? ''} onChange={(e) => onItemChange(item.code, 'obs', e.target.value)}
+                <input value={safeItems[item.code]?.obs ?? ''} onChange={(e) => onItemChange(item.code, 'obs', e.target.value)}
                   placeholder="Obs..." className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-amber-400" />
               </div>
             ))}
@@ -1574,9 +1576,9 @@ function NewChecklistTable({
             <span className="font-mono text-xs font-semibold text-slate-400">{item.code}</span>
             <span className="pr-3 text-sm text-slate-700">{item.desc}</span>
             <div className="flex justify-center">
-              <StatusPicker value={items[item.code]?.estado ?? ''} onChange={(v) => onItemChange(item.code, 'estado', v)} />
+              <StatusPicker value={safeItems[item.code]?.estado ?? ''} onChange={(v) => onItemChange(item.code, 'estado', v)} />
             </div>
-            <input value={items[item.code]?.obs ?? ''} onChange={(e) => onItemChange(item.code, 'obs', e.target.value)}
+            <input value={safeItems[item.code]?.obs ?? ''} onChange={(e) => onItemChange(item.code, 'obs', e.target.value)}
               placeholder="Obs..." className="rounded border border-slate-200 px-2 py-1 text-xs outline-none focus:border-amber-400" />
           </div>
         ))}
