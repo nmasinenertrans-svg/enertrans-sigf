@@ -243,6 +243,7 @@ export const buildAppNotifications = (params: {
 
   const latestAuditByUnit = new Map<string, AuditRecord>()
   audits.forEach((audit) => {
+    if (!audit.unitId) return
     const existing = latestAuditByUnit.get(audit.unitId)
     if (!existing || new Date(audit.performedAt).getTime() > new Date(existing.performedAt).getTime()) {
       latestAuditByUnit.set(audit.unitId, audit)

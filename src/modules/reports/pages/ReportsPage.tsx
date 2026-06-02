@@ -952,9 +952,9 @@ export const ReportsPage = () => {
     const rows = filteredAudits.map((audit) => [
       audit.code ?? 'INS-LEGACY',
       formatDateTime(audit.performedAt),
-      unitMap.get(audit.unitId)?.domain ?? 'Unidad no disponible',
-      unitMap.get(audit.unitId)?.client ?? 'Sin cliente',
-      unitMap.get(audit.unitId)?.typeLabel ?? 'Sin tipo',
+      unitMap.get(audit.unitId ?? '')?.domain ?? 'Unidad no disponible',
+      unitMap.get(audit.unitId ?? '')?.client ?? 'Sin cliente',
+      unitMap.get(audit.unitId ?? '')?.typeLabel ?? 'Sin tipo',
       audit.auditorName ?? '',
       audit.result,
     ])
@@ -966,9 +966,9 @@ export const ReportsPage = () => {
     const rows = filteredAudits.map((audit) => [
       audit.code ?? 'INS-LEGACY',
       formatDateTime(audit.performedAt),
-      unitMap.get(audit.unitId)?.domain ?? 'Unidad no disponible',
-      unitMap.get(audit.unitId)?.client ?? 'Sin cliente',
-      unitMap.get(audit.unitId)?.typeLabel ?? 'Sin tipo',
+      unitMap.get(audit.unitId ?? '')?.domain ?? 'Unidad no disponible',
+      unitMap.get(audit.unitId ?? '')?.client ?? 'Sin cliente',
+      unitMap.get(audit.unitId ?? '')?.typeLabel ?? 'Sin tipo',
       audit.auditorName ?? '',
       audit.result,
     ])
@@ -981,9 +981,9 @@ export const ReportsPage = () => {
     const rows = filteredAudits.map((audit) => [
       audit.code ?? 'INS-LEGACY',
       formatDateTime(audit.performedAt),
-      unitMap.get(audit.unitId)?.domain ?? 'Unidad no disponible',
-      unitMap.get(audit.unitId)?.client ?? 'Sin cliente',
-      unitMap.get(audit.unitId)?.typeLabel ?? 'Sin tipo',
+      unitMap.get(audit.unitId ?? '')?.domain ?? 'Unidad no disponible',
+      unitMap.get(audit.unitId ?? '')?.client ?? 'Sin cliente',
+      unitMap.get(audit.unitId ?? '')?.typeLabel ?? 'Sin tipo',
       audit.auditorName ?? '',
       audit.result,
     ])
