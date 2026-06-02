@@ -11,7 +11,6 @@ import { AuditPhotoPicker } from '../components/AuditPhotoPicker'
 import { exportAuditPdf } from '../services/auditPdfService'
 import {
   buildAuditHistoryView,
-  buildChecklistSectionsFromNew,
   CAMION_ITEMS,
   createChecklistFromDeviations,
   createEmptyAuditFormData,
