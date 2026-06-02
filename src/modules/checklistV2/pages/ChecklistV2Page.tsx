@@ -214,11 +214,10 @@ export const ChecklistV2Page = () => {
     tipoMarcaModelo: '',
     horasTrabajo: '',
     kilometraje: '',
-    choferEntrega: '',
-    choferRecibe: '',
+    entregaUnidad: '',
+    recibeUnidad: '',
     ultimoService: '',
     proximoService: '',
-    contratadoPor: '',
   })
 
   // Camion docs
@@ -293,9 +292,8 @@ export const ChecklistV2Page = () => {
           <FieldInput label={type === 'hidrogua' ? 'Horas de Trabajo' : 'Kilometraje'} value={type === 'hidrogua' ? header.horasTrabajo : header.kilometraje} onChange={(v) => setHeader((h) => type === 'hidrogua' ? { ...h, horasTrabajo: v } : { ...h, kilometraje: v })} />
           <FieldInput label={type === 'hidrogua' ? 'Fecha/Horas Último Service' : 'Fecha/Km Último Service'} value={header.ultimoService} onChange={(v) => setHeader((h) => ({ ...h, ultimoService: v }))} />
           <FieldInput label={type === 'hidrogua' ? 'Fecha/Horas Próximo Service' : 'Fecha/Km Próximo Service'} value={header.proximoService} onChange={(v) => setHeader((h) => ({ ...h, proximoService: v }))} />
-          <FieldInput label="Chofer que Entrega Unidad" value={header.choferEntrega} onChange={(v) => setHeader((h) => ({ ...h, choferEntrega: v }))} />
-          <FieldInput label="Chofer que Recibe Unidad" value={header.choferRecibe} onChange={(v) => setHeader((h) => ({ ...h, choferRecibe: v }))} />
-          <FieldInput label="Contratado Por" value={header.contratadoPor} onChange={(v) => setHeader((h) => ({ ...h, contratadoPor: v }))} />
+          <FieldInput label="Entrega Unidad" value={header.entregaUnidad} onChange={(v) => setHeader((h) => ({ ...h, entregaUnidad: v }))} />
+          <FieldInput label="Recibe Unidad" value={header.recibeUnidad} onChange={(v) => setHeader((h) => ({ ...h, recibeUnidad: v }))} />
         </div>
       </div>
 
@@ -432,22 +430,14 @@ export const ChecklistV2Page = () => {
         />
       </div>
 
-      {/* ── References + signatures ── */}
+      {/* ── References ── */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="mb-3 text-xs font-bold text-slate-500 uppercase">Referencias</p>
-        <div className="flex flex-wrap gap-2 mb-5">
+        <div className="flex flex-wrap gap-2">
           {STATUS_OPTIONS.map((opt) => (
             <span key={opt.value} className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-bold ${opt.color}`}>
               {opt.value} <span className="font-normal">{STATUS_LABEL[opt.value]}</span>
             </span>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-5">
-          {['Chofer que Entrega la Unidad', 'Contratado Por', 'Chofer que Recibe la Unidad'].map((label) => (
-            <div key={label} className="flex flex-col items-center gap-1">
-              <div className="h-16 w-full rounded-lg border border-dashed border-slate-300 bg-slate-50" />
-              <span className="text-xs font-semibold text-slate-500">{label}</span>
-            </div>
           ))}
         </div>
       </div>
