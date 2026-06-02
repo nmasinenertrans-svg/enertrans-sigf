@@ -282,7 +282,7 @@ export const AuditsPage = () => {
       externalRequestId: '',
       checklistSections: createChecklistFromDeviations(pendingWorkOrder.taskList ?? []),
     }))
-    setUnitFilter(pendingWorkOrder.unitId)
+    setUnitFilter(pendingWorkOrder.unitId ?? '')
   }, [pendingWorkOrder, manualAuditMode])
 
   const handleItemStatusChange = (sectionId: string, itemId: string, status: AuditChecklistStatus) => {

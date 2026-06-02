@@ -15,7 +15,7 @@ export interface AuditChecklistSectionDraft {
 
 export interface AuditFormData {
   vehicleMode: 'fleet' | 'external'
-  unitId: string
+  unitId: string | null
   externalVehicle: string
   auditMode: 'INDEPENDENT' | 'EXTERNAL_REQUEST'
   manualResult: 'APPROVED' | 'REJECTED'
@@ -47,7 +47,7 @@ export interface AuditHistoryViewItem {
   code: string
   auditKind: 'AUDIT' | 'REAUDIT'
   id: string
-  unitId: string
+  unitId: string | null
   unitLabel: string
   performedAt: string
   auditorName: string

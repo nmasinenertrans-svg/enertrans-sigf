@@ -261,7 +261,7 @@ export const buildAppNotifications = (params: {
       description: `${unit?.internalCode ?? 'Unidad'} - ${formatDate(audit.performedAt)}`,
       severity: 'danger',
       createdAt: audit.performedAt,
-      target: buildFleetDetailPath(audit.unitId),
+      target: audit.unitId ? buildFleetDetailPath(audit.unitId) : undefined,
     })
   })
 
