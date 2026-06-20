@@ -555,17 +555,26 @@ export const WorkOrdersPage = () => {
     clearResolutionDraft()
   }
 
+  const autoResolveTasks = (tasks: WorkOrderDeviation[]): WorkOrderDeviation[] =>
+    tasks.map((task) =>
+      task.status === 'RESOLVED'
+        ? task
+        : {
+            ...task,
+            status: 'RESOLVED' as WorkOrderDeviationStatus,
+            resolutionNote: task.resolutionNote?.trim() || 'Resuelto por jerarquía',
+            resolvedAt: new Date().toISOString(),
+          },
+    )
+
   const handleCloseWorkOrder = async (workOrderId: string) => {
     const workOrder = workOrders.find((order) => order.id === workOrderId)
-    if (!workOrder) {
-      return
-    }
+    if (!workOrder) return
 
     const normalizedTasks = normalizeTaskList(workOrder.taskList)
     const blockingTasks = normalizedTasks.filter((task) => task.status !== 'RESOLVED' || !hasResolutionEvidence(task))
-    const allResolved = blockingTasks.length === 0
 
-    if (!allResolved) {
+    if (blockingTasks.length > 0 && !isHighHierarchy) {
       const sample = blockingTasks
         .slice(0, 2)
         .map((task) => `${task.section} / ${task.item}`)
@@ -576,14 +585,15 @@ export const WorkOrdersPage = () => {
       return
     }
 
+    const finalTasks = blockingTasks.length > 0 ? autoResolveTasks(normalizedTasks) : normalizedTasks
+
     const updatedWorkOrder: WorkOrder = {
       ...workOrder,
       status: 'CLOSED' as WorkOrderStatus,
       pendingReaudit: manualAuditMode ? false : true,
-      taskList: normalizedTasks,
+      taskList: finalTasks,
     }
-    const nextWorkOrders = workOrders.map((order) => (order.id === workOrderId ? updatedWorkOrder : order))
-    setWorkOrders(nextWorkOrders)
+    setWorkOrders(workOrders.map((order) => (order.id === workOrderId ? updatedWorkOrder : order)))
 
     setFleetUnits(
       fleetUnits.map((unit) =>
@@ -596,11 +606,9 @@ export const WorkOrdersPage = () => {
         const message = String((error as Error)?.message ?? '')
         if (message.startsWith('404')) {
           await apiRequest('/work-orders', { method: 'POST', body: updatedWorkOrder })
-          return
         }
       })
-      const unitPayload = fleetUnits.find((unit) => unit.id === updatedWorkOrder.unitId)
-      if (unitPayload) {
+      if (fleetUnits.find((unit) => unit.id === updatedWorkOrder.unitId)) {
         apiRequest(`/fleet/${updatedWorkOrder.unitId}`, {
           method: 'PATCH',
           body: { operationalStatus: 'MAINTENANCE' },
@@ -615,30 +623,6 @@ export const WorkOrdersPage = () => {
     )
   }
 
-  const handleForceCloseWorkOrder = async (workOrderId: string) => {
-    const workOrder = workOrders.find((order) => order.id === workOrderId)
-    if (!workOrder) return
-
-    const normalizedTasks = normalizeTaskList(workOrder.taskList)
-    const updatedWorkOrder: WorkOrder = {
-      ...workOrder,
-      status: 'CLOSED' as WorkOrderStatus,
-      pendingReaudit: manualAuditMode ? false : true,
-      taskList: normalizedTasks,
-    }
-    const nextWorkOrders = workOrders.map((order) => (order.id === workOrderId ? updatedWorkOrder : order))
-    setWorkOrders(nextWorkOrders)
-
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest(`/work-orders/${workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(async (error) => {
-        const message = String((error as Error)?.message ?? '')
-        if (message.startsWith('404')) {
-          await apiRequest('/work-orders', { method: 'POST', body: updatedWorkOrder })
-        }
-      })
-    }
-  }
-
   const handleBulkCloseWorkOrders = async () => {
     const targets = filteredWorkOrders.filter((item) => item.status !== 'CLOSED')
     if (targets.length === 0) {
@@ -649,7 +633,7 @@ export const WorkOrdersPage = () => {
     const targetIds = new Set(targets.map((t) => t.id))
     const updatedWorkOrders: WorkOrder[] = workOrders.map((order) => {
       if (!targetIds.has(order.id)) return order
-      const normalizedTasks = normalizeTaskList(order.taskList)
+      const normalizedTasks = autoResolveTasks(normalizeTaskList(order.taskList))
       return {
         ...order,
         status: 'CLOSED' as WorkOrderStatus,
@@ -799,25 +783,13 @@ export const WorkOrdersPage = () => {
                       canDelete={canDelete}
                     />
                     {item.status !== 'CLOSED' ? (
-                      <div className="flex gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleCloseWorkOrder(item.id)}
-                          className="flex-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                        >
-                          {manualAuditMode ? 'Cerrar OT (sin re-inspeccion)' : 'Cerrar OT y solicitar re-inspeccion'}
-                        </button>
-                        {isHighHierarchy ? (
-                          <button
-                            type="button"
-                            onClick={() => { void handleForceCloseWorkOrder(item.id) }}
-                            title="Cierre forzado sin verificar desvios ni fotos"
-                            className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-                          >
-                            Forzar
-                          </button>
-                        ) : null}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCloseWorkOrder(item.id)}
+                        className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                      >
+                        {manualAuditMode ? 'Cerrar OT (sin re-inspeccion automatica)' : 'Cerrar OT y solicitar re-inspeccion'}
+                      </button>
                     ) : null}
                   </div>
                 ))
