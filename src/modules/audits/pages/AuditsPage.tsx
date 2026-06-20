@@ -45,6 +45,7 @@ export const AuditsPage = () => {
 
   const canCreate = can('AUDITS', 'create')
   const canDelete = can('AUDITS', 'delete')
+  const isHighHierarchy = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
 
   const pendingReauditParam = searchParams.get('pendingReaudit')
   const createParam = searchParams.get('create')
@@ -859,6 +860,22 @@ export const AuditsPage = () => {
     }
   }
 
+  const handleBulkDismissReaudits = () => {
+    if (pendingReauditOrders.length === 0) return
+
+    setWorkOrders(
+      workOrders.map((order) => (order.pendingReaudit ? { ...order, pendingReaudit: false } : order)),
+    )
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      for (const order of pendingReauditOrders) {
+        apiRequest(`/work-orders/${order.id}`, { method: 'PATCH', body: { pendingReaudit: false } }).catch(() => null)
+      }
+    }
+
+    setAppError(`${pendingReauditOrders.length} re-inspeccion(es) cerradas forzosamente.`)
+  }
+
   if (fleetUnits.length === 0) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -893,9 +910,20 @@ export const AuditsPage = () => {
               <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">Re-inspecciones pendientes</p>
               <p className="mt-1 text-sm text-slate-700">Selecciona una OT cerrada para auditar solo los desvios corregidos.</p>
             </div>
-            <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold text-sky-700">
-              {pendingReauditOrders.length} pendientes
-            </span>
+            <div className="flex items-center gap-2">
+              {isHighHierarchy ? (
+                <button
+                  type="button"
+                  onClick={handleBulkDismissReaudits}
+                  className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                >
+                  Cerrar todas
+                </button>
+              ) : null}
+              <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold text-sky-700">
+                {pendingReauditOrders.length} pendientes
+              </span>
+            </div>
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {pendingReauditOrders.map((order) => {

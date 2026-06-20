@@ -37,7 +37,7 @@ export const WorkOrdersPage = () => {
   const [searchParams] = useSearchParams()
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, inventoryItems, workOrders, featureFlags },
+    state: { currentUser, fleetUnits, inventoryItems, workOrders, featureFlags },
     actions: { setWorkOrders, setInventoryItems, setFleetUnits, setAppError },
   } = useAppContext()
   const manualAuditMode = featureFlags.manualAuditMode
@@ -45,6 +45,7 @@ export const WorkOrdersPage = () => {
   const canCreate = can('WORK_ORDERS', 'create')
   const canEdit = can('WORK_ORDERS', 'edit')
   const canDelete = can('WORK_ORDERS', 'delete')
+  const isHighHierarchy = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
 
   const [formData, setFormData] = useState<WorkOrderFormData>(() => createEmptyWorkOrderFormData(fleetUnits[0]?.id ?? ''))
   const [errors, setErrors] = useState<WorkOrderFormErrors>({})
@@ -614,6 +615,59 @@ export const WorkOrdersPage = () => {
     )
   }
 
+  const handleForceCloseWorkOrder = async (workOrderId: string) => {
+    const workOrder = workOrders.find((order) => order.id === workOrderId)
+    if (!workOrder) return
+
+    const normalizedTasks = normalizeTaskList(workOrder.taskList)
+    const updatedWorkOrder: WorkOrder = {
+      ...workOrder,
+      status: 'CLOSED' as WorkOrderStatus,
+      pendingReaudit: manualAuditMode ? false : true,
+      taskList: normalizedTasks,
+    }
+    const nextWorkOrders = workOrders.map((order) => (order.id === workOrderId ? updatedWorkOrder : order))
+    setWorkOrders(nextWorkOrders)
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      apiRequest(`/work-orders/${workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(async (error) => {
+        const message = String((error as Error)?.message ?? '')
+        if (message.startsWith('404')) {
+          await apiRequest('/work-orders', { method: 'POST', body: updatedWorkOrder })
+        }
+      })
+    }
+  }
+
+  const handleBulkCloseWorkOrders = async () => {
+    const targets = filteredWorkOrders.filter((item) => item.status !== 'CLOSED')
+    if (targets.length === 0) {
+      setAppError('No hay OT abiertas para cerrar en el filtro actual.')
+      return
+    }
+
+    const targetIds = new Set(targets.map((t) => t.id))
+    const updatedWorkOrders: WorkOrder[] = workOrders.map((order) => {
+      if (!targetIds.has(order.id)) return order
+      const normalizedTasks = normalizeTaskList(order.taskList)
+      return {
+        ...order,
+        status: 'CLOSED' as WorkOrderStatus,
+        pendingReaudit: manualAuditMode ? false : true,
+        taskList: normalizedTasks,
+      }
+    })
+    setWorkOrders(updatedWorkOrders)
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      for (const order of updatedWorkOrders.filter((o) => targetIds.has(o.id))) {
+        apiRequest(`/work-orders/${order.id}`, { method: 'PATCH', body: order }).catch(() => null)
+      }
+    }
+
+    setAppError(`${targets.length} OT(s) cerradas.`)
+  }
+
   if (fleetUnits.length === 0) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -674,6 +728,15 @@ export const WorkOrdersPage = () => {
                 <h3 className="text-lg font-bold text-slate-900">Listado de OT</h3>
                 <p className="mt-1 text-sm text-slate-600">Visualizacion por estado operativo.</p>
               </div>
+              {isHighHierarchy && filteredWorkOrders.some((item) => item.status !== 'CLOSED') ? (
+                <button
+                  type="button"
+                  onClick={() => { void handleBulkCloseWorkOrders() }}
+                  className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                >
+                  Cerrar todas ({filteredWorkOrders.filter((item) => item.status !== 'CLOSED').length})
+                </button>
+              ) : null}
             </div>
 
             <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_220px_220px]">
@@ -736,13 +799,25 @@ export const WorkOrdersPage = () => {
                       canDelete={canDelete}
                     />
                     {item.status !== 'CLOSED' ? (
-                      <button
-                        type="button"
-                        onClick={() => handleCloseWorkOrder(item.id)}
-                        className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                      >
-                        {manualAuditMode ? 'Cerrar OT (sin re-inspeccion automatica)' : 'Cerrar OT y solicitar re-inspeccion'}
-                      </button>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleCloseWorkOrder(item.id)}
+                          className="flex-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          {manualAuditMode ? 'Cerrar OT (sin re-inspeccion)' : 'Cerrar OT y solicitar re-inspeccion'}
+                        </button>
+                        {isHighHierarchy ? (
+                          <button
+                            type="button"
+                            onClick={() => { void handleForceCloseWorkOrder(item.id) }}
+                            title="Cierre forzado sin verificar desvios ni fotos"
+                            className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                          >
+                            Forzar
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 ))
