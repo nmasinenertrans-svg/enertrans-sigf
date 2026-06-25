@@ -148,6 +148,10 @@ const isOverrideActive = (override: { expiresAt?: string }) => {
 
 export const resolveUserPermissions = (user: User | null): UserPermissions => {
   const roleDefaults = user ? getRolePermissions(user.role) : buildEmptyPermissions()
+  // DEV is superadmin — stored permissions never restrict role defaults
+  if (user?.role === 'DEV') {
+    return roleDefaults
+  }
   const stored = user?.permissions as UserPermissions | undefined
   const base = permissionModules.reduce((acc, moduleKey) => {
     acc[moduleKey] = {

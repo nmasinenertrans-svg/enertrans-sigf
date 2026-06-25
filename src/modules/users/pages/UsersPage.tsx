@@ -482,7 +482,12 @@ export const UsersPage = () => {
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
           <h3 className="text-lg font-bold text-slate-900">Permisos por módulo</h3>
-          <div className="mt-4 overflow-x-auto">
+          {formData.role === 'DEV' ? (
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              El rol DEV tiene acceso total a todos los módulos. Los permisos no son editables para este rol.
+            </p>
+          ) : null}
+          <div className={`mt-4 overflow-x-auto${formData.role === 'DEV' ? ' pointer-events-none opacity-40' : ''}`}>
             <div className="min-w-[640px]">
               <div className="grid grid-cols-[180px_repeat(4,1fr)] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
                 <span>Módulo</span>

@@ -109,6 +109,10 @@ const isOverrideActive = (override: PermissionOverride): boolean => {
 
 export const resolveUserPermissions = (user: AppUser | null): UserPermissions => {
   const roleDefaults = user ? getRolePermissions(user.role) : buildEmptyPermissions()
+  // DEV is superadmin — stored permissions never restrict role defaults
+  if (user?.role === 'DEV') {
+    return roleDefaults
+  }
   const stored = user?.permissions
   const base = permissionModules.reduce((accumulator, moduleKey) => {
     accumulator[moduleKey] = {
