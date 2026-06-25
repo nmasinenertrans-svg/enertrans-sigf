@@ -15,6 +15,23 @@ const activityStatusValues = ['PENDING', 'DONE'] as const
 const dealUnitStatusValues = ['EN_CONCURSO', 'ADJUDICADA', 'PERDIDA', 'LIBERADA'] as const
 const currencyValues = ['ARS', 'USD'] as const
 
+const stageLabel: Record<(typeof stageValues)[number], string> = {
+  LEAD: 'Lead',
+  CONTACTED: 'Contactado',
+  QUALIFICATION: 'Calificación',
+  PROPOSAL: 'Propuesta',
+  NEGOTIATION: 'Negociación',
+  WON: 'Ganada',
+  LOST: 'Perdida',
+}
+
+const dealUnitStatusLabel: Record<(typeof dealUnitStatusValues)[number], string> = {
+  EN_CONCURSO: 'En concurso',
+  ADJUDICADA: 'Adjudicada',
+  PERDIDA: 'Perdida',
+  LIBERADA: 'Liberada',
+}
+
 const stageDefaultProbability: Record<(typeof stageValues)[number], number> = {
   LEAD: 10,
   CONTACTED: 20,
@@ -308,7 +325,7 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req: any, re
               dealId,
               type: 'TASK',
               status: 'DONE',
-              summary: `Etapa actualizada a ${parsed.data.stage}`,
+              summary: `Etapa actualizada a ${stageLabel[parsed.data.stage as (typeof stageValues)[number]] ?? parsed.data.stage}`,
               completedAt: new Date(),
               createdByUserId: req.userId ?? existing.createdByUserId,
             },
@@ -362,7 +379,7 @@ router.patch('/deals/:id/stage', requirePermission('CRM', 'edit'), async (req: a
             dealId,
             type: 'TASK',
             status: 'DONE',
-            summary: `Etapa actualizada a ${stage}`,
+            summary: `Etapa actualizada a ${stageLabel[stage] ?? stage}`,
             completedAt: new Date(),
             createdByUserId: req.userId ?? deal.createdByUserId,
           },
@@ -629,7 +646,7 @@ router.post('/deals/:id/units', requirePermission('CRM', 'edit'), async (req: an
             dealId,
             type: 'TASK',
             status: 'DONE',
-            summary: `Unidad ${unit.internalCode} vinculada (${parsed.data.status}).`,
+            summary: `Unidad ${unit.internalCode} vinculada (${dealUnitStatusLabel[parsed.data.status as (typeof dealUnitStatusValues)[number]] ?? parsed.data.status}).`,
             completedAt: new Date(),
             createdByUserId: req.userId,
           },
