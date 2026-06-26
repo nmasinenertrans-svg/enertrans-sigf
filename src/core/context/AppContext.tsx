@@ -31,12 +31,15 @@ export const AppProvider = ({ children }: AppProviderProps) => {
       },
       setUsers: (users) => {
         setState((previousState) => {
+          // Look up by currentUser.id first, fallback to currentUserId stored in state.
+          // Never set currentUser to null just because the ID wasn't found in the new list —
+          // that would silently log out the user or switch to a wrong user.
+          const lookupId = previousState.currentUser?.id ?? previousState.currentUserId
+          const refreshed = lookupId ? users.find((user) => user.id === lookupId) : undefined
           const nextState = {
             ...previousState,
             users,
-            currentUser: previousState.currentUser
-              ? users.find((user) => user.id === previousState.currentUser?.id) ?? null
-              : null,
+            currentUser: refreshed ?? previousState.currentUser,
           }
           persistAppState(nextState)
           return nextState
