@@ -121,6 +121,7 @@ export const FleetDetailPage = () => {
   const [activeTab, setActiveTab] = useState<DetailTabId>('maintenancePlan')
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrPdfLoading, setIsQrPdfLoading] = useState(false)
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
   const [copySpecsOpen, setCopySpecsOpen] = useState(false)
   const [copySpecsSearch, setCopySpecsSearch] = useState('')
   const [copySpecsSource, setCopySpecsSource] = useState<FleetUnit | null>(null)
@@ -711,6 +712,187 @@ export const FleetDetailPage = () => {
     }
   }
 
+  const handlePhotoUpload = async (file: File | null | undefined) => {
+    if (!file || !selectedUnit) return
+    setIsUploadingPhoto(true)
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+      apiRequest<{ url: string }>('/files/upload', {
+        method: 'POST',
+        body: {
+          fileName: `${selectedUnit.id}-profile-${file.name}`,
+          contentType: file.type || 'image/jpeg',
+          dataUrl,
+          folder: 'fleet-photos',
+        },
+      })
+        .then((response) => {
+          updateUnit((unit) => ({ ...unit, profilePhotoUrl: response.url }))
+          apiRequest(`/fleet/${selectedUnit.id}`, {
+            method: 'PATCH',
+            body: { profilePhotoUrl: response.url },
+          }).catch(() => null)
+        })
+        .catch(() => null)
+        .finally(() => setIsUploadingPhoto(false))
+    }
+    reader.onerror = () => setIsUploadingPhoto(false)
+    reader.readAsDataURL(file)
+  }
+
+  const handleDeletePhoto = () => {
+    if (!canEditFleet || !selectedUnit) return
+    if (!window.confirm('¿Eliminar foto de perfil del vehículo?')) return
+    updateUnit((unit) => ({ ...unit, profilePhotoUrl: null }))
+    apiRequest(`/fleet/${selectedUnit.id}`, {
+      method: 'PATCH',
+      body: { profilePhotoUrl: null },
+    }).catch(() => null)
+  }
+
+  const handlePrintFicha = () => {
+    if (!selectedUnit) return
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+    if (!printWindow) return
+
+    const photoHtml = selectedUnit.profilePhotoUrl
+      ? `<img src="${selectedUnit.profilePhotoUrl}" alt="Foto del vehículo" class="vehicle-photo" />`
+      : `<div class="no-photo">Sin foto registrada</div>`
+
+    const row = (label: string, value: string) =>
+      `<tr><td class="label">${label}</td><td class="value">${value || '—'}</td></tr>`
+
+    const lubRows = [
+      ['Aceite Motor', safeLubricants.engineOil],
+      ['Litros Aceite Motor', safeLubricants.engineOilLiters],
+      ['Aceite Caja', safeLubricants.gearboxOil],
+      ['Litros Aceite Caja', safeLubricants.gearboxOilLiters],
+      ['Aceite Diferencial', safeLubricants.differentialOil],
+      ['Litros Aceite Diferencial', safeLubricants.differentialOilLiters],
+      ['Líquido Embrague', safeLubricants.clutchFluid],
+      ['Líquido Dirección', safeLubricants.steeringFluid],
+      ['Refrigerante', safeLubricants.coolant],
+      ['Aceite Hidráulico', safeLubricants.hydraulicOil],
+    ]
+      .filter(([, v]) => Boolean(v))
+      .map(([l, v]) => row(l, v))
+      .join('')
+
+    const filterRowsHtml = [
+      ['Filtro Aceite', safeFilters.oilFilter],
+      ['Filtro Combustible', safeFilters.fuelFilter],
+      ['Filtro TA', safeFilters.taFilter],
+      ['Filtro Aire Primario', safeFilters.primaryAirFilter],
+      ['Filtro Aire Secundario', safeFilters.secondaryAirFilter],
+      ['Filtro Habitáculo', safeFilters.cabinFilter],
+    ]
+      .filter(([, v]) => Boolean(v))
+      .map(([l, v]) => row(l, v))
+      .join('')
+
+    const semiTrailerSection = selectedUnit.hasSemiTrailer
+      ? `<section>
+          <h2>Semirremolque</h2>
+          <table><tbody>
+            ${row('Dominio', associatedSemiTrailer?.internalCode || selectedUnit.semiTrailerLicensePlate)}
+            ${row('Marca', associatedSemiTrailer?.semiTrailerBrand || selectedUnit.semiTrailerBrand)}
+            ${row('Modelo', associatedSemiTrailer?.semiTrailerModel || selectedUnit.semiTrailerModel)}
+            ${row('Año', String(associatedSemiTrailer?.semiTrailerYear || selectedUnit.semiTrailerYear || ''))}
+            ${row('N° chasis', associatedSemiTrailer?.semiTrailerChassisNumber || selectedUnit.semiTrailerChassisNumber)}
+          </tbody></table>
+        </section>`
+      : ''
+
+    const hydroSection = selectedUnit.hasHydroCrane
+      ? `<section>
+          <h2>Hidrogrúa</h2>
+          <table><tbody>
+            ${row('Marca', selectedUnit.hydroCraneBrand)}
+            ${row('Modelo', selectedUnit.hydroCraneModel)}
+            ${row('N° serie', selectedUnit.hydroCraneSerialNumber)}
+          </tbody></table>
+        </section>`
+      : ''
+
+    printWindow.document.write(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Ficha Técnica - ${selectedUnit.internalCode}</title>
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    body { padding: 20px; color: #0f172a; font-size: 11px; }
+    .header { display: flex; gap: 16px; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+    .vehicle-photo { width: 160px; height: 120px; object-fit: cover; border: 1px solid #cbd5e1; border-radius: 4px; flex-shrink: 0; }
+    .no-photo { width: 160px; height: 120px; border: 1px dashed #94a3b8; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 10px; flex-shrink: 0; }
+    .header-info { flex: 1; }
+    .header-info h1 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+    .header-info .subtitle { font-size: 12px; color: #475569; margin-bottom: 8px; }
+    .badge { display: inline-block; border-radius: 9999px; padding: 2px 8px; font-size: 10px; font-weight: bold; margin-right: 4px; }
+    .badge-ok { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-warn { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .badge-bad { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    section { margin-bottom: 14px; }
+    h2 { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 3px 6px; vertical-align: top; }
+    td.label { color: #475569; width: 40%; }
+    td.value { font-weight: 600; color: #0f172a; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .print-date { text-align: right; font-size: 9px; color: #94a3b8; margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 6px; }
+    @media print { body { padding: 12px; } @page { margin: 0.5cm; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    ${photoHtml}
+    <div class="header-info">
+      <h1>${selectedUnit.internalCode}</h1>
+      <div class="subtitle">${getFleetUnitTypeLabel(selectedUnit.unitType)} · ${selectedUnit.ownerCompany}</div>
+      <span class="badge ${selectedUnit.operationalStatus === 'OPERATIONAL' ? 'badge-ok' : selectedUnit.operationalStatus === 'MAINTENANCE' ? 'badge-warn' : 'badge-bad'}">
+        ${getOperationalStatusLabel(selectedUnit.operationalStatus)}
+      </span>
+    </div>
+  </div>
+
+  <section>
+    <h2>Datos del vehículo</h2>
+    <div class="two-col">
+      <table><tbody>
+        ${row('Marca', selectedUnit.brand)}
+        ${row('Modelo', selectedUnit.model)}
+        ${row('Año', String(selectedUnit.year || ''))}
+        ${row('N° chasis', selectedUnit.chassisNumber)}
+        ${row('N° motor', selectedUnit.engineNumber)}
+        ${selectedUnit.engineCylinders ? row('Cilindros', `${selectedUnit.engineCylinders} cil.`) : ''}
+      </tbody></table>
+      <table><tbody>
+        ${row('Cliente', selectedUnit.clientName)}
+        ${row('Ubicación', selectedUnit.location)}
+        ${selectedUnit.tareWeightKg ? row('Tara', `${selectedUnit.tareWeightKg} kg`) : ''}
+        ${selectedUnit.maxLoadKg ? row('Carga máxima', `${selectedUnit.maxLoadKg} kg`) : ''}
+        ${selectedUnit.currentKilometers ? row('Km actuales', `${selectedUnit.currentKilometers.toLocaleString('es-AR')} km`) : ''}
+        ${selectedUnit.currentEngineHours ? row('Horas motor', `${selectedUnit.currentEngineHours.toLocaleString('es-AR')} hs`) : ''}
+      </tbody></table>
+    </div>
+    ${selectedUnit.configurationNotes ? `<p style="margin-top:6px;color:#475569">Configuración: ${selectedUnit.configurationNotes}</p>` : ''}
+  </section>
+
+  ${lubRows ? `<section><h2>Lubricantes</h2><div class="two-col"><table><tbody>${lubRows}</tbody></table></div></section>` : ''}
+  ${filterRowsHtml ? `<section><h2>Filtros</h2><div class="two-col"><table><tbody>${filterRowsHtml}</tbody></table></div></section>` : ''}
+  ${hydroSection}
+  ${semiTrailerSection}
+
+  <div class="print-date">Ficha técnica generada el ${new Date().toLocaleString('es-AR')} · Sistema SIGF</div>
+</body>
+</html>`)
+
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+  }
+
   if (!unitId || !selectedUnit) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -746,6 +928,13 @@ export const FleetDetailPage = () => {
                 Editar unidad
               </Link>
             ) : null}
+            <button
+              type="button"
+              onClick={handlePrintFicha}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Imprimir ficha
+            </button>
             <button
               type="button"
               onClick={() => setIsQrOpen(true)}
@@ -948,6 +1137,51 @@ export const FleetDetailPage = () => {
         <p className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
           <span className="font-semibold">Configuracion:</span> {selectedUnit.configurationNotes || 'Sin configuracion registrada.'}
         </p>
+
+        <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+          <h4 className="text-sm font-bold text-slate-900">Foto del vehículo</h4>
+          <div className="mt-3 flex flex-wrap items-start gap-4">
+            {selectedUnit.profilePhotoUrl ? (
+              <div className="relative">
+                <img
+                  src={selectedUnit.profilePhotoUrl}
+                  alt="Foto del vehículo"
+                  className="h-40 w-56 rounded-lg border border-slate-200 object-cover"
+                />
+                {canEditFleet ? (
+                  <button
+                    type="button"
+                    onClick={handleDeletePhoto}
+                    className="absolute right-1 top-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-100"
+                  >
+                    Eliminar
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex h-40 w-56 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
+                Sin foto registrada
+              </div>
+            )}
+            {canEditFleet ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-slate-500">
+                  {selectedUnit.profilePhotoUrl ? 'Reemplazar foto' : 'Subir foto del camión'}
+                </p>
+                <label className={`inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 ${isUploadingPhoto ? 'pointer-events-none opacity-50' : ''}`}>
+                  {isUploadingPhoto ? 'Subiendo...' : 'Seleccionar imagen'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    disabled={isUploadingPhoto}
+                    onChange={(event) => { void handlePhotoUpload(event.target.files?.[0]) }}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </div>
+        </section>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
           <section className="rounded-lg border border-slate-200 bg-white">

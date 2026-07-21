@@ -182,6 +182,7 @@ export interface FleetUnit {
   lubricants: FleetUnitLubricants
   filters: FleetUnitFilters
   documents: FleetUnitDocuments
+  profilePhotoUrl?: string | null
   crmDealLink?: {
     dealId: string
     dealTitle: string

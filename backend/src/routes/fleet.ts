@@ -290,6 +290,7 @@ const fleetSchema = z.object({
   lubricants: z.any().optional().default({}),
   filters: z.any().optional().default({}),
   documents: z.any().optional().default({}),
+  profilePhotoUrl: z.string().nullable().optional(),
 })
 
 const toTrimmedString = (value: unknown): string => {
@@ -403,6 +404,7 @@ const sanitizeFleetPatchData = (rawBody: Record<string, unknown>): Partial<z.inf
   setString('semiTrailerBrand')
   setString('semiTrailerModel')
   setString('logisticsStatusNote')
+  setNullableString('profilePhotoUrl')
 
   setInt('year')
   setInt('tareWeightKg')
