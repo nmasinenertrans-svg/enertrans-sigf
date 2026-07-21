@@ -885,11 +885,14 @@ export const FleetDetailPage = () => {
   ${semiTrailerSection}
 
   <div class="print-date">Ficha técnica generada el ${new Date().toLocaleString('es-AR')} · Sistema SIGF</div>
-  <script>window.onload = function() { window.focus(); window.print(); }</script>
 </body>
 </html>`)
 
     printWindow.document.close()
+    setTimeout(() => {
+      printWindow.focus()
+      printWindow.print()
+    }, 500)
   }
 
   if (!unitId || !selectedUnit) {
