@@ -199,6 +199,7 @@ model FleetUnit {
   currentEngineHours       Int      @default(0)
   currentHydroHours        Int      @default(0)
   engineCylinders          Int?
+  profilePhotoUrl          String?
   lubricants               Json
   filters                  Json
   documents                Json

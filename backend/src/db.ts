@@ -296,6 +296,7 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     )
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "engineCylinders" INTEGER;`)
+    await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "profilePhotoUrl" TEXT;`)
 
     // WorkOrder y AuditRecord: schema-qualified directo para evitar problemas de qualifyCompatSql
     const sq = quoteIdentifier(getNormalizedActiveSchema())
