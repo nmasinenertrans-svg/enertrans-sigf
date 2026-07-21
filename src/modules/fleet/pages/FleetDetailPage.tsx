@@ -122,6 +122,7 @@ export const FleetDetailPage = () => {
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [isQrPdfLoading, setIsQrPdfLoading] = useState(false)
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
+  const [isDownloadingFicha, setIsDownloadingFicha] = useState(false)
   const [copySpecsOpen, setCopySpecsOpen] = useState(false)
   const [copySpecsSearch, setCopySpecsSearch] = useState('')
   const [copySpecsSource, setCopySpecsSource] = useState<FleetUnit | null>(null)
@@ -751,148 +752,204 @@ export const FleetDetailPage = () => {
     }).catch(() => null)
   }
 
-  const handlePrintFicha = () => {
+  const handleDownloadFichaPdf = async () => {
     if (!selectedUnit) return
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
-    if (!printWindow) return
+    setIsDownloadingFicha(true)
+    try {
+      const { jsPDF } = await import('jspdf')
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-    const photoHtml = selectedUnit.profilePhotoUrl
-      ? `<img src="${selectedUnit.profilePhotoUrl}" alt="Foto del vehículo" class="vehicle-photo" />`
-      : `<div class="no-photo">Sin foto registrada</div>`
+      const pageW = 210
+      const pageH = 297
+      const mg = 15
+      const cW = pageW - mg * 2
+      let y = mg
 
-    const row = (label: string, value: string) =>
-      `<tr><td class="label">${label}</td><td class="value">${value || '—'}</td></tr>`
+      const txt = (
+        text: string,
+        x: number,
+        yPos: number,
+        opts?: { size?: number; bold?: boolean; color?: [number, number, number]; align?: 'left' | 'center' | 'right' },
+      ) => {
+        doc.setFontSize(opts?.size ?? 10)
+        doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal')
+        const c = opts?.color ?? ([15, 23, 42] as [number, number, number])
+        doc.setTextColor(c[0], c[1], c[2])
+        doc.text(text, x, yPos, { align: opts?.align ?? 'left' })
+      }
 
-    const lubRows = [
-      ['Aceite Motor', safeLubricants.engineOil],
-      ['Litros Aceite Motor', safeLubricants.engineOilLiters],
-      ['Aceite Caja', safeLubricants.gearboxOil],
-      ['Litros Aceite Caja', safeLubricants.gearboxOilLiters],
-      ['Aceite Diferencial', safeLubricants.differentialOil],
-      ['Litros Aceite Diferencial', safeLubricants.differentialOilLiters],
-      ['Líquido Embrague', safeLubricants.clutchFluid],
-      ['Líquido Dirección', safeLubricants.steeringFluid],
-      ['Refrigerante', safeLubricants.coolant],
-      ['Aceite Hidráulico', safeLubricants.hydraulicOil],
-    ]
-      .filter(([, v]) => Boolean(v))
-      .map(([l, v]) => row(l, v))
-      .join('')
+      const section = (title: string, yPos: number): number => {
+        doc.setFillColor(241, 245, 249)
+        doc.rect(mg, yPos, cW, 6, 'F')
+        txt(title.toUpperCase(), mg + 3, yPos + 4.2, { size: 7.5, bold: true, color: [100, 116, 139] })
+        return yPos + 8
+      }
 
-    const filterRowsHtml = [
-      ['Filtro Aceite', safeFilters.oilFilter],
-      ['Filtro Combustible', safeFilters.fuelFilter],
-      ['Filtro TA', safeFilters.taFilter],
-      ['Filtro Aire Primario', safeFilters.primaryAirFilter],
-      ['Filtro Aire Secundario', safeFilters.secondaryAirFilter],
-      ['Filtro Habitáculo', safeFilters.cabinFilter],
-    ]
-      .filter(([, v]) => Boolean(v))
-      .map(([l, v]) => row(l, v))
-      .join('')
+      const row2 = (label: string, value: string, x: number, yPos: number): number => {
+        txt(label, x, yPos, { size: 8, color: [71, 85, 105] })
+        txt(value || '—', x + cW * 0.25, yPos, { size: 8.5, bold: true })
+        return yPos + 5.5
+      }
 
-    const semiTrailerSection = selectedUnit.hasSemiTrailer
-      ? `<section>
-          <h2>Semirremolque</h2>
-          <table><tbody>
-            ${row('Dominio', associatedSemiTrailer?.internalCode || selectedUnit.semiTrailerLicensePlate)}
-            ${row('Marca', associatedSemiTrailer?.semiTrailerBrand || selectedUnit.semiTrailerBrand)}
-            ${row('Modelo', associatedSemiTrailer?.semiTrailerModel || selectedUnit.semiTrailerModel)}
-            ${row('Año', String(associatedSemiTrailer?.semiTrailerYear || selectedUnit.semiTrailerYear || ''))}
-            ${row('N° chasis', associatedSemiTrailer?.semiTrailerChassisNumber || selectedUnit.semiTrailerChassisNumber)}
-          </tbody></table>
-        </section>`
-      : ''
+      // Header bar
+      doc.setFillColor(15, 23, 42)
+      doc.rect(0, 0, pageW, 20, 'F')
+      txt('FICHA TÉCNICA DEL VEHÍCULO', mg, 9, { size: 13, bold: true, color: [255, 255, 255] })
+      txt(`SIGF · ${new Date().toLocaleDateString('es-AR')}`, mg, 16, { size: 8, color: [148, 163, 184] })
 
-    const hydroSection = selectedUnit.hasHydroCrane
-      ? `<section>
-          <h2>Hidrogrúa</h2>
-          <table><tbody>
-            ${row('Marca', selectedUnit.hydroCraneBrand)}
-            ${row('Modelo', selectedUnit.hydroCraneModel)}
-            ${row('N° serie', selectedUnit.hydroCraneSerialNumber)}
-          </tbody></table>
-        </section>`
-      : ''
+      y = 28
 
-    printWindow.document.write(`<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <title>Ficha Técnica - ${selectedUnit.internalCode}</title>
-  <style>
-    * { box-sizing: border-box; font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    body { padding: 20px; color: #0f172a; font-size: 11px; }
-    .header { display: flex; gap: 16px; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
-    .vehicle-photo { width: 160px; height: 120px; object-fit: cover; border: 1px solid #cbd5e1; border-radius: 4px; flex-shrink: 0; }
-    .no-photo { width: 160px; height: 120px; border: 1px dashed #94a3b8; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 10px; flex-shrink: 0; }
-    .header-info { flex: 1; }
-    .header-info h1 { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
-    .header-info .subtitle { font-size: 12px; color: #475569; margin-bottom: 8px; }
-    .badge { display: inline-block; border-radius: 9999px; padding: 2px 8px; font-size: 10px; font-weight: bold; margin-right: 4px; }
-    .badge-ok { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
-    .badge-warn { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-    .badge-bad { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
-    section { margin-bottom: 14px; }
-    h2 { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 6px; }
-    table { width: 100%; border-collapse: collapse; }
-    td { padding: 3px 6px; vertical-align: top; }
-    td.label { color: #475569; width: 40%; }
-    td.value { font-weight: 600; color: #0f172a; }
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .print-date { text-align: right; font-size: 9px; color: #94a3b8; margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 6px; }
-    @media print { body { padding: 12px; } @page { margin: 0.5cm; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    ${photoHtml}
-    <div class="header-info">
-      <h1>${selectedUnit.internalCode}</h1>
-      <div class="subtitle">${getFleetUnitTypeLabel(selectedUnit.unitType)} · ${selectedUnit.ownerCompany}</div>
-      <span class="badge ${selectedUnit.operationalStatus === 'OPERATIONAL' ? 'badge-ok' : selectedUnit.operationalStatus === 'MAINTENANCE' ? 'badge-warn' : 'badge-bad'}">
-        ${getOperationalStatusLabel(selectedUnit.operationalStatus)}
-      </span>
-    </div>
-  </div>
+      // Photo
+      let photoLoaded = false
+      if (selectedUnit.profilePhotoUrl) {
+        try {
+          const photoData = await fetchImageAsDataUrl(selectedUnit.profilePhotoUrl)
+          doc.addImage(photoData, 'JPEG', mg, y, 58, 43)
+          photoLoaded = true
+        } catch { /* skip */ }
+      }
 
-  <section>
-    <h2>Datos del vehículo</h2>
-    <div class="two-col">
-      <table><tbody>
-        ${row('Marca', selectedUnit.brand)}
-        ${row('Modelo', selectedUnit.model)}
-        ${row('Año', String(selectedUnit.year || ''))}
-        ${row('N° chasis', selectedUnit.chassisNumber)}
-        ${row('N° motor', selectedUnit.engineNumber)}
-        ${selectedUnit.engineCylinders ? row('Cilindros', `${selectedUnit.engineCylinders} cil.`) : ''}
-      </tbody></table>
-      <table><tbody>
-        ${row('Cliente', selectedUnit.clientName)}
-        ${row('Ubicación', selectedUnit.location)}
-        ${selectedUnit.tareWeightKg ? row('Tara', `${selectedUnit.tareWeightKg} kg`) : ''}
-        ${selectedUnit.maxLoadKg ? row('Carga máxima', `${selectedUnit.maxLoadKg} kg`) : ''}
-        ${selectedUnit.currentKilometers ? row('Km actuales', `${selectedUnit.currentKilometers.toLocaleString('es-AR')} km`) : ''}
-        ${selectedUnit.currentEngineHours ? row('Horas motor', `${selectedUnit.currentEngineHours.toLocaleString('es-AR')} hs`) : ''}
-      </tbody></table>
-    </div>
-    ${selectedUnit.configurationNotes ? `<p style="margin-top:6px;color:#475569">Configuración: ${selectedUnit.configurationNotes}</p>` : ''}
-  </section>
+      const infoX = photoLoaded ? mg + 63 : mg
+      txt(selectedUnit.internalCode, infoX, y + 8, { size: 16, bold: true })
+      txt(getFleetUnitTypeLabel(selectedUnit.unitType), infoX, y + 15, { size: 9.5, color: [71, 85, 105] })
+      txt(selectedUnit.ownerCompany, infoX, y + 21, { size: 8.5, color: [100, 116, 139] })
 
-  ${lubRows ? `<section><h2>Lubricantes</h2><div class="two-col"><table><tbody>${lubRows}</tbody></table></div></section>` : ''}
-  ${filterRowsHtml ? `<section><h2>Filtros</h2><div class="two-col"><table><tbody>${filterRowsHtml}</tbody></table></div></section>` : ''}
-  ${hydroSection}
-  ${semiTrailerSection}
+      const statusColors: Record<string, [number, number, number]> = {
+        OPERATIONAL: [22, 163, 74],
+        MAINTENANCE: [217, 119, 6],
+        OUT_OF_SERVICE: [220, 38, 38],
+      }
+      const sc = statusColors[selectedUnit.operationalStatus] ?? ([100, 116, 139] as [number, number, number])
+      doc.setFillColor(sc[0], sc[1], sc[2])
+      doc.roundedRect(infoX, y + 26, 48, 7, 2, 2, 'F')
+      txt(getOperationalStatusLabel(selectedUnit.operationalStatus), infoX + 24, y + 31, {
+        size: 8,
+        bold: true,
+        color: [255, 255, 255],
+        align: 'center',
+      })
 
-  <div class="print-date">Ficha técnica generada el ${new Date().toLocaleString('es-AR')} · Sistema SIGF</div>
-</body>
-</html>`)
+      y += photoLoaded ? 50 : 36
 
-    printWindow.document.close()
-    setTimeout(() => {
-      printWindow.focus()
-      printWindow.print()
-    }, 500)
+      // Datos del vehículo
+      y = section('Datos del vehículo', y + 4)
+      const c1 = mg
+      const c2 = mg + cW / 2
+
+      const specs: [string, string][] = [
+        ['Marca', selectedUnit.brand],
+        ['Modelo', selectedUnit.model],
+        ['Año', String(selectedUnit.year || '')],
+        ['Cliente', selectedUnit.clientName],
+        ['Ubicación', selectedUnit.location],
+        ['N° chasis', selectedUnit.chassisNumber],
+        ['N° motor', selectedUnit.engineNumber],
+        ...(selectedUnit.engineCylinders ? [['Cilindros', `${selectedUnit.engineCylinders} cil.`] as [string, string]] : []),
+        ...(selectedUnit.currentKilometers ? [['Km actuales', `${selectedUnit.currentKilometers.toLocaleString('es-AR')} km`] as [string, string]] : []),
+        ...(selectedUnit.currentEngineHours ? [['Horas motor', `${selectedUnit.currentEngineHours.toLocaleString('es-AR')} hs`] as [string, string]] : []),
+        ...(selectedUnit.tareWeightKg ? [['Tara', `${selectedUnit.tareWeightKg} kg`] as [string, string]] : []),
+        ...(selectedUnit.maxLoadKg ? [['Carga máx', `${selectedUnit.maxLoadKg} kg`] as [string, string]] : []),
+      ]
+      const sL = specs.filter((_, i) => i % 2 === 0)
+      const sR = specs.filter((_, i) => i % 2 === 1)
+      for (let i = 0; i < Math.max(sL.length, sR.length); i++) {
+        if (sL[i]) row2(sL[i][0], sL[i][1], c1, y)
+        if (sR[i]) row2(sR[i][0], sR[i][1], c2, y)
+        y += 5.5
+      }
+      if (selectedUnit.configurationNotes) {
+        y += 2
+        const lines = doc.splitTextToSize(`Configuración: ${selectedUnit.configurationNotes}`, cW) as string[]
+        txt(lines.join('\n'), mg, y, { size: 8, color: [71, 85, 105] })
+        y += lines.length * 4.5
+      }
+
+      // Lubricantes
+      const lubPairs = [
+        ['Aceite Motor', safeLubricants.engineOil],
+        ['Litros Motor', safeLubricants.engineOilLiters],
+        ['Aceite Caja', safeLubricants.gearboxOil],
+        ['Litros Caja', safeLubricants.gearboxOilLiters],
+        ['Aceite Diferencial', safeLubricants.differentialOil],
+        ['Litros Diferencial', safeLubricants.differentialOilLiters],
+        ['Líquido Embrague', safeLubricants.clutchFluid],
+        ['Refrigerante', safeLubricants.coolant],
+        ['Aceite Hidráulico', safeLubricants.hydraulicOil],
+      ].filter(([, v]) => Boolean(v)) as [string, string][]
+
+      if (lubPairs.length > 0) {
+        y += 3
+        y = section('Lubricantes', y)
+        const lL = lubPairs.filter((_, i) => i % 2 === 0)
+        const lR = lubPairs.filter((_, i) => i % 2 === 1)
+        for (let i = 0; i < Math.max(lL.length, lR.length); i++) {
+          if (lL[i]) row2(lL[i][0], lL[i][1], c1, y)
+          if (lR[i]) row2(lR[i][0], lR[i][1], c2, y)
+          y += 5.5
+        }
+      }
+
+      // Filtros
+      const filtPairs = [
+        ['Filtro Aceite', safeFilters.oilFilter],
+        ['Filtro Combustible', safeFilters.fuelFilter],
+        ['Filtro TA', safeFilters.taFilter],
+        ['Filtro Aire Primario', safeFilters.primaryAirFilter],
+        ['Filtro Aire Secundario', safeFilters.secondaryAirFilter],
+        ['Filtro Habitáculo', safeFilters.cabinFilter],
+      ].filter(([, v]) => Boolean(v)) as [string, string][]
+
+      if (filtPairs.length > 0) {
+        y += 3
+        y = section('Filtros', y)
+        const fL = filtPairs.filter((_, i) => i % 2 === 0)
+        const fR = filtPairs.filter((_, i) => i % 2 === 1)
+        for (let i = 0; i < Math.max(fL.length, fR.length); i++) {
+          if (fL[i]) row2(fL[i][0], fL[i][1], c1, y)
+          if (fR[i]) row2(fR[i][0], fR[i][1], c2, y)
+          y += 5.5
+        }
+      }
+
+      // Hidrogrúa
+      if (selectedUnit.hasHydroCrane) {
+        y += 3
+        y = section('Hidrogrúa', y)
+        row2('Marca', selectedUnit.hydroCraneBrand, c1, y)
+        row2('Modelo', selectedUnit.hydroCraneModel, c2, y)
+        y += 5.5
+        row2('N° serie', selectedUnit.hydroCraneSerialNumber, c1, y)
+        y += 5.5
+      }
+
+      // Semirremolque
+      if (selectedUnit.hasSemiTrailer) {
+        y += 3
+        y = section('Semirremolque', y)
+        row2('Dominio', associatedSemiTrailer?.internalCode || selectedUnit.semiTrailerLicensePlate, c1, y)
+        row2('Marca', associatedSemiTrailer?.semiTrailerBrand || selectedUnit.semiTrailerBrand, c2, y)
+        y += 5.5
+        row2('Modelo', associatedSemiTrailer?.semiTrailerModel || selectedUnit.semiTrailerModel, c1, y)
+        row2('N° chasis', associatedSemiTrailer?.semiTrailerChassisNumber || selectedUnit.semiTrailerChassisNumber, c2, y)
+        y += 5.5
+      }
+
+      // Footer
+      doc.setDrawColor(226, 232, 240)
+      doc.line(mg, pageH - 12, pageW - mg, pageH - 12)
+      txt(
+        `Ficha técnica generada el ${new Date().toLocaleString('es-AR')} · Sistema SIGF`,
+        pageW / 2,
+        pageH - 7,
+        { size: 7, color: [148, 163, 184], align: 'center' },
+      )
+
+      doc.save(`Ficha-${selectedUnit.internalCode}.pdf`)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo generar el PDF.')
+    } finally {
+      setIsDownloadingFicha(false)
+    }
   }
 
   if (!unitId || !selectedUnit) {
@@ -932,10 +989,11 @@ export const FleetDetailPage = () => {
             ) : null}
             <button
               type="button"
-              onClick={handlePrintFicha}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              onClick={() => { void handleDownloadFichaPdf() }}
+              disabled={isDownloadingFicha}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
-              Imprimir ficha
+              {isDownloadingFicha ? 'Generando PDF...' : 'Descargar ficha PDF'}
             </button>
             <button
               type="button"
