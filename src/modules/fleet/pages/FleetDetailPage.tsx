@@ -1,4 +1,5 @@
 ﻿import { useMemo, useState } from 'react'
+import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { Link, useParams } from 'react-router-dom'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -761,9 +762,15 @@ export const FleetDetailPage = () => {
 
       const pageW = 210
       const pageH = 297
-      const mg = 15
+      const mg = 14
       const cW = pageW - mg * 2
-      let y = mg
+      let y = 0
+
+      // Colores Enertrans
+      const BLACK: [number, number, number] = [10, 10, 10]
+      const YELLOW: [number, number, number] = [245, 195, 0]
+      const GRAY_LABEL: [number, number, number] = [100, 100, 100]
+      const GRAY_LIGHT: [number, number, number] = [240, 240, 240]
 
       const txt = (
         text: string,
@@ -773,98 +780,123 @@ export const FleetDetailPage = () => {
       ) => {
         doc.setFontSize(opts?.size ?? 10)
         doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal')
-        const c = opts?.color ?? ([15, 23, 42] as [number, number, number])
+        const c = opts?.color ?? BLACK
         doc.setTextColor(c[0], c[1], c[2])
         doc.text(text, x, yPos, { align: opts?.align ?? 'left' })
       }
 
       const section = (title: string, yPos: number): number => {
-        doc.setFillColor(241, 245, 249)
-        doc.rect(mg, yPos, cW, 6, 'F')
-        txt(title.toUpperCase(), mg + 3, yPos + 4.2, { size: 7.5, bold: true, color: [100, 116, 139] })
-        return yPos + 8
+        // Barra amarilla fina a la izquierda + fondo gris claro
+        doc.setFillColor(...GRAY_LIGHT)
+        doc.rect(mg, yPos, cW, 6.5, 'F')
+        doc.setFillColor(...YELLOW)
+        doc.rect(mg, yPos, 2.5, 6.5, 'F')
+        txt(title.toUpperCase(), mg + 5, yPos + 4.5, { size: 7.5, bold: true, color: BLACK })
+        return yPos + 9
       }
 
-      const row2 = (label: string, value: string, x: number, yPos: number): number => {
-        txt(label, x, yPos, { size: 8, color: [71, 85, 105] })
-        txt(value || '—', x + cW * 0.25, yPos, { size: 8.5, bold: true })
-        return yPos + 5.5
+      const dataRow = (label: string, value: string, x: number, yPos: number) => {
+        txt(label, x, yPos, { size: 8, color: GRAY_LABEL })
+        txt(value || '—', x, yPos + 4.5, { size: 9, bold: true, color: BLACK })
       }
 
-      // Header bar
-      doc.setFillColor(15, 23, 42)
-      doc.rect(0, 0, pageW, 20, 'F')
-      txt('FICHA TÉCNICA DEL VEHÍCULO', mg, 9, { size: 13, bold: true, color: [255, 255, 255] })
-      txt(`SIGF · ${new Date().toLocaleDateString('es-AR')}`, mg, 16, { size: 8, color: [148, 163, 184] })
+      // ── HEADER NEGRO ──────────────────────────────────────────
+      doc.setFillColor(...BLACK)
+      doc.rect(0, 0, pageW, 28, 'F')
 
-      y = 28
+      // Logo Enertrans
+      try {
+        const logoData = await fetchImageAsDataUrl(enertransLogoUrl)
+        doc.addImage(logoData, 'PNG', mg, 2, 22, 22)
+      } catch { /* skip logo */ }
 
-      // Photo
+      // Nombre empresa y título
+      txt('ENERTRANS', mg + 25, 10, { size: 14, bold: true, color: [255, 255, 255] })
+      txt('Hidrogrúas · Logística', mg + 25, 16, { size: 8, color: YELLOW })
+      txt('FICHA TÉCNICA DEL VEHÍCULO', pageW - mg, 10, { size: 11, bold: true, color: YELLOW, align: 'right' })
+      txt(new Date().toLocaleDateString('es-AR'), pageW - mg, 16, { size: 7.5, color: [180, 180, 180], align: 'right' })
+
+      // Línea amarilla decorativa
+      doc.setFillColor(...YELLOW)
+      doc.rect(0, 28, pageW, 1.5, 'F')
+
+      y = 36
+
+      // ── FOTO + DATOS PRINCIPALES ──────────────────────────────
       let photoLoaded = false
       if (selectedUnit.profilePhotoUrl) {
         try {
           const photoData = await fetchImageAsDataUrl(selectedUnit.profilePhotoUrl)
-          doc.addImage(photoData, 'JPEG', mg, y, 58, 43)
+          doc.addImage(photoData, 'JPEG', mg, y, 72, 52)
+          // Borde amarillo alrededor de la foto
+          doc.setDrawColor(...YELLOW)
+          doc.setLineWidth(0.8)
+          doc.rect(mg, y, 72, 52)
           photoLoaded = true
         } catch { /* skip */ }
       }
 
-      const infoX = photoLoaded ? mg + 63 : mg
-      txt(selectedUnit.internalCode, infoX, y + 8, { size: 16, bold: true })
-      txt(getFleetUnitTypeLabel(selectedUnit.unitType), infoX, y + 15, { size: 9.5, color: [71, 85, 105] })
-      txt(selectedUnit.ownerCompany, infoX, y + 21, { size: 8.5, color: [100, 116, 139] })
+      const infoX = photoLoaded ? mg + 77 : mg
+      const infoW = photoLoaded ? cW - 77 : cW
 
-      const statusColors: Record<string, [number, number, number]> = {
-        OPERATIONAL: [22, 163, 74],
-        MAINTENANCE: [217, 119, 6],
-        OUT_OF_SERVICE: [220, 38, 38],
+      // Dominio / código del vehículo
+      txt(selectedUnit.internalCode, infoX, y + 10, { size: 20, bold: true, color: BLACK })
+
+      // Línea amarilla bajo el dominio
+      doc.setFillColor(...YELLOW)
+      doc.rect(infoX, y + 13, infoW, 0.8, 'F')
+
+      txt(`${selectedUnit.brand} ${selectedUnit.model}`.trim() || '—', infoX, y + 20, { size: 10.5, bold: true, color: BLACK })
+      txt(getFleetUnitTypeLabel(selectedUnit.unitType), infoX, y + 27, { size: 9, color: GRAY_LABEL })
+      txt(`Año: ${selectedUnit.year || '—'}`, infoX, y + 33, { size: 9, color: GRAY_LABEL })
+      if (selectedUnit.clientName) {
+        txt(`Cliente: ${selectedUnit.clientName}`, infoX, y + 39, { size: 9, color: GRAY_LABEL })
       }
-      const sc = statusColors[selectedUnit.operationalStatus] ?? ([100, 116, 139] as [number, number, number])
-      doc.setFillColor(sc[0], sc[1], sc[2])
-      doc.roundedRect(infoX, y + 26, 48, 7, 2, 2, 'F')
-      txt(getOperationalStatusLabel(selectedUnit.operationalStatus), infoX + 24, y + 31, {
-        size: 8,
-        bold: true,
-        color: [255, 255, 255],
-        align: 'center',
-      })
+      if (selectedUnit.location) {
+        txt(`Ubicación: ${selectedUnit.location}`, infoX, y + 45, { size: 9, color: GRAY_LABEL })
+      }
 
-      y += photoLoaded ? 50 : 36
+      y += photoLoaded ? 58 : 52
 
-      // Datos del vehículo
+      // ── DATOS DEL VEHÍCULO ────────────────────────────────────
       y = section('Datos del vehículo', y + 4)
-      const c1 = mg
-      const c2 = mg + cW / 2
 
-      const specs: [string, string][] = [
-        ['Marca', selectedUnit.brand],
-        ['Modelo', selectedUnit.model],
-        ['Año', String(selectedUnit.year || '')],
-        ['Cliente', selectedUnit.clientName],
-        ['Ubicación', selectedUnit.location],
-        ['N° chasis', selectedUnit.chassisNumber],
-        ['N° motor', selectedUnit.engineNumber],
-        ...(selectedUnit.engineCylinders ? [['Cilindros', `${selectedUnit.engineCylinders} cil.`] as [string, string]] : []),
-        ...(selectedUnit.currentKilometers ? [['Km actuales', `${selectedUnit.currentKilometers.toLocaleString('es-AR')} km`] as [string, string]] : []),
-        ...(selectedUnit.currentEngineHours ? [['Horas motor', `${selectedUnit.currentEngineHours.toLocaleString('es-AR')} hs`] as [string, string]] : []),
-        ...(selectedUnit.tareWeightKg ? [['Tara', `${selectedUnit.tareWeightKg} kg`] as [string, string]] : []),
-        ...(selectedUnit.maxLoadKg ? [['Carga máx', `${selectedUnit.maxLoadKg} kg`] as [string, string]] : []),
+      const col1 = mg
+      const col2 = mg + cW / 3
+      const col3 = mg + (cW / 3) * 2
+      const rowH = 11
+
+      const specs: [string, string, string][] = [
+        ['N° Chasis', selectedUnit.chassisNumber, ''],
+        ['N° Motor', selectedUnit.engineNumber, ''],
+        ...(selectedUnit.engineCylinders ? [['Cilindros', `${selectedUnit.engineCylinders} cil.`, ''] as [string, string, string]] : []),
+        ...(selectedUnit.currentKilometers ? [['Km actuales', `${selectedUnit.currentKilometers.toLocaleString('es-AR')} km`, ''] as [string, string, string]] : []),
+        ...(selectedUnit.currentEngineHours ? [['Horas motor', `${selectedUnit.currentEngineHours.toLocaleString('es-AR')} hs`, ''] as [string, string, string]] : []),
+        ...(selectedUnit.tareWeightKg ? [['Tara', `${selectedUnit.tareWeightKg} kg`, ''] as [string, string, string]] : []),
+        ...(selectedUnit.maxLoadKg ? [['Carga máx.', `${selectedUnit.maxLoadKg} kg`, ''] as [string, string, string]] : []),
       ]
-      const sL = specs.filter((_, i) => i % 2 === 0)
-      const sR = specs.filter((_, i) => i % 2 === 1)
-      for (let i = 0; i < Math.max(sL.length, sR.length); i++) {
-        if (sL[i]) row2(sL[i][0], sL[i][1], c1, y)
-        if (sR[i]) row2(sR[i][0], sR[i][1], c2, y)
-        y += 5.5
+
+      // En filas de a 3 columnas
+      const specGroups: [string, string][][] = []
+      for (let i = 0; i < specs.length; i += 3) {
+        specGroups.push(specs.slice(i, i + 3).map(([l, v]) => [l, v]))
       }
+      for (const group of specGroups) {
+        const cols = [col1, col2, col3]
+        group.forEach(([label, value], idx) => { dataRow(label, value, cols[idx] ?? col1, y) })
+        y += rowH
+      }
+
       if (selectedUnit.configurationNotes) {
         y += 2
-        const lines = doc.splitTextToSize(`Configuración: ${selectedUnit.configurationNotes}`, cW) as string[]
-        txt(lines.join('\n'), mg, y, { size: 8, color: [71, 85, 105] })
-        y += lines.length * 4.5
+        txt('Notas de configuración:', col1, y, { size: 7.5, color: GRAY_LABEL })
+        y += 4
+        const lines = doc.splitTextToSize(selectedUnit.configurationNotes, cW) as string[]
+        txt(lines.join('\n'), col1, y, { size: 8.5, color: BLACK })
+        y += lines.length * 4.8
       }
 
-      // Lubricantes
+      // ── LUBRICANTES ───────────────────────────────────────────
       const lubPairs = [
         ['Aceite Motor', safeLubricants.engineOil],
         ['Litros Motor', safeLubricants.engineOilLiters],
@@ -878,18 +910,18 @@ export const FleetDetailPage = () => {
       ].filter(([, v]) => Boolean(v)) as [string, string][]
 
       if (lubPairs.length > 0) {
-        y += 3
+        y += 4
         y = section('Lubricantes', y)
-        const lL = lubPairs.filter((_, i) => i % 2 === 0)
-        const lR = lubPairs.filter((_, i) => i % 2 === 1)
-        for (let i = 0; i < Math.max(lL.length, lR.length); i++) {
-          if (lL[i]) row2(lL[i][0], lL[i][1], c1, y)
-          if (lR[i]) row2(lR[i][0], lR[i][1], c2, y)
-          y += 5.5
+        const lubGroups: [string, string][][] = []
+        for (let i = 0; i < lubPairs.length; i += 3) lubGroups.push(lubPairs.slice(i, i + 3))
+        for (const group of lubGroups) {
+          const cols = [col1, col2, col3]
+          group.forEach(([label, value], idx) => { dataRow(label, value, cols[idx] ?? col1, y) })
+          y += rowH
         }
       }
 
-      // Filtros
+      // ── FILTROS ───────────────────────────────────────────────
       const filtPairs = [
         ['Filtro Aceite', safeFilters.oilFilter],
         ['Filtro Combustible', safeFilters.fuelFilter],
@@ -900,48 +932,50 @@ export const FleetDetailPage = () => {
       ].filter(([, v]) => Boolean(v)) as [string, string][]
 
       if (filtPairs.length > 0) {
-        y += 3
+        y += 4
         y = section('Filtros', y)
-        const fL = filtPairs.filter((_, i) => i % 2 === 0)
-        const fR = filtPairs.filter((_, i) => i % 2 === 1)
-        for (let i = 0; i < Math.max(fL.length, fR.length); i++) {
-          if (fL[i]) row2(fL[i][0], fL[i][1], c1, y)
-          if (fR[i]) row2(fR[i][0], fR[i][1], c2, y)
-          y += 5.5
+        const filtGroups: [string, string][][] = []
+        for (let i = 0; i < filtPairs.length; i += 3) filtGroups.push(filtPairs.slice(i, i + 3))
+        for (const group of filtGroups) {
+          const cols = [col1, col2, col3]
+          group.forEach(([label, value], idx) => { dataRow(label, value, cols[idx] ?? col1, y) })
+          y += rowH
         }
       }
 
-      // Hidrogrúa
+      // ── HIDROGRÚA ─────────────────────────────────────────────
       if (selectedUnit.hasHydroCrane) {
-        y += 3
+        y += 4
         y = section('Hidrogrúa', y)
-        row2('Marca', selectedUnit.hydroCraneBrand, c1, y)
-        row2('Modelo', selectedUnit.hydroCraneModel, c2, y)
-        y += 5.5
-        row2('N° serie', selectedUnit.hydroCraneSerialNumber, c1, y)
-        y += 5.5
+        dataRow('Marca', selectedUnit.hydroCraneBrand, col1, y)
+        dataRow('Modelo', selectedUnit.hydroCraneModel, col2, y)
+        dataRow('N° serie', selectedUnit.hydroCraneSerialNumber, col3, y)
+        y += rowH
       }
 
-      // Semirremolque
+      // ── SEMIRREMOLQUE ─────────────────────────────────────────
       if (selectedUnit.hasSemiTrailer) {
-        y += 3
+        y += 4
         y = section('Semirremolque', y)
-        row2('Dominio', associatedSemiTrailer?.internalCode || selectedUnit.semiTrailerLicensePlate, c1, y)
-        row2('Marca', associatedSemiTrailer?.semiTrailerBrand || selectedUnit.semiTrailerBrand, c2, y)
-        y += 5.5
-        row2('Modelo', associatedSemiTrailer?.semiTrailerModel || selectedUnit.semiTrailerModel, c1, y)
-        row2('N° chasis', associatedSemiTrailer?.semiTrailerChassisNumber || selectedUnit.semiTrailerChassisNumber, c2, y)
-        y += 5.5
+        dataRow('Dominio', associatedSemiTrailer?.internalCode || selectedUnit.semiTrailerLicensePlate, col1, y)
+        dataRow('Marca', associatedSemiTrailer?.semiTrailerBrand || selectedUnit.semiTrailerBrand, col2, y)
+        dataRow('Modelo', associatedSemiTrailer?.semiTrailerModel || selectedUnit.semiTrailerModel, col3, y)
+        y += rowH
+        dataRow('N° chasis', associatedSemiTrailer?.semiTrailerChassisNumber || selectedUnit.semiTrailerChassisNumber, col1, y)
+        y += rowH
       }
 
-      // Footer
-      doc.setDrawColor(226, 232, 240)
-      doc.line(mg, pageH - 12, pageW - mg, pageH - 12)
+      // ── FOOTER ────────────────────────────────────────────────
+      doc.setFillColor(...BLACK)
+      doc.rect(0, pageH - 14, pageW, 14, 'F')
+      doc.setFillColor(...YELLOW)
+      doc.rect(0, pageH - 14, pageW, 1, 'F')
+      txt('ENERTRANS · Hidrogrúas y Logística', mg, pageH - 6, { size: 7.5, bold: true, color: [255, 255, 255] })
       txt(
-        `Ficha técnica generada el ${new Date().toLocaleString('es-AR')} · Sistema SIGF`,
-        pageW / 2,
-        pageH - 7,
-        { size: 7, color: [148, 163, 184], align: 'center' },
+        `Generado el ${new Date().toLocaleString('es-AR')}`,
+        pageW - mg,
+        pageH - 6,
+        { size: 7, color: [160, 160, 160], align: 'right' },
       )
 
       doc.save(`Ficha-${selectedUnit.internalCode}.pdf`)
