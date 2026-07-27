@@ -19,6 +19,7 @@ export type PermissionModule =
   | 'USERS'
   | 'MAINTENANCE_MODE'
   | 'POSTVENTA'
+  | 'SERVICE_ORDERS'
 
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete'
 
@@ -44,6 +45,7 @@ const permissionModules: PermissionModule[] = [
   'USERS',
   'MAINTENANCE_MODE',
   'POSTVENTA',
+  'SERVICE_ORDERS',
 ]
 
 const permissionActions: PermissionAction[] = ['view', 'create', 'edit', 'delete']

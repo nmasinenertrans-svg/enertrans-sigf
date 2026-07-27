@@ -130,6 +130,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setServiceOrders: (orders) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, serviceOrders: orders }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setFeatureFlags: (flags) => {
         setState((previousState) => {
           const nextState = { ...previousState, featureFlags: flags }

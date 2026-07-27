@@ -17,6 +17,7 @@ import type {
   InventoryItem,
   MaintenancePlan,
   RepairRecord,
+  ServiceOrder,
   Supplier,
   UserInboxNotification,
   WorkOrder,
@@ -102,6 +103,7 @@ export const AppLayout = () => {
       currentUser,
       maintenanceStatus,
       featureFlags,
+      serviceOrders,
     },
     actions: {
       setFleetUnits,
@@ -122,6 +124,7 @@ export const AppLayout = () => {
       setGlobalLoading,
       setMaintenanceStatus,
       setFeatureFlags,
+      setServiceOrders,
     },
   } = useAppContext()
 
@@ -138,6 +141,7 @@ export const AppLayout = () => {
   const suppliersRef = useRef(suppliers)
   const deliveriesRef = useRef(deliveries)
   const inventoryRef = useRef(inventoryItems)
+  const serviceOrdersRef = useRef(serviceOrders)
   const featureFlagsRef = useRef(featureFlags)
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
   const workOrdersRefreshInProgressRef = useRef(false)
@@ -195,6 +199,10 @@ export const AppLayout = () => {
   useEffect(() => {
     inventoryRef.current = inventoryItems
   }, [inventoryItems])
+
+  useEffect(() => {
+    serviceOrdersRef.current = serviceOrders
+  }, [serviceOrders])
 
   useEffect(() => {
     featureFlagsRef.current = featureFlags
@@ -309,6 +317,7 @@ export const AppLayout = () => {
           deliveriesResponse,
           inventoryResponse,
           userNotificationsResponse,
+          serviceOrdersResponse,
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
@@ -327,6 +336,9 @@ export const AppLayout = () => {
           shouldSyncDeliveries ? safeRequest<DeliveryOperation[]>('/deliveries', { silent: true }) : Promise.resolve(null),
           shouldSyncInventory ? safeRequest<InventoryItem[]>('/inventory', { silent: true }) : Promise.resolve(null),
           safeRequest<UserInboxNotification[]>('/notifications', { silent: true }),
+          canUser(currentUserRef.current ?? null, 'SERVICE_ORDERS', 'view')
+            ? safeRequest<ServiceOrder[]>('/service-orders', { silent: true })
+            : Promise.resolve(null),
         ])
 
         const mappedAudits: AuditRecord[] | null = auditsResponse
@@ -469,6 +481,9 @@ export const AppLayout = () => {
         if (userNotificationsResponse) {
           setUserNotifications(userNotificationsResponse)
         }
+        if (serviceOrdersResponse) {
+          setServiceOrders(mergeByIdWithLocal(serviceOrdersResponse, serviceOrdersRef.current) ?? serviceOrdersResponse)
+        }
       } finally {
         setGlobalLoading(false)
         isFetchingRef.current = false
@@ -495,6 +510,7 @@ export const AppLayout = () => {
     setAppError,
     setGlobalLoading,
     setCurrentUser,
+    setServiceOrders,
   ])
 
   useEffect(() => {

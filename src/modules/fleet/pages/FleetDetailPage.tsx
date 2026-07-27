@@ -3,7 +3,7 @@ import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { Link, useParams } from 'react-router-dom'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { buildFleetDetailPath, buildFleetEditPath, ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { buildFleetDetailPath, buildFleetEditPath, buildServiceOrderDetailPath, ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import { BackLink } from '../../../components/shared/BackLink'
 import {
@@ -24,6 +24,7 @@ const detailTabs = [
   { id: 'externalRequests', label: 'Notas externas' },
   { id: 'movements', label: 'Remitos' },
   { id: 'inventory', label: 'Inventario asociado' },
+  { id: 'serviceOrders', label: 'Órdenes de Servicio' },
 ] as const
 
 type DetailTabId = (typeof detailTabs)[number]['id']
@@ -130,7 +131,7 @@ export const FleetDetailPage = () => {
   const [isCopyingSpecs, setIsCopyingSpecs] = useState(false)
 
   const {
-    state: { currentUser, fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements },
+    state: { currentUser, fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements, serviceOrders },
     actions: { setFleetUnits },
   } = useAppContext()
 
@@ -1802,6 +1803,41 @@ export const FleetDetailPage = () => {
               ) : (
                 <p className="text-xs text-slate-500">Sin inventario asociado.</p>
               )}
+            </div>
+          ) : null}
+
+          {activeTab === 'serviceOrders' ? (
+            <div className="space-y-2">
+              {(() => {
+                const unitOs = serviceOrders.filter((os) => os.unitId === selectedUnit.id)
+                const statusColors: Record<string, string> = {
+                  OPEN: 'bg-red-100 text-red-800',
+                  IN_PROGRESS: 'bg-amber-100 text-amber-800',
+                  WAITING_PARTS: 'bg-blue-100 text-blue-800',
+                  CLOSED: 'bg-green-100 text-green-800',
+                }
+                const statusLabels: Record<string, string> = {
+                  OPEN: 'Abierta',
+                  IN_PROGRESS: 'En proceso',
+                  WAITING_PARTS: 'Esperando repuestos',
+                  CLOSED: 'Cerrada',
+                }
+                if (unitOs.length === 0) {
+                  return <p className="text-xs text-slate-500">No hay órdenes de servicio para esta unidad.</p>
+                }
+                return unitOs.map((os) => (
+                  <Link key={os.id} to={buildServiceOrderDetailPath(os.id)} className="block rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 hover:bg-slate-100">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-bold text-slate-700">{os.code}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusColors[os.status] ?? ''}`}>
+                        {statusLabels[os.status] ?? os.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-800 line-clamp-2">{os.reportedFault}</p>
+                    <p className="mt-1 text-xs text-slate-500">{new Date(os.createdAt).toLocaleDateString('es-AR')}</p>
+                  </Link>
+                ))
+              })()}
             </div>
           ) : null}
         </div>

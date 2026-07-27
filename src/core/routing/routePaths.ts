@@ -33,6 +33,10 @@
   },
   postventa: '/postventa',
   checklistV2: '/checklist-v2',
+  serviceOrders: {
+    list: '/service-orders',
+    detail: '/service-orders/:serviceOrderId',
+  },
 } as const
 
 const unitIdPlaceholder = ':unitId'
@@ -48,3 +52,7 @@ export const buildSupplierDetailPath = (supplierId: string): string =>
 const projectIdPlaceholder = ':projectId'
 export const buildProjectDetailPath = (projectId: string): string =>
   ROUTE_PATHS.projects.detail.replace(projectIdPlaceholder, projectId)
+
+const serviceOrderIdPlaceholder = ':serviceOrderId'
+export const buildServiceOrderDetailPath = (serviceOrderId: string): string =>
+  ROUTE_PATHS.serviceOrders.detail.replace(serviceOrderIdPlaceholder, serviceOrderId)

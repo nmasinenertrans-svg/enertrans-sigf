@@ -24,6 +24,7 @@ export const permissionModules = [
   'MAINTENANCE_MODE',
   'POSTVENTA',
   'CHECKLIST_V2',
+  'SERVICE_ORDERS',
 ] as const
 export type PermissionModule = (typeof permissionModules)[number]
 
@@ -685,6 +686,38 @@ export interface FleetProject {
   createdAt: string
   updatedAt: string
   items: FleetProjectItem[]
+}
+
+export const serviceOrderStatuses = ['OPEN', 'IN_PROGRESS', 'WAITING_PARTS', 'CLOSED'] as const
+export type ServiceOrderStatus = (typeof serviceOrderStatuses)[number]
+
+export const serviceOrderOrigins = ['EMAIL', 'PHONE_CALL', 'WHATSAPP', 'INTERNAL_INSPECTION'] as const
+export type ServiceOrderOrigin = (typeof serviceOrderOrigins)[number]
+
+export interface ServiceOrder {
+  id: string
+  code: string
+  unitId?: string | null
+  externalVehicle?: string | null
+  clientId?: string | null
+  clientName: string
+  reportedFault: string
+  claimOrigin: ServiceOrderOrigin
+  status: ServiceOrderStatus
+  estimatedResolutionAt?: string | null
+  closedAt?: string | null
+  resolutionDetail: string
+  assignedToUserId?: string | null
+  assignedToName: string
+  sparePartsUsed: string
+  photoUrls: string[]
+  createdByUserId: string
+  createdAt: string
+  updatedAt: string
+  unit?: { id: string; internalCode: string; brand: string; model: string } | null
+  client?: { id: string; name: string } | null
+  createdBy?: { id: string; name: string }
+  assignedTo?: { id: string; name: string } | null
 }
 
 export interface PostventaEvent {

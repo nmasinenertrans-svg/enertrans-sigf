@@ -26,6 +26,8 @@ import { CrmPage } from '../../modules/crm/pages/CrmPage'
 import { ProjectsPage } from '../../modules/projects/pages/ProjectsPage'
 import { ProjectDetailPage } from '../../modules/projects/pages/ProjectDetailPage'
 import { PostventaPage } from '../../modules/postventa/pages/PostventaPage'
+import { ServiceOrdersPage } from '../../modules/serviceOrders/pages/ServiceOrdersPage'
+import { ServiceOrderDetailPage } from '../../modules/serviceOrders/pages/ServiceOrderDetailPage'
 import { ChecklistV2Page } from '../../modules/checklistV2/pages/ChecklistV2Page'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
@@ -302,6 +304,22 @@ export const AppRouter = () => (
           element={
             <RequirePermission module="CHECKLIST_V2" action="view">
               <ChecklistV2Page />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.serviceOrders.list}
+          element={
+            <RequirePermission module="SERVICE_ORDERS" action="view">
+              <ServiceOrdersPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.serviceOrders.detail}
+          element={
+            <RequirePermission module="SERVICE_ORDERS" action="view">
+              <ServiceOrderDetailPage />
             </RequirePermission>
           }
         />

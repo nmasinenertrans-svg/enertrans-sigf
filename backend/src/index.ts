@@ -24,6 +24,7 @@ import notificationsRoutes from './routes/notifications.js'
 import crmRoutes from './routes/crm.js'
 import projectsRoutes from './routes/projects.js'
 import postventaRoutes from './routes/postventa.js'
+import serviceOrdersRoutes from './routes/serviceOrders.js'
 import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
@@ -77,6 +78,7 @@ app.use('/tasks', requireAuth, requirePermission('TASKS', 'view'), tasksRoutes)
 app.use('/crm', requireAuth, crmRoutes)
 app.use('/projects', requireAuth, requirePermission('PROJECTS', 'view'), projectsRoutes)
 app.use('/postventa', requireAuth, requirePermission('POSTVENTA', 'view'), postventaRoutes)
+app.use('/service-orders', requireAuth, requirePermission('SERVICE_ORDERS', 'view'), serviceOrdersRoutes)
 app.use('/files', requireAuth, filesRoutes)
 
 Sentry.setupExpressErrorHandler(app)

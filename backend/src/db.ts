@@ -298,6 +298,39 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "engineCylinders" INTEGER;`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "profilePhotoUrl" TEXT;`)
 
+    // ServiceOrder: crea enum types y tabla
+    await safeCreateEnumType('ServiceOrderStatus', ['OPEN', 'IN_PROGRESS', 'WAITING_PARTS', 'CLOSED'])
+    await safeCreateEnumType('ServiceOrderOrigin', ['EMAIL', 'PHONE_CALL', 'WHATSAPP', 'INTERNAL_INSPECTION'])
+    await safeExecuteCompatSql(`
+      CREATE TABLE IF NOT EXISTS "ServiceOrder" (
+        "id"                    TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+        "code"                  TEXT NOT NULL,
+        "unitId"                TEXT,
+        "externalVehicle"       TEXT,
+        "clientId"              TEXT,
+        "clientName"            TEXT NOT NULL DEFAULT '',
+        "reportedFault"         TEXT NOT NULL DEFAULT '',
+        "claimOrigin"           TEXT NOT NULL DEFAULT 'EMAIL',
+        "status"                TEXT NOT NULL DEFAULT 'OPEN',
+        "estimatedResolutionAt" TIMESTAMP(3),
+        "closedAt"              TIMESTAMP(3),
+        "resolutionDetail"      TEXT NOT NULL DEFAULT '',
+        "assignedToUserId"      TEXT,
+        "assignedToName"        TEXT NOT NULL DEFAULT '',
+        "sparePartsUsed"        TEXT NOT NULL DEFAULT '',
+        "photoUrls"             JSONB NOT NULL DEFAULT '[]'::jsonb,
+        "createdByUserId"       TEXT NOT NULL DEFAULT '',
+        "createdAt"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt"             TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ServiceOrder_pkey" PRIMARY KEY ("id")
+      );
+    `)
+    await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "ServiceOrder_code_key" ON "ServiceOrder"("code");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "ServiceOrder_unitId_createdAt_idx" ON "ServiceOrder"("unitId","createdAt");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "ServiceOrder_status_createdAt_idx" ON "ServiceOrder"("status","createdAt");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "ServiceOrder_clientId_idx" ON "ServiceOrder"("clientId");`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "ServiceOrder_assignedToUserId_idx" ON "ServiceOrder"("assignedToUserId");`)
+
     // WorkOrder y AuditRecord: schema-qualified directo para evitar problemas de qualifyCompatSql
     const sq = quoteIdentifier(getNormalizedActiveSchema())
     for (const [tbl, col, type] of [

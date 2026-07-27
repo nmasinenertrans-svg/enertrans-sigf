@@ -12,6 +12,7 @@ import type {
   InventoryItem,
   MaintenancePlan,
   RepairRecord,
+  ServiceOrder,
   Supplier,
   UserInboxNotification,
   WorkOrder,
@@ -38,6 +39,7 @@ interface PersistedAppState {
   inventoryItems: InventoryItem[]
   userNotifications: UserInboxNotification[]
   featureFlags: FeatureFlags
+  serviceOrders: ServiceOrder[]
 }
 
 export interface AppState extends PersistedAppState {
@@ -62,6 +64,7 @@ export interface AppActions {
   setDeliveries: (deliveries: DeliveryOperation[]) => void
   setInventoryItems: (items: InventoryItem[]) => void
   setUserNotifications: (notifications: UserInboxNotification[]) => void
+  setServiceOrders: (orders: ServiceOrder[]) => void
   setFeatureFlags: (flags: FeatureFlags) => void
   setGlobalLoading: (value: boolean) => void
   setAppError: (errorMessage: string | null) => void
@@ -121,6 +124,7 @@ const defaultPersistedState: PersistedAppState = {
   inventoryItems: [],
   userNotifications: [],
   featureFlags: defaultFeatureFlags,
+  serviceOrders: [],
 }
 
 const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError'> = {
@@ -175,6 +179,7 @@ export const getInitialAppState = (): AppState => {
     inventoryItems: persistedState.inventoryItems ?? [],
     userNotifications: persistedState.userNotifications ?? [],
     featureFlags: { ...defaultFeatureFlags, ...(persistedState.featureFlags ?? {}) },
+    serviceOrders: persistedState.serviceOrders ?? [],
   }
   const fallbackUserId = typeof window !== 'undefined' ? window.localStorage.getItem(CURRENT_USER_KEY) : null
   const sessionUserId =
@@ -212,6 +217,7 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   inventoryItems: state.inventoryItems,
   userNotifications: state.userNotifications,
   featureFlags: state.featureFlags,
+  serviceOrders: state.serviceOrders,
 })
 
 export const persistAppState = (state: AppState): void => {

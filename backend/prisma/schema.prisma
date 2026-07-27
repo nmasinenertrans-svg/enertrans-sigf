@@ -134,6 +134,20 @@ enum CrmDealUnitStatus {
   LIBERADA
 }
 
+enum ServiceOrderStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_PARTS
+  CLOSED
+}
+
+enum ServiceOrderOrigin {
+  EMAIL
+  PHONE_CALL
+  WHATSAPP
+  INTERNAL_INSPECTION
+}
+
 
 model User {
   id                  String   @id @default(uuid())
@@ -151,6 +165,8 @@ model User {
   tasksCreated        Task[]      @relation("TaskCreatedBy")
   tasksAssigned       Task[]      @relation("TaskAssignedTo")
   tasksAssignedBy     Task[]      @relation("TaskAssignedBy")
+  serviceOrdersCreated   ServiceOrder[] @relation("ServiceOrderCreatedBy")
+  serviceOrdersAssigned  ServiceOrder[] @relation("ServiceOrderAssignedTo")
   taskEvents          TaskEvent[] @relation("TaskEventActor")
   deliveryOperationsRequested DeliveryOperation[] @relation("DeliveryRequestedBy")
   crmDealsCreated     CrmDeal[]      @relation("CrmDealCreatedBy")
@@ -220,6 +236,7 @@ model FleetUnit {
   crmDealLinks             CrmDealUnit[]
   fleetProjects            FleetProject[]
   postventaEvents          PostventaEvent[]
+  serviceOrders            ServiceOrder[]
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -479,6 +496,7 @@ model ClientAccount {
   units         FleetUnit[]
   deliveries    DeliveryOperation[]
   crmDeals      CrmDeal[]
+  serviceOrders ServiceOrder[]
 }
 
 model Supplier {
@@ -652,4 +670,36 @@ model FleetProjectItem {
   assignedTo User?        @relation("FleetProjectItemAssignedTo", fields: [assignedToUserId], references: [id])
 
   @@index([projectId])
+}
+
+model ServiceOrder {
+  id                    String             @id @default(uuid())
+  code                  String             @unique
+  unitId                String?
+  externalVehicle       String?
+  clientId              String?
+  clientName            String             @default("")
+  reportedFault         String
+  claimOrigin           ServiceOrderOrigin @default(EMAIL)
+  status                ServiceOrderStatus @default(OPEN)
+  estimatedResolutionAt DateTime?
+  closedAt              DateTime?
+  resolutionDetail      String             @default("")
+  assignedToUserId      String?
+  assignedToName        String             @default("")
+  sparePartsUsed        String             @default("")
+  photoUrls             Json               @default("[]")
+  createdByUserId       String
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  unit        FleetUnit?     @relation(fields: [unitId], references: [id])
+  client      ClientAccount? @relation(fields: [clientId], references: [id])
+  assignedTo  User?          @relation("ServiceOrderAssignedTo", fields: [assignedToUserId], references: [id])
+  createdBy   User           @relation("ServiceOrderCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([unitId, createdAt])
+  @@index([status, createdAt])
+  @@index([clientId])
+  @@index([assignedToUserId])
 }
