@@ -32,9 +32,7 @@ const serviceOrderUpdateSchema = z.object({
   closedAt: z.string().datetime().nullable().optional(),
 })
 
-import type { ServiceOrderStatus } from '@prisma/client'
-
-const OPEN_STATUSES: ServiceOrderStatus[] = ['OPEN', 'IN_PROGRESS', 'WAITING_PARTS']
+const OPEN_STATUSES = ['OPEN', 'IN_PROGRESS', 'WAITING_PARTS']
 
 const mapOs = (os: Record<string, unknown>) => {
   const mapUser = (u: unknown) => {
@@ -153,27 +151,27 @@ router.post('/', async (req, res) => {
 
   const data = parsed.data
 
-  // One open OS per unit at a time
-  if (data.unitId) {
-    const existing = await prisma.serviceOrder.findFirst({
-      where: { unitId: data.unitId, status: { in: OPEN_STATUSES } },
-      select: { id: true, code: true, status: true },
-    })
-    if (existing) {
-      return res.status(409).json({
-        message: `La unidad ya tiene una orden de servicio abierta (${existing.code}). Ciérrela antes de crear una nueva.`,
-        conflictingId: existing.id,
-      })
-    }
-  }
-
-  const unit = data.unitId
-    ? await prisma.fleetUnit.findUnique({ where: { id: data.unitId }, select: { internalCode: true } })
-    : null
-  const unitCode = unit?.internalCode ?? ''
-  const code = formatCode('OS', await getNextSequence('serviceOrder'), unitCode)
-
   try {
+    // One open OS per unit at a time
+    if (data.unitId) {
+      const existing = await prisma.serviceOrder.findFirst({
+        where: { unitId: data.unitId, status: { in: OPEN_STATUSES } },
+        select: { id: true, code: true, status: true },
+      })
+      if (existing) {
+        return res.status(409).json({
+          message: `La unidad ya tiene una orden de servicio abierta (${existing.code}). Ciérrela antes de crear una nueva.`,
+          conflictingId: existing.id,
+        })
+      }
+    }
+
+    const unit = data.unitId
+      ? await prisma.fleetUnit.findUnique({ where: { id: data.unitId }, select: { internalCode: true } })
+      : null
+    const unitCode = unit?.internalCode ?? ''
+    const code = formatCode('OS', await getNextSequence('serviceOrder'), unitCode)
+
     const item = await prisma.serviceOrder.create({
       data: {
         code,
@@ -214,19 +212,19 @@ router.patch('/:id', async (req, res) => {
 
   const data = parsed.data
 
-  // If closing, require resolutionDetail
-  if (data.status === 'CLOSED') {
-    const current = await prisma.serviceOrder.findUnique({
-      where: { id: req.params.id },
-      select: { resolutionDetail: true },
-    })
-    const finalDetail = data.resolutionDetail ?? current?.resolutionDetail ?? ''
-    if (!finalDetail.trim()) {
-      return res.status(400).json({ message: 'Se requiere detalle de resolución para cerrar la orden de servicio.' })
-    }
-  }
-
   try {
+    // If closing, require resolutionDetail
+    if (data.status === 'CLOSED') {
+      const current = await prisma.serviceOrder.findUnique({
+        where: { id: req.params.id },
+        select: { resolutionDetail: true },
+      })
+      const finalDetail = data.resolutionDetail ?? current?.resolutionDetail ?? ''
+      if (!finalDetail.trim()) {
+        return res.status(400).json({ message: 'Se requiere detalle de resolución para cerrar la orden de servicio.' })
+      }
+    }
+
     const updateData: Record<string, unknown> = {}
 
     if (data.clientName !== undefined) updateData.clientName = data.clientName

@@ -134,21 +134,6 @@ enum CrmDealUnitStatus {
   LIBERADA
 }
 
-enum ServiceOrderStatus {
-  OPEN
-  IN_PROGRESS
-  WAITING_PARTS
-  CLOSED
-}
-
-enum ServiceOrderOrigin {
-  EMAIL
-  PHONE_CALL
-  WHATSAPP
-  INTERNAL_INSPECTION
-}
-
-
 model User {
   id                  String   @id @default(uuid())
   username            String   @unique
@@ -680,8 +665,8 @@ model ServiceOrder {
   clientId              String?
   clientName            String             @default("")
   reportedFault         String
-  claimOrigin           ServiceOrderOrigin @default(EMAIL)
-  status                ServiceOrderStatus @default(OPEN)
+  claimOrigin           String             @default("EMAIL")
+  status                String             @default("OPEN")
   estimatedResolutionAt DateTime?
   closedAt              DateTime?
   resolutionDetail      String             @default("")
