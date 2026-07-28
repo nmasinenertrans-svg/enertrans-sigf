@@ -1429,22 +1429,20 @@ export const ReportsPage = () => {
   }
 
   const exportOccupancyXlsx = () => {
-    const summaryHeaders = [occupancyDimensionLabelMap[occupancyGroupBy], 'Unidades', 'Participación (%)']
-    const summaryRows = occupancyPivot.rows.map((row) => [row.label, row.total, Number(row.share.toFixed(1))])
+    const groupLabel = occupancyDimensionLabelMap[occupancyGroupBy]
+    const breakdownLabel = occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy]
 
-    const detailHeaders = [
-      occupancyDimensionLabelMap[occupancyGroupBy],
-      occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy],
-      'Dominio',
-      'Marca',
-      'Modelo',
-      'Año',
-      'Empresa prop.',
-      'Cliente',
-      'Tipo',
-      'Ubicación',
+    const summaryAoa: Array<Array<string | number>> = [
+      ['REPORTE DINAMICO DE FLOTA'],
+      [`Emitido: ${new Date().toLocaleString('es-AR')}`],
+      [`Agrupar por: ${groupLabel} | Desglosar por: ${breakdownLabel}`],
+      [`Total de unidades: ${occupancyPivot.totalUnits} | Grupos: ${occupancyPivot.totalGroups}`],
+      [],
+      [groupLabel, 'Unidades', 'Participación (%)'],
+      ...occupancyPivot.rows.map((row) => [row.label, row.total, Number(row.share.toFixed(1))]),
     ]
-    const detailRows = filteredOccupancyUnits
+
+    const occupancyUnitRows = filteredOccupancyUnits
       .slice()
       .sort((a, b) => {
         const groupCompare = getOccupancyDimensionValue(a, occupancyGroupBy).localeCompare(
@@ -1461,22 +1459,47 @@ export const ReportsPage = () => {
         }
         return a.internalCode.localeCompare(b.internalCode)
       })
-      .map((unit) => [
-        getOccupancyDimensionValue(unit, occupancyGroupBy),
-        getOccupancyDimensionValue(unit, effectiveOccupancyBreakdownBy),
-        unit.internalCode || 'Sin dominio',
-        unit.brand || '-',
-        unit.model || '-',
-        unit.year || '-',
-        normalizeOccupancyValue(unit.ownerCompany ?? '', 'Sin empresa'),
-        normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
-        getFleetUnitTypeLabel(unit.unitType),
-        normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
-      ])
+      .map((unit) => ({
+        groupLabel: getOccupancyDimensionValue(unit, occupancyGroupBy),
+        breakdownLabel: getOccupancyDimensionValue(unit, effectiveOccupancyBreakdownBy),
+        domain: unit.internalCode || 'Sin dominio',
+        brand: unit.brand || '-',
+        model: unit.model || '-',
+        year: unit.year || '-',
+        owner: normalizeOccupancyValue(unit.ownerCompany ?? '', 'Sin empresa'),
+        client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
+        type: getFleetUnitTypeLabel(unit.unitType),
+        location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
+      }))
+
+    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación']
+    const detailAoa: Array<Array<string | number>> = [
+      ['DETALLE DE DOMINIOS'],
+      [`Listado de ${occupancyUnitRows.length} unidades ordenadas por ${groupLabel.toLowerCase()} y ${breakdownLabel.toLowerCase()}.`],
+      [],
+    ]
+
+    let currentGroup = ''
+    let currentBreakdown = ''
+    occupancyUnitRows.forEach((row) => {
+      if (row.groupLabel !== currentGroup || row.breakdownLabel !== currentBreakdown) {
+        currentGroup = row.groupLabel
+        currentBreakdown = row.breakdownLabel
+        const sectionCount = occupancyUnitRows.filter(
+          (item) => item.groupLabel === currentGroup && item.breakdownLabel === currentBreakdown,
+        ).length
+        if (detailAoa.length > 3) {
+          detailAoa.push([])
+        }
+        detailAoa.push([`${currentGroup} · ${currentBreakdown}`, `${sectionCount} unidad(es)`])
+        detailAoa.push(detailHeaders)
+      }
+      detailAoa.push([row.domain, row.brand, row.model, row.year, row.owner, row.client, row.type, row.location])
+    })
 
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]), 'Resumen')
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows]), 'Detalle')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryAoa), 'Resumen')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(detailAoa), 'Detalle')
     XLSX.writeFile(workbook, 'ocupacion-flota-por-cliente.xlsx')
   }
 
