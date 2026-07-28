@@ -145,6 +145,7 @@ const COMPAT_TABLE_NAMES = [
   'FleetProject',
   'FleetProjectItem',
   'PostventaEvent',
+  'ServiceOrder',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
