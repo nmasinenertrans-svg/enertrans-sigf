@@ -1428,6 +1428,58 @@ export const ReportsPage = () => {
     doc.save('ocupacion-flota-por-cliente.pdf')
   }
 
+  const exportOccupancyXlsx = () => {
+    const summaryHeaders = [occupancyDimensionLabelMap[occupancyGroupBy], 'Unidades', 'Participación (%)']
+    const summaryRows = occupancyPivot.rows.map((row) => [row.label, row.total, Number(row.share.toFixed(1))])
+
+    const detailHeaders = [
+      occupancyDimensionLabelMap[occupancyGroupBy],
+      occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy],
+      'Dominio',
+      'Marca',
+      'Modelo',
+      'Año',
+      'Empresa prop.',
+      'Cliente',
+      'Tipo',
+      'Ubicación',
+    ]
+    const detailRows = filteredOccupancyUnits
+      .slice()
+      .sort((a, b) => {
+        const groupCompare = getOccupancyDimensionValue(a, occupancyGroupBy).localeCompare(
+          getOccupancyDimensionValue(b, occupancyGroupBy),
+        )
+        if (groupCompare !== 0) {
+          return groupCompare
+        }
+        const breakdownCompare = getOccupancyDimensionValue(a, effectiveOccupancyBreakdownBy).localeCompare(
+          getOccupancyDimensionValue(b, effectiveOccupancyBreakdownBy),
+        )
+        if (breakdownCompare !== 0) {
+          return breakdownCompare
+        }
+        return a.internalCode.localeCompare(b.internalCode)
+      })
+      .map((unit) => [
+        getOccupancyDimensionValue(unit, occupancyGroupBy),
+        getOccupancyDimensionValue(unit, effectiveOccupancyBreakdownBy),
+        unit.internalCode || 'Sin dominio',
+        unit.brand || '-',
+        unit.model || '-',
+        unit.year || '-',
+        normalizeOccupancyValue(unit.ownerCompany ?? '', 'Sin empresa'),
+        normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
+        getFleetUnitTypeLabel(unit.unitType),
+        normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
+      ])
+
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]), 'Resumen')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows]), 'Detalle')
+    XLSX.writeFile(workbook, 'ocupacion-flota-por-cliente.xlsx')
+  }
+
   return (
     <section className="space-y-5">
       <header>
@@ -1452,6 +1504,13 @@ export const ReportsPage = () => {
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Descargar PDF
+              </button>
+              <button
+                type="button"
+                onClick={exportOccupancyXlsx}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Descargar Excel
               </button>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700">
                 Grupos: {occupancyPivot.totalGroups}
