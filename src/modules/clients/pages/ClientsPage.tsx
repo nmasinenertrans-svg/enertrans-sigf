@@ -3,8 +3,29 @@ import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
-import { apiRequest } from '../../../services/api/apiClient'
+import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
 import type { ClientAccount, FleetUnit } from '../../../types/domain'
+
+const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof ApiRequestError) {
+    try {
+      const parsed = JSON.parse(error.responseBody) as { message?: string }
+      if (typeof parsed?.message === 'string' && parsed.message.trim()) {
+        return parsed.message
+      }
+    } catch {
+      if (typeof error.responseBody === 'string' && error.responseBody.trim()) {
+        return error.responseBody
+      }
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return fallback
+}
 
 type ClientFormState = {
   name: string
@@ -156,8 +177,8 @@ export const ClientsPage = () => {
         setClients([created, ...clients])
       }
       resetForm()
-    } catch {
-      setAppError('No se pudo guardar el cliente.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo guardar el cliente.'))
     } finally {
       setIsSaving(false)
     }
@@ -203,8 +224,8 @@ export const ClientsPage = () => {
       if (selectedClientId === clientId) {
         setSelectedClientId('')
       }
-    } catch {
-      setAppError('No se pudo eliminar el cliente. Verifica que no tenga unidades o historial asociado.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo eliminar el cliente. Verifica que no tenga unidades o historial asociado.'))
     }
   }
 
@@ -228,8 +249,8 @@ export const ClientsPage = () => {
       setIsEditingAssignments(false)
       setUnitSearch('')
       setAppError('Asignacion de unidades actualizada.')
-    } catch {
-      setAppError('No se pudo guardar la asignacion de unidades.')
+    } catch (error) {
+      setAppError(getApiErrorMessage(error, 'No se pudo guardar la asignacion de unidades.'))
     } finally {
       setIsAssigning(false)
     }
