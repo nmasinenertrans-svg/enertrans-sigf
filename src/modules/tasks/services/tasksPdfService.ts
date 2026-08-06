@@ -203,3 +203,105 @@ export const downloadTaskPdf = async (task: TaskRecord): Promise<void> => {
 
   pdf.save(`Tarea_${task.id.slice(0, 8).toUpperCase()}.pdf`)
 }
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
+}
+
+export const downloadTasksSummaryPdf = async (tasks: TaskRecord[]): Promise<void> => {
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  let logoDataUrl: string | null = null
+
+  try {
+    logoDataUrl = await fetchImageAsDataUrl(enertransLogoUrl)
+  } catch {
+    logoDataUrl = null
+  }
+
+  const pageHeight = pdf.internal.pageSize.getHeight()
+  const marginX = 10
+
+  const sortedTasks = tasks.slice().sort((a, b) => {
+    const dateA = new Date(a.startDate || a.createdAt || 0).getTime()
+    const dateB = new Date(b.startDate || b.createdAt || 0).getTime()
+    return dateA - dateB
+  })
+
+  const columns = [
+    { label: 'N° HOJA DE TAREA', width: 32 },
+    { label: 'TAREA RESUMIDA', width: 92 },
+    { label: 'FECHA', width: 28 },
+    { label: 'FECHA APROX. FINALIZACION', width: 38 },
+  ]
+  const tableWidth = columns.reduce((sum, col) => sum + col.width, 0)
+  const rowHeight = 8
+
+  const drawPageHeader = () => {
+    if (logoDataUrl) {
+      try {
+        pdf.addImage(logoDataUrl, 'PNG', marginX, 8, 18, 18)
+      } catch {
+        // ignore
+      }
+    }
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(12)
+    pdf.setTextColor(17, 24, 39)
+    pdf.text('ENERTRANS S.R.L.', marginX + 22, 14)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.text('Listado resumen de tareas', marginX + 22, 20)
+    pdf.setFontSize(7)
+    pdf.text(`Emitido: ${new Date().toLocaleString('es-AR')}`, marginX + 22, 25)
+
+    let headerY = 34
+    pdf.setDrawColor(120, 120, 120)
+    pdf.setFillColor(242, 242, 242)
+    pdf.rect(marginX, headerY, tableWidth, rowHeight, 'F')
+    let x = marginX
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(8)
+    pdf.setTextColor(17, 24, 39)
+    columns.forEach((col) => {
+      pdf.rect(x, headerY, col.width, rowHeight)
+      pdf.text(col.label, x + 2, headerY + 5.5, { maxWidth: col.width - 3 })
+      x += col.width
+    })
+    return headerY + rowHeight
+  }
+
+  let y = drawPageHeader()
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+
+  sortedTasks.forEach((task) => {
+    if (y + rowHeight > pageHeight - 15) {
+      pdf.addPage()
+      y = drawPageHeader()
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8)
+    }
+
+    const summary = safeText(task.title) || safeText(task.description).slice(0, 90) || 'Sin descripcion'
+    const values = [
+      task.id.slice(0, 8).toUpperCase(),
+      summary,
+      formatDateOnly(task.startDate || task.createdAt),
+      formatDateOnly(task.estimatedFinishDate),
+    ]
+
+    let x = marginX
+    values.forEach((value, index) => {
+      const col = columns[index]
+      pdf.rect(x, y, col.width, rowHeight)
+      const wrapped = pdf.splitTextToSize(value, col.width - 3)
+      pdf.text(wrapped[0] ?? '', x + 2, y + 5.5)
+      x += col.width
+    })
+    y += rowHeight
+  })
+
+  pdf.save(`Tareas_Resumen_${new Date().toISOString().slice(0, 10)}.pdf`)
+}

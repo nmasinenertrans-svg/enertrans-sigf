@@ -6,7 +6,7 @@ import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { TaskPriority, TaskRecord, TaskStatus } from '../../../types/domain'
-import { downloadTaskPdf } from '../services/tasksPdfService'
+import { downloadTaskPdf, downloadTasksSummaryPdf } from '../services/tasksPdfService'
 
 type TaskFormData = {
   title: string
@@ -16,6 +16,8 @@ type TaskFormData = {
   assignedToUserId: string
   assignedToExternalName: string
   isInTaskBank: boolean
+  startDate: string
+  estimatedFinishDate: string
 }
 
 const statusLabelMap: Record<TaskStatus, string> = {
@@ -41,6 +43,19 @@ const priorityBadgeMap: Record<TaskPriority, string> = {
   URGENT: 'border-rose-200 bg-rose-50 text-rose-700',
 }
 
+const toDateInputValue = (value?: string | null): string => {
+  if (!value) {
+    return ''
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+  return date.toISOString().slice(0, 10)
+}
+
+const todayDateInputValue = (): string => new Date().toISOString().slice(0, 10)
+
 const createEmptyForm = (): TaskFormData => ({
   title: '',
   description: '',
@@ -49,6 +64,8 @@ const createEmptyForm = (): TaskFormData => ({
   assignedToUserId: '',
   assignedToExternalName: '',
   isInTaskBank: true,
+  startDate: todayDateInputValue(),
+  estimatedFinishDate: '',
 })
 
 const formatDateTime = (value?: string | null) => {
@@ -57,6 +74,14 @@ const formatDateTime = (value?: string | null) => {
   }
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-AR')
+}
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) {
+    return '-'
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
 }
 
 export const TasksPage = () => {
@@ -127,6 +152,8 @@ export const TasksPage = () => {
         assignedToUserId: formData.assignedToUserId || null,
         assignedToExternalName: formData.assignedToExternalName.trim(),
         isInTaskBank: formData.isInTaskBank,
+        startDate: formData.startDate || null,
+        estimatedFinishDate: formData.estimatedFinishDate || null,
       }
 
       if (editingTaskId) {
@@ -161,6 +188,8 @@ export const TasksPage = () => {
       assignedToUserId: task.assignedToUserId ?? '',
       assignedToExternalName: task.assignedToExternalName ?? '',
       isInTaskBank: Boolean(task.isInTaskBank),
+      startDate: toDateInputValue(task.startDate) || toDateInputValue(task.createdAt),
+      estimatedFinishDate: toDateInputValue(task.estimatedFinishDate),
     })
   }
 
@@ -348,6 +377,28 @@ export const TasksPage = () => {
                 </label>
               </div>
 
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                  Fecha de inicio
+                  <input
+                    type="date"
+                    value={formData.startDate}
+                    onChange={(event) => handleFormChange('startDate', event.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                  Fecha aprox. de finalizacion
+                  <input
+                    type="date"
+                    value={formData.estimatedFinishDate}
+                    onChange={(event) => handleFormChange('estimatedFinishDate', event.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  />
+                </label>
+              </div>
+
               <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
                 <input
                   type="checkbox"
@@ -427,7 +478,19 @@ export const TasksPage = () => {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-bold text-slate-900">Listado de tareas</h3>
+            <button
+              type="button"
+              onClick={() => downloadTasksSummaryPdf(filteredTasks)}
+              disabled={filteredTasks.length === 0}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+            >
+              Descargar resumen PDF
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-end gap-3">
             <label className="flex min-w-[220px] flex-1 flex-col gap-2 text-sm font-semibold text-slate-700">
               Buscar
               <input
@@ -629,6 +692,10 @@ export const TasksPage = () => {
                               {task.assignedToUserName ||
                                 (task.assignedToExternalName ? `${task.assignedToExternalName} (externo)` : 'Sin asignar')}{' '}
                               | Creada por {task.createdByUserName || task.createdByUserId}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Inicio: {formatDateOnly(task.startDate || task.createdAt)} | Fin aprox.:{' '}
+                              {formatDateOnly(task.estimatedFinishDate)}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">

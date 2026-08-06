@@ -623,6 +623,8 @@ export interface TaskRecord {
   createdByUserId: string
   createdByUserName?: string
   isInTaskBank: boolean
+  startDate?: string | null
+  estimatedFinishDate?: string | null
   createdAt?: string
   updatedAt?: string
   closedAt?: string | null

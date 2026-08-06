@@ -18,6 +18,8 @@ const createTaskSchema = z.object({
   assignedToUserId: z.string().uuid().nullable().optional(),
   assignedToExternalName: z.string().max(120).optional().default(''),
   isInTaskBank: z.boolean().optional().default(false),
+  startDate: z.string().nullable().optional(),
+  estimatedFinishDate: z.string().nullable().optional(),
 })
 
 const updateTaskSchema = z.object({
@@ -28,7 +30,17 @@ const updateTaskSchema = z.object({
   assignedToUserId: z.string().uuid().nullable().optional(),
   assignedToExternalName: z.string().max(120).optional(),
   isInTaskBank: z.boolean().optional(),
+  startDate: z.string().nullable().optional(),
+  estimatedFinishDate: z.string().nullable().optional(),
 })
+
+const parseOptionalDate = (value: string | null | undefined): Date | null => {
+  if (!value) {
+    return null
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
 
 const takeTaskSchema = z.object({
   status: z.enum(taskStatusValues).optional().default('ASSIGNED'),
@@ -65,6 +77,8 @@ const mapTask = (task: any) => ({
   createdByUserId: task.createdByUserId,
   createdByUserName: task.createdBy?.fullName ?? '',
   isInTaskBank: Boolean(task.isInTaskBank),
+  startDate: task.startDate ? (task.startDate.toISOString?.() ?? task.startDate) : null,
+  estimatedFinishDate: task.estimatedFinishDate ? (task.estimatedFinishDate.toISOString?.() ?? task.estimatedFinishDate) : null,
   createdAt: task.createdAt?.toISOString?.() ?? task.createdAt,
   updatedAt: task.updatedAt?.toISOString?.() ?? task.updatedAt,
   closedAt: task.closedAt ? (task.closedAt.toISOString?.() ?? task.closedAt) : null,
@@ -197,6 +211,8 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
         ? TaskStatus.ASSIGNED
         : (parsed.data.status as TaskStatus)
   const closedAt = status === TaskStatus.DONE ? new Date() : null
+  const startDate = parseOptionalDate(parsed.data.startDate) ?? new Date()
+  const estimatedFinishDate = parseOptionalDate(parsed.data.estimatedFinishDate)
 
   try {
     const task = await prisma.$transaction(async (tx) => {
@@ -211,6 +227,8 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           assignedByUserId,
           createdByUserId: actor.id,
           isInTaskBank: shouldGoToBank,
+          startDate,
+          estimatedFinishDate,
           closedAt,
         },
       })
@@ -317,6 +335,17 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     let nextIsInTaskBank = patchData.isInTaskBank !== undefined ? patchData.isInTaskBank : current.isInTaskBank
     let nextStatus = (patchData.status ?? current.status) as TaskStatus
     const nextPriority = (patchData.priority ?? current.priority) as TaskPriority
+    let nextStartDate =
+      patchData.startDate !== undefined ? (parseOptionalDate(patchData.startDate) ?? current.startDate) : current.startDate
+    let nextEstimatedFinishDate =
+      patchData.estimatedFinishDate !== undefined
+        ? parseOptionalDate(patchData.estimatedFinishDate)
+        : current.estimatedFinishDate
+
+    if (!isManager) {
+      nextStartDate = current.startDate
+      nextEstimatedFinishDate = current.estimatedFinishDate
+    }
 
     if (isManager && nextAssignedToUserId) {
       const assignedUser = await prisma.user.findUnique({ where: { id: nextAssignedToUserId }, select: { id: true } })
@@ -371,6 +400,8 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
           assignedToExternalName: nextAssignedToExternalName,
           assignedByUserId: nextAssignedByUserId,
           isInTaskBank: nextIsInTaskBank,
+          startDate: nextStartDate,
+          estimatedFinishDate: nextEstimatedFinishDate,
           closedAt,
         },
       })

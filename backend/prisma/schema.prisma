@@ -433,6 +433,8 @@ model Task {
   assignedByUserId String?
   createdByUserId  String
   isInTaskBank     Boolean      @default(false)
+  startDate        DateTime?
+  estimatedFinishDate DateTime?
   closedAt         DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
