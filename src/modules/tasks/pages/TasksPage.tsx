@@ -75,6 +75,8 @@ export const TasksPage = () => {
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | TaskPriority>('ALL')
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL')
   const [bankFilter, setBankFilter] = useState<'ALL' | 'BANK' | 'ASSIGNED'>('ALL')
+  const [assignDrafts, setAssignDrafts] = useState<Record<string, { userId: string; externalName: string }>>({})
+  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
 
   const isManager = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
   const canViewTasks = can('TASKS', 'view')
@@ -168,6 +170,53 @@ export const TasksPage = () => {
       setTasks((previous) => previous.map((task) => (task.id === updated.id ? updated : task)))
     } catch (error) {
       setAppError(String((error as Error)?.message ?? 'No se pudo tomar la tarea.'))
+    }
+  }
+
+  const getAssignDraft = (taskId: string) => assignDrafts[taskId] ?? { userId: '', externalName: '' }
+
+  const setAssignDraftUserId = (taskId: string, userId: string) => {
+    setAssignDrafts((previous) => ({
+      ...previous,
+      [taskId]: { userId, externalName: userId ? '' : (previous[taskId]?.externalName ?? '') },
+    }))
+  }
+
+  const setAssignDraftExternalName = (taskId: string, externalName: string) => {
+    setAssignDrafts((previous) => ({
+      ...previous,
+      [taskId]: { userId: externalName ? '' : (previous[taskId]?.userId ?? ''), externalName },
+    }))
+  }
+
+  const handleAssignBankTask = async (taskId: string) => {
+    const draft = getAssignDraft(taskId)
+    const externalName = draft.externalName.trim()
+    if (!draft.userId && !externalName) {
+      setAppError('Elegi un usuario o escribi un tercero para asignar la tarea.')
+      return
+    }
+
+    setAssigningTaskId(taskId)
+    try {
+      const updated = await apiRequest<TaskRecord>(`/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: {
+          assignedToUserId: draft.userId || null,
+          assignedToExternalName: externalName,
+          isInTaskBank: false,
+        },
+      })
+      setTasks((previous) => previous.map((task) => (task.id === updated.id ? updated : task)))
+      setAssignDrafts((previous) => {
+        const next = { ...previous }
+        delete next[taskId]
+        return next
+      })
+    } catch (error) {
+      setAppError(String((error as Error)?.message ?? 'No se pudo asignar la tarea.'))
+    } finally {
+      setAssigningTaskId(null)
     }
   }
 
@@ -500,6 +549,40 @@ export const TasksPage = () => {
                           Descargar PDF
                         </button>
                       </div>
+
+                      {isManager ? (
+                        <div className="mt-3 space-y-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-2">
+                          <p className="text-xs font-semibold text-slate-600">Asignar</p>
+                          <select
+                            value={getAssignDraft(task.id).userId}
+                            onChange={(event) => setAssignDraftUserId(task.id, event.target.value)}
+                            disabled={Boolean(getAssignDraft(task.id).externalName)}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-400 disabled:bg-slate-100"
+                          >
+                            <option value="">Seleccionar usuario...</option>
+                            {assignableUsers.map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {user.fullName} ({user.role})
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            value={getAssignDraft(task.id).externalName}
+                            onChange={(event) => setAssignDraftExternalName(task.id, event.target.value)}
+                            disabled={Boolean(getAssignDraft(task.id).userId)}
+                            placeholder="...o tercero sin usuario"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-400 disabled:bg-slate-100"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAssignBankTask(task.id)}
+                            disabled={assigningTaskId === task.id}
+                            className="w-full rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-70"
+                          >
+                            {assigningTaskId === task.id ? 'Asignando...' : 'Asignar'}
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ))
                 )}
