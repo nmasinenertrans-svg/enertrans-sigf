@@ -750,6 +750,19 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     $$;
   `)
 
+  // Tareas: asignacion a terceros sin usuario del sistema.
+  const hasTaskTable = await tableExistsInActiveSchema('Task')
+  if (hasTaskTable) {
+    const taskSchema = quoteIdentifier(getNormalizedActiveSchema())
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE ${taskSchema}."Task" ADD COLUMN IF NOT EXISTS "assignedToExternalName" TEXT NOT NULL DEFAULT ''`,
+      )
+    } catch (err) {
+      console.warn('[DB] ADD COLUMN Task.assignedToExternalName:', err)
+    }
+  }
+
   // NDP/Reparaciones: solo aplica cambios si tablas existen en schema activo.
   const hasExternalRequestTable = await tableExistsInActiveSchema('ExternalRequest')
   const hasRepairRecordTable = await tableExistsInActiveSchema('RepairRecord')

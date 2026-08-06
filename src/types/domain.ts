@@ -618,6 +618,7 @@ export interface TaskRecord {
   priority: TaskPriority
   assignedToUserId?: string | null
   assignedToUserName?: string
+  assignedToExternalName?: string
   assignedByUserId?: string | null
   createdByUserId: string
   createdByUserName?: string

@@ -429,6 +429,7 @@ model Task {
   status           TaskStatus   @default(UNASSIGNED)
   priority         TaskPriority @default(MEDIUM)
   assignedToUserId String?
+  assignedToExternalName String @default("")
   assignedByUserId String?
   createdByUserId  String
   isInTaskBank     Boolean      @default(false)

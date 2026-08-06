@@ -6,6 +6,7 @@ import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { TaskPriority, TaskRecord, TaskStatus } from '../../../types/domain'
+import { downloadTaskPdf } from '../services/tasksPdfService'
 
 type TaskFormData = {
   title: string
@@ -13,6 +14,7 @@ type TaskFormData = {
   status: TaskStatus
   priority: TaskPriority
   assignedToUserId: string
+  assignedToExternalName: string
   isInTaskBank: boolean
 }
 
@@ -45,6 +47,7 @@ const createEmptyForm = (): TaskFormData => ({
   status: 'UNASSIGNED',
   priority: 'MEDIUM',
   assignedToUserId: '',
+  assignedToExternalName: '',
   isInTaskBank: true,
 })
 
@@ -120,6 +123,7 @@ export const TasksPage = () => {
         status: formData.status,
         priority: formData.priority,
         assignedToUserId: formData.assignedToUserId || null,
+        assignedToExternalName: formData.assignedToExternalName.trim(),
         isInTaskBank: formData.isInTaskBank,
       }
 
@@ -153,6 +157,7 @@ export const TasksPage = () => {
       status: task.status,
       priority: task.priority,
       assignedToUserId: task.assignedToUserId ?? '',
+      assignedToExternalName: task.assignedToExternalName ?? '',
       isInTaskBank: Boolean(task.isInTaskBank),
     })
   }
@@ -201,6 +206,7 @@ export const TasksPage = () => {
         task.description,
         task.createdByUserName,
         task.assignedToUserName,
+        task.assignedToExternalName,
         statusLabelMap[task.status],
         priorityLabelMap[task.priority],
       ]
@@ -303,11 +309,18 @@ export const TasksPage = () => {
               </label>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
-                Asignar a (opcional)
+                Asignar a usuario del sistema (opcional)
                 <select
                   value={formData.assignedToUserId}
-                  onChange={(event) => handleFormChange('assignedToUserId', event.target.value)}
-                  disabled={formData.isInTaskBank}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setFormData((previous) => ({
+                      ...previous,
+                      assignedToUserId: value,
+                      assignedToExternalName: value ? '' : previous.assignedToExternalName,
+                    }))
+                  }}
+                  disabled={formData.isInTaskBank || Boolean(formData.assignedToExternalName)}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 disabled:bg-slate-100"
                 >
                   <option value="">Sin asignar</option>
@@ -317,6 +330,24 @@ export const TasksPage = () => {
                     </option>
                   ))}
                 </select>
+              </label>
+
+              <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                O asignar a un tercero sin usuario (opcional)
+                <input
+                  value={formData.assignedToExternalName}
+                  onChange={(event) => {
+                    const value = event.target.value
+                    setFormData((previous) => ({
+                      ...previous,
+                      assignedToExternalName: value,
+                      assignedToUserId: value ? '' : previous.assignedToUserId,
+                    }))
+                  }}
+                  disabled={formData.isInTaskBank || Boolean(formData.assignedToUserId)}
+                  placeholder="Nombre y apellido del contratista/tercero"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 disabled:bg-slate-100"
+                />
               </label>
 
               <div className="mt-5 flex flex-wrap gap-2">
@@ -451,15 +482,24 @@ export const TasksPage = () => {
                       <p className="mt-2 text-xs text-slate-500">
                         Creada por {task.createdByUserName || task.createdByUserId} | {formatDateTime(task.createdAt)}
                       </p>
-                      {currentUserCanTake ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {currentUserCanTake ? (
+                          <button
+                            type="button"
+                            onClick={() => handleTakeFromBank(task.id)}
+                            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Tomar tarea
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          onClick={() => handleTakeFromBank(task.id)}
-                          className="mt-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                          onClick={() => downloadTaskPdf(task)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                         >
-                          Tomar tarea
+                          Descargar PDF
                         </button>
-                      ) : null}
+                      </div>
                     </div>
                   ))
                 )}
@@ -502,18 +542,30 @@ export const TasksPage = () => {
                             <p className="mt-2 text-sm font-semibold text-slate-900">{task.title || 'Tarea sin titulo'}</p>
                             <p className="mt-1 text-sm text-slate-600">{task.description}</p>
                             <p className="mt-2 text-xs text-slate-500">
-                              Asignada a {task.assignedToUserName || 'Sin asignar'} | Creada por {task.createdByUserName || task.createdByUserId}
+                              Asignada a{' '}
+                              {task.assignedToUserName ||
+                                (task.assignedToExternalName ? `${task.assignedToExternalName} (externo)` : 'Sin asignar')}{' '}
+                              | Creada por {task.createdByUserName || task.createdByUserId}
                             </p>
                           </div>
-                          {isManager ? (
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => startEdit(task.id)}
+                              onClick={() => downloadTaskPdf(task)}
                               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                             >
-                              Editar
+                              Descargar PDF
                             </button>
-                          ) : null}
+                            {isManager ? (
+                              <button
+                                type="button"
+                                onClick={() => startEdit(task.id)}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                              >
+                                Editar
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
 
                         {canEditThisTask ? (

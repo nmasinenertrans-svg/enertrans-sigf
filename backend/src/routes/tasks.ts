@@ -16,6 +16,7 @@ const createTaskSchema = z.object({
   status: z.enum(taskStatusValues).optional().default('UNASSIGNED'),
   priority: z.enum(taskPriorityValues).optional().default('MEDIUM'),
   assignedToUserId: z.string().uuid().nullable().optional(),
+  assignedToExternalName: z.string().max(120).optional().default(''),
   isInTaskBank: z.boolean().optional().default(false),
 })
 
@@ -25,6 +26,7 @@ const updateTaskSchema = z.object({
   status: z.enum(taskStatusValues).optional(),
   priority: z.enum(taskPriorityValues).optional(),
   assignedToUserId: z.string().uuid().nullable().optional(),
+  assignedToExternalName: z.string().max(120).optional(),
   isInTaskBank: z.boolean().optional(),
 })
 
@@ -37,6 +39,8 @@ const bankTakerRoles = new Set<UserRole>(['AUDITOR', 'MECANICO'])
 
 const isManagerRole = (role: UserRole) => managerRoles.has(role)
 const canTakeFromBankRole = (role: UserRole) => bankTakerRoles.has(role)
+
+const normalizeExternalName = (value: string | null | undefined): string => (value ?? '').trim().replace(/\s+/g, ' ')
 
 const getAuthenticatedUser = async (req: AuthenticatedRequest) => {
   if (!req.userId) {
@@ -56,6 +60,7 @@ const mapTask = (task: any) => ({
   priority: task.priority,
   assignedToUserId: task.assignedToUserId ?? null,
   assignedToUserName: task.assignedTo?.fullName ?? '',
+  assignedToExternalName: task.assignedToExternalName ?? '',
   assignedByUserId: task.assignedByUserId ?? null,
   createdByUserId: task.createdByUserId,
   createdByUserName: task.createdBy?.fullName ?? '',
@@ -96,6 +101,7 @@ const buildTaskEventsFromDiff = (params: {
   next: {
     status: TaskStatus
     assignedToUserId: string | null
+    assignedToExternalName: string
     isInTaskBank: boolean
   }
 }) => {
@@ -116,13 +122,22 @@ const buildTaskEventsFromDiff = (params: {
     })
   }
 
-  if ((previous.assignedToUserId ?? null) !== (next.assignedToUserId ?? null)) {
+  const previousExternalName = previous.assignedToExternalName ?? ''
+  if (
+    (previous.assignedToUserId ?? null) !== (next.assignedToUserId ?? null) ||
+    previousExternalName !== next.assignedToExternalName
+  ) {
+    const isNowAssigned = Boolean(next.assignedToUserId) || Boolean(next.assignedToExternalName)
     events.push({
-      type: next.assignedToUserId ? TaskEventType.ASSIGNED : TaskEventType.UNASSIGNED,
+      type: isNowAssigned ? TaskEventType.ASSIGNED : TaskEventType.UNASSIGNED,
       actorUserId,
       fromAssignedToUserId: previous.assignedToUserId ?? null,
       toAssignedToUserId: next.assignedToUserId ?? null,
-      notes: '',
+      notes: next.assignedToExternalName
+        ? `Asignado a: ${next.assignedToExternalName} (externo)`
+        : previousExternalName
+          ? `Se quito la asignacion externa: ${previousExternalName}`
+          : '',
     })
   }
 
@@ -170,11 +185,15 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     : null
   const shouldGoToBank = parsed.data.isInTaskBank
   const assignedToUserId = shouldGoToBank ? null : assignedExists?.id ?? null
-  const assignedByUserId = assignedToUserId ? actor.id : null
+  // La asignacion a un tercero externo solo aplica si no hay usuario del sistema asignado.
+  const assignedToExternalName =
+    shouldGoToBank || assignedToUserId ? '' : normalizeExternalName(parsed.data.assignedToExternalName)
+  const isAssigned = Boolean(assignedToUserId) || Boolean(assignedToExternalName)
+  const assignedByUserId = isAssigned ? actor.id : null
   const status =
     shouldGoToBank
       ? TaskStatus.UNASSIGNED
-      : assignedToUserId && parsed.data.status === 'UNASSIGNED'
+      : isAssigned && parsed.data.status === 'UNASSIGNED'
         ? TaskStatus.ASSIGNED
         : (parsed.data.status as TaskStatus)
   const closedAt = status === TaskStatus.DONE ? new Date() : null
@@ -188,6 +207,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           status,
           priority: parsed.data.priority as TaskPriority,
           assignedToUserId,
+          assignedToExternalName,
           assignedByUserId,
           createdByUserId: actor.id,
           isInTaskBank: shouldGoToBank,
@@ -206,13 +226,14 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
         },
       })
 
-      if (assignedToUserId) {
+      if (isAssigned) {
         await tx.taskEvent.create({
           data: {
             taskId: created.id,
             type: TaskEventType.ASSIGNED,
             actorUserId: actor.id,
             toAssignedToUserId: assignedToUserId,
+            notes: assignedToExternalName ? `Asignado a: ${assignedToExternalName} (externo)` : '',
           },
         })
       } else if (shouldGoToBank) {
@@ -288,6 +309,10 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     const nextDescription = patchData.description !== undefined ? patchData.description.trim() : current.description
     let nextAssignedToUserId =
       patchData.assignedToUserId !== undefined ? (patchData.assignedToUserId ?? null) : (current.assignedToUserId ?? null)
+    let nextAssignedToExternalName =
+      patchData.assignedToExternalName !== undefined
+        ? normalizeExternalName(patchData.assignedToExternalName)
+        : (current.assignedToExternalName ?? '')
     let nextAssignedByUserId = current.assignedByUserId
     let nextIsInTaskBank = patchData.isInTaskBank !== undefined ? patchData.isInTaskBank : current.isInTaskBank
     let nextStatus = (patchData.status ?? current.status) as TaskStatus
@@ -300,23 +325,36 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
 
     if (!isManager) {
       nextAssignedToUserId = current.assignedToUserId
+      nextAssignedToExternalName = current.assignedToExternalName ?? ''
       nextIsInTaskBank = current.isInTaskBank
     }
 
+    // La asignacion a un usuario del sistema y a un tercero externo son mutuamente excluyentes.
+    if (nextAssignedToUserId) {
+      nextAssignedToExternalName = ''
+    }
+
+    const wasAssigned = Boolean(current.assignedToUserId) || Boolean(current.assignedToExternalName)
+    const willBeAssigned = Boolean(nextAssignedToUserId) || Boolean(nextAssignedToExternalName)
+
     if (nextIsInTaskBank) {
       nextAssignedToUserId = null
+      nextAssignedToExternalName = ''
       nextAssignedByUserId = null
       nextStatus = TaskStatus.UNASSIGNED
-    } else if (nextAssignedToUserId && nextStatus === TaskStatus.UNASSIGNED) {
+    } else if (willBeAssigned && !wasAssigned && nextStatus === TaskStatus.UNASSIGNED) {
       nextStatus = TaskStatus.ASSIGNED
       if (isManager) {
         nextAssignedByUserId = actor.id
       }
-    } else if (!nextAssignedToUserId && nextStatus === TaskStatus.ASSIGNED) {
+    } else if (!willBeAssigned && nextStatus === TaskStatus.ASSIGNED) {
       nextStatus = TaskStatus.UNASSIGNED
       nextAssignedByUserId = null
-    } else if (isManager && patchData.assignedToUserId !== undefined) {
-      nextAssignedByUserId = nextAssignedToUserId ? actor.id : null
+    } else if (
+      isManager &&
+      (patchData.assignedToUserId !== undefined || patchData.assignedToExternalName !== undefined)
+    ) {
+      nextAssignedByUserId = willBeAssigned ? actor.id : null
     }
 
     const closedAt = nextStatus === TaskStatus.DONE ? (current.closedAt ?? new Date()) : null
@@ -330,6 +368,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
           status: nextStatus,
           priority: nextPriority,
           assignedToUserId: nextAssignedToUserId,
+          assignedToExternalName: nextAssignedToExternalName,
           assignedByUserId: nextAssignedByUserId,
           isInTaskBank: nextIsInTaskBank,
           closedAt,
@@ -342,6 +381,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
         next: {
           status: nextStatus,
           assignedToUserId: nextAssignedToUserId,
+          assignedToExternalName: nextAssignedToExternalName,
           isInTaskBank: nextIsInTaskBank,
         },
       })
