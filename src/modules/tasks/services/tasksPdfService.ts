@@ -210,8 +210,18 @@ const formatDateOnly = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
 }
 
+const getResponsibleLabel = (task: TaskRecord): string => {
+  if (safeText(task.assignedToUserName)) {
+    return safeText(task.assignedToUserName)
+  }
+  if (safeText(task.assignedToExternalName)) {
+    return `${safeText(task.assignedToExternalName)} (externo)`
+  }
+  return 'Sin asignar'
+}
+
 export const downloadTasksSummaryPdf = async (tasks: TaskRecord[]): Promise<void> => {
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   let logoDataUrl: string | null = null
 
   try {
@@ -230,13 +240,18 @@ export const downloadTasksSummaryPdf = async (tasks: TaskRecord[]): Promise<void
   })
 
   const columns = [
-    { label: 'N° HOJA DE TAREA', width: 32 },
-    { label: 'TAREA RESUMIDA', width: 92 },
-    { label: 'FECHA', width: 28 },
-    { label: 'FECHA APROX. FINALIZACION', width: 38 },
-  ]
+    { key: 'code', label: 'N° HOJA DE TAREA', width: 26 },
+    { key: 'summary', label: 'TAREA RESUMIDA', width: 82 },
+    { key: 'responsible', label: 'RESPONSABLE ASIGNADO', width: 48 },
+    { key: 'status', label: 'ESTADO', width: 24 },
+    { key: 'priority', label: 'PRIORIDAD', width: 22 },
+    { key: 'startDate', label: 'FECHA INICIO', width: 26 },
+    { key: 'finishDate', label: 'FECHA APROX. FIN', width: 28 },
+  ] as const
   const tableWidth = columns.reduce((sum, col) => sum + col.width, 0)
-  const rowHeight = 8
+  const minRowHeight = 8
+  const lineHeight = 3.8
+  const maxSummaryLines = 3
 
   const drawPageHeader = () => {
     if (logoDataUrl) {
@@ -254,50 +269,55 @@ export const downloadTasksSummaryPdf = async (tasks: TaskRecord[]): Promise<void
     pdf.setFontSize(8)
     pdf.text('Listado resumen de tareas', marginX + 22, 20)
     pdf.setFontSize(7)
-    pdf.text(`Emitido: ${new Date().toLocaleString('es-AR')}`, marginX + 22, 25)
+    pdf.text(`Emitido: ${new Date().toLocaleString('es-AR')} | Total: ${sortedTasks.length} tareas`, marginX + 22, 25)
 
-    let headerY = 34
+    const headerY = 34
     pdf.setDrawColor(120, 120, 120)
     pdf.setFillColor(242, 242, 242)
-    pdf.rect(marginX, headerY, tableWidth, rowHeight, 'F')
+    pdf.rect(marginX, headerY, tableWidth, minRowHeight, 'F')
     let x = marginX
     pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(8)
+    pdf.setFontSize(7.5)
     pdf.setTextColor(17, 24, 39)
     columns.forEach((col) => {
-      pdf.rect(x, headerY, col.width, rowHeight)
-      pdf.text(col.label, x + 2, headerY + 5.5, { maxWidth: col.width - 3 })
+      pdf.rect(x, headerY, col.width, minRowHeight)
+      pdf.text(col.label, x + 2, headerY + 5.2, { maxWidth: col.width - 3 })
       x += col.width
     })
-    return headerY + rowHeight
+    return headerY + minRowHeight
   }
 
   let y = drawPageHeader()
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8)
+  pdf.setFontSize(7.5)
 
   sortedTasks.forEach((task) => {
+    const summary = safeText(task.title) || safeText(task.description) || 'Sin descripcion'
+    const summaryLines = pdf.splitTextToSize(summary, columns[1].width - 4).slice(0, maxSummaryLines)
+    const responsibleLines = pdf.splitTextToSize(getResponsibleLabel(task), columns[2].width - 4).slice(0, 2)
+    const rowHeight = Math.max(minRowHeight, Math.max(summaryLines.length, responsibleLines.length) * lineHeight + 3.5)
+
     if (y + rowHeight > pageHeight - 15) {
       pdf.addPage()
       y = drawPageHeader()
       pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(8)
+      pdf.setFontSize(7.5)
     }
 
-    const summary = safeText(task.title) || safeText(task.description).slice(0, 90) || 'Sin descripcion'
-    const values = [
-      task.id.slice(0, 8).toUpperCase(),
-      summary,
-      formatDateOnly(task.startDate || task.createdAt),
-      formatDateOnly(task.estimatedFinishDate),
-    ]
+    const values: Record<(typeof columns)[number]['key'], string[]> = {
+      code: [task.id.slice(0, 8).toUpperCase()],
+      summary: summaryLines,
+      responsible: responsibleLines,
+      status: [statusLabelMap[task.status]],
+      priority: [priorityLabelMap[task.priority]],
+      startDate: [formatDateOnly(task.startDate || task.createdAt)],
+      finishDate: [formatDateOnly(task.estimatedFinishDate)],
+    }
 
     let x = marginX
-    values.forEach((value, index) => {
-      const col = columns[index]
+    columns.forEach((col) => {
       pdf.rect(x, y, col.width, rowHeight)
-      const wrapped = pdf.splitTextToSize(value, col.width - 3)
-      pdf.text(wrapped[0] ?? '', x + 2, y + 5.5)
+      pdf.text(values[col.key], x + 2, y + 4.8, { maxWidth: col.width - 3 })
       x += col.width
     })
     y += rowHeight
