@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { getErrorCode } from '../utils/errors.js'
+import { sendPushToAllUsers } from '../services/webPush.js'
 
 const router = Router()
 const WORK_ORDER_DUPLICATE_WINDOW_MS = 15 * 60 * 1000
@@ -101,6 +102,12 @@ router.post('/', async (req, res) => {
         code,
       },
     })
+    void sendPushToAllUsers({
+      title: 'Nueva Orden de Trabajo',
+      body: unitCode ? `${code} - ${unitCode}` : code,
+      url: '/work-orders',
+      tag: 'work-order',
+    }).catch(() => undefined)
     return res.status(201).json(item)
   } catch (error: unknown) {
     if (getErrorCode(error) === 'P2002') {

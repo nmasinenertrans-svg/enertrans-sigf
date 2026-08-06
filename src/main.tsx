@@ -26,19 +26,18 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    // Hard-disable SW to avoid stale chunk/navigation cache issues in production.
-    navigator.serviceWorker
-      .getRegistrations()
-      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
-      .catch(() => null)
-
-    if ('caches' in window) {
-      caches
-        .keys()
-        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
-        .catch(() => null)
-    }
+    // sw.js usa estrategia network-first (ver public/sw.js): nunca sirve un bundle
+    // viejo mientras haya conexion, asi que registrar el SW aca no reintroduce el
+    // problema de cache stale que forzo a deshabilitarlo antes (commit 5fa7bb2).
+    // Lo necesitamos vivo para poder recibir notificaciones push con la app cerrada.
+    navigator.serviceWorker.register('/sw.js').catch(() => null)
   })
 }
+
+// When a lazy chunk fails after a new deploy, force reload once to pick the new manifest.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault()
+  window.location.reload()
+})

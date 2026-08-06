@@ -9,14 +9,66 @@ import {
   readStoredNotifications,
 } from '../../../core/notifications/notifications'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import {
+  getPushState,
+  subscribeToPush,
+  unsubscribeFromPush,
+  type PushSupportState,
+} from '../../../services/push/pushClient'
 
 type NotificationFilter = 'ALL' | 'UNREAD' | 'DANGER' | 'WARNING' | 'INFO'
+
+const pushStateLabel: Record<PushSupportState, string> = {
+  unsupported: 'Este navegador no soporta notificaciones push.',
+  denied: 'Bloqueaste los permisos de notificaciones para este sitio. Habilitalos desde la configuracion del navegador.',
+  subscribed: 'Las notificaciones push estan activas en este dispositivo.',
+  'not-subscribed': 'Activa las notificaciones para recibir avisos aunque tengas la app cerrada.',
+}
 
 export const NotificationsPage = () => {
   const navigate = useNavigate()
   const {
     state: { fleetUnits, audits, workOrders, userNotifications },
+    actions: { setAppError },
   } = useAppContext()
+
+  const [pushState, setPushState] = useState<PushSupportState | 'loading'>('loading')
+  const [isTogglingPush, setIsTogglingPush] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+    getPushState().then((state) => {
+      if (isMounted) {
+        setPushState(state)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const handleEnablePush = async () => {
+    setIsTogglingPush(true)
+    try {
+      await subscribeToPush()
+      setPushState('subscribed')
+      setAppError('Notificaciones push activadas en este dispositivo.')
+    } catch (error) {
+      setAppError(error instanceof Error ? error.message : 'No se pudieron activar las notificaciones push.')
+    } finally {
+      setIsTogglingPush(false)
+    }
+  }
+
+  const handleDisablePush = async () => {
+    setIsTogglingPush(true)
+    try {
+      await unsubscribeFromPush()
+      setPushState('not-subscribed')
+    } finally {
+      setIsTogglingPush(false)
+    }
+  }
 
   const notifications = useMemo(
     () => buildAppNotifications({ fleetUnits, audits, workOrders, userNotifications }),
@@ -105,6 +157,36 @@ export const NotificationsPage = () => {
           Historial de alertas del sistema. No leidas: <span className="font-semibold">{unreadCount}</span>
         </p>
       </header>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Notificaciones push en este dispositivo</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              {pushState === 'loading' ? 'Verificando estado...' : pushStateLabel[pushState]}
+            </p>
+          </div>
+          {pushState === 'subscribed' ? (
+            <button
+              type="button"
+              onClick={handleDisablePush}
+              disabled={isTogglingPush}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              Desactivar en este dispositivo
+            </button>
+          ) : pushState === 'not-subscribed' ? (
+            <button
+              type="button"
+              onClick={handleEnablePush}
+              disabled={isTogglingPush}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+            >
+              Activar notificaciones
+            </button>
+          ) : null}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">

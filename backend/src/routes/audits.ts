@@ -5,6 +5,7 @@ import { prisma } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { supabase, supabaseBucket } from '../storage/supabase.js'
+import { sendPushToAllUsers } from '../services/webPush.js'
 
 const router = Router()
 const AUDIT_DUPLICATE_WINDOW_MS = 10 * 60 * 1000
@@ -382,6 +383,13 @@ router.post('/', async (req, res) => {
           data: { operationalStatus: 'OUT_OF_SERVICE' },
         })
       }
+
+      void sendPushToAllUsers({
+        title: 'Inspeccion rechazada',
+        body: `${code} - ${unitCode || 'vehiculo externo'}`,
+        url: '/audits',
+        tag: 'audit-rejected',
+      }).catch(() => undefined)
     } else {
       if (!manualAuditMode && parsed.data.workOrderId) {
         await prisma.workOrder.updateMany({

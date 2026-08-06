@@ -146,6 +146,7 @@ const COMPAT_TABLE_NAMES = [
   'FleetProjectItem',
   'PostventaEvent',
   'ServiceOrder',
+  'PushSubscription',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -462,6 +463,24 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     );
   `)
   await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "Supplier_name_key" ON "Supplier"("name");`)
+
+  // Suscripciones de notificaciones push (Web Push): crea tabla si falta.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "PushSubscription" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "userId" TEXT NOT NULL,
+      "endpoint" TEXT NOT NULL,
+      "p256dh" TEXT NOT NULL,
+      "auth" TEXT NOT NULL,
+      "userAgent" TEXT NOT NULL DEFAULT '',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "PushSubscription_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");`,
+  )
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "PushSubscription_userId_idx" ON "PushSubscription"("userId");`)
 
   // Si Supplier existe legacy, asegura columnas nuevas.
   await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT NOT NULL DEFAULT '';`)

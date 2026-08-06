@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { getErrorCode } from '../utils/errors.js'
+import { sendPushToAllUsers, sendPushToUser } from '../services/webPush.js'
 
 const router = Router()
 
@@ -194,6 +195,22 @@ router.post('/', async (req, res) => {
         assignedTo: { select: { id: true, fullName: true } },
       },
     })
+    void sendPushToAllUsers({
+      title: 'Nueva Orden de Servicio (OOSS)',
+      body: `${item.code}: ${item.reportedFault}`,
+      url: '/service-orders',
+      tag: 'service-order',
+    }, item.assignedToUserId ?? undefined).catch(() => undefined)
+
+    if (item.assignedToUserId) {
+      void sendPushToUser(item.assignedToUserId, {
+        title: 'Te asignaron una Orden de Servicio',
+        body: `${item.code}: ${item.reportedFault}`,
+        url: '/service-orders',
+        tag: 'service-order-assigned',
+      }).catch(() => undefined)
+    }
+
     return res.status(201).json(mapOs(item as unknown as Record<string, unknown>))
   } catch (error: unknown) {
     if (getErrorCode(error) === 'P2002') {

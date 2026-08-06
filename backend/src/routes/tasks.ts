@@ -3,6 +3,7 @@ import { TaskEventType, TaskPriority, TaskStatus, UserRole } from '@prisma/clien
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
+import { sendPushToUser } from '../services/webPush.js'
 
 const router = Router()
 
@@ -230,6 +231,15 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       })
     })
 
+    if (assignedToUserId) {
+      void sendPushToUser(assignedToUserId, {
+        title: 'Te asignaron una tarea',
+        body: parsed.data.title.trim() || parsed.data.description.trim(),
+        url: '/tasks',
+        tag: 'task-assigned',
+      }).catch(() => undefined)
+    }
+
     return res.status(201).json(mapTask(task))
   } catch (error) {
     console.error('Tasks POST error:', error)
@@ -369,6 +379,15 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
         include: includeTaskRelations,
       })
     })
+
+    if (nextAssignedToUserId && nextAssignedToUserId !== current.assignedToUserId) {
+      void sendPushToUser(nextAssignedToUserId, {
+        title: 'Te asignaron una tarea',
+        body: nextTitle || nextDescription,
+        url: '/tasks',
+        tag: 'task-assigned',
+      }).catch(() => undefined)
+    }
 
     return res.json(mapTask(task))
   } catch (error) {
