@@ -353,8 +353,13 @@ model RepairRecord {
 model InventoryItem {
   id                 String   @id @default(uuid())
   sku                String   @unique
+  externalBarcode    String?
   productName        String
-  stock              Int
+  description        String   @default("")
+  stock              Float
+  unit               String   @default("UNIDAD")
+  unitPrice          Float?
+  currency           String   @default("ARS")
   movementHistory    Json
   linkedWorkOrderIds Json
   createdAt          DateTime @default(now())

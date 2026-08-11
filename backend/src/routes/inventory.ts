@@ -8,8 +8,13 @@ const router = Router()
 const inventorySchema = z.object({
   id: z.string().uuid().optional(),
   sku: z.string().min(1),
+  externalBarcode: z.string().nullable().optional(),
   productName: z.string().min(1),
-  stock: z.number().int().nonnegative(),
+  description: z.string().optional().default(''),
+  stock: z.number().nonnegative(),
+  unit: z.enum(['UNIDAD', 'LITRO', 'KG', 'METRO']).optional().default('UNIDAD'),
+  unitPrice: z.number().nonnegative().nullable().optional(),
+  currency: z.enum(['ARS', 'USD']).optional().default('ARS'),
   movementHistory: z.array(z.string()).optional().default([]),
   linkedWorkOrderIds: z.array(z.string()).optional().default([]),
 })

@@ -3,6 +3,7 @@ import type { InventoryUnit } from '../../types/domain'
 export interface InventoryItemFormData {
   sku: string
   productName: string
+  description: string
   stock: number
   unit: InventoryUnit
   unitPrice: string
@@ -22,6 +23,7 @@ export interface PendingBarcodeRegistration {
   barcode: string
   quantity: number
   productName: string
+  description: string
   suggestedSku: string
 }
 
@@ -30,6 +32,7 @@ export interface InventoryViewItem {
   sku: string
   externalBarcode?: string
   productName: string
+  description?: string
   stock: number
   unit: InventoryUnit
   unitPrice?: number

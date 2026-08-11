@@ -376,6 +376,7 @@ export interface InventoryItem {
   sku: string
   externalBarcode?: string
   productName: string
+  description?: string
   stock: number
   unit: InventoryUnit
   unitPrice?: number

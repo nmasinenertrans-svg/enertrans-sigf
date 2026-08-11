@@ -5,6 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { InventoryBarcodePanel } from '../components/InventoryBarcodePanel'
 import { InventoryItemCard } from '../components/InventoryItemCard'
+import { InventoryLookupPanel } from '../components/InventoryLookupPanel'
 import { InventoryStockCard } from '../components/InventoryStockCard'
 import { BackLink } from '../../../components/shared/BackLink'
 import {
@@ -143,6 +144,7 @@ export const InventoryPage = () => {
       barcode: normalizedBarcode,
       quantity: payload.quantity,
       productName: '',
+      description: '',
       suggestedSku: generateInternalSku(inventoryItems),
     })
   }
@@ -164,6 +166,7 @@ export const InventoryPage = () => {
       undefined,
       'ARS',
       pendingBarcodeRegistration.suggestedSku,
+      pendingBarcodeRegistration.description,
     )
     setInventoryItems(nextItems)
     enqueueAndSync({ id: `inventory.create.${createdItem.id}`, type: 'inventory.create', payload: createdItem, createdAt: new Date().toISOString() })
@@ -212,6 +215,8 @@ export const InventoryPage = () => {
         totalValueUsd={totalValue.usd}
       />
 
+      <InventoryLookupPanel inventoryItems={inventoryItems} />
+
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-1">
           {canCreate || canEdit ? (
@@ -237,6 +242,12 @@ export const InventoryPage = () => {
                       onChange={(e) => setPendingBarcodeRegistration((prev) => prev ? { ...prev, productName: e.target.value } : prev)}
                       placeholder="Nombre del producto *"
                       autoFocus
+                    />
+                    <input
+                      className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500"
+                      value={pendingBarcodeRegistration.description}
+                      onChange={(e) => setPendingBarcodeRegistration((prev) => prev ? { ...prev, description: e.target.value } : prev)}
+                      placeholder="Qué es (opcional). Ej: Filtro de aire Nissan Frontier"
                     />
                     <input
                       className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-600 outline-none focus:border-amber-500"
@@ -304,6 +315,17 @@ export const InventoryPage = () => {
                       placeholder="Nombre del producto"
                     />
                     {errors.productName && <span className="text-xs font-semibold text-rose-700">{errors.productName}</span>}
+                  </label>
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-sm font-semibold text-slate-700">Qué es (opcional)</span>
+                    <input
+                      className={inputClassName}
+                      value={formData.description}
+                      onChange={(e) => handleFieldChange('description', e.target.value)}
+                      placeholder="Ej: Filtro de aire Nissan Frontier"
+                    />
+                    {errors.description && <span className="text-xs font-semibold text-rose-700">{errors.description}</span>}
                   </label>
 
                   <label className="flex flex-col gap-1.5">

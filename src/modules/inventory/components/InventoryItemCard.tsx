@@ -39,6 +39,7 @@ export const InventoryItemCard = ({
           <p className="text-xs uppercase tracking-wide text-slate-500">SKU</p>
           <h3 className="mt-0.5 text-base font-bold text-slate-900">{item.sku}</h3>
           <p className="text-sm text-slate-600">{item.productName}</p>
+          {item.description && <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>}
           {item.externalBarcode && item.externalBarcode !== item.sku && (
             <p className="mt-0.5 text-xs text-slate-400">Cód. barra: {item.externalBarcode}</p>
           )}

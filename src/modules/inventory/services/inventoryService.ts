@@ -20,6 +20,8 @@ const normalizeSku = (value: string): string => value.trim().toUpperCase()
 
 const normalizeName = (value: string): string => value.trim()
 
+const normalizeDescription = (value: string): string => value.trim().replace(/\s+/g, ' ')
+
 export const isLiquidUnit = (unit: InventoryItem['unit']): boolean =>
   unit === 'LITRO' || unit === 'KG' || unit === 'METRO'
 
@@ -57,6 +59,7 @@ export const createInventoryMovementLog = (action: 'IN' | 'OUT' | 'ADJUST', quan
 export const createEmptyInventoryItemFormData = (): InventoryItemFormData => ({
   sku: '',
   productName: '',
+  description: '',
   stock: 0,
   unit: 'UNIDAD',
   unitPrice: '',
@@ -66,6 +69,7 @@ export const createEmptyInventoryItemFormData = (): InventoryItemFormData => ({
 export const toInventoryItemFormData = (item: InventoryItem): InventoryItemFormData => ({
   sku: item.sku,
   productName: item.productName,
+  description: item.description ?? '',
   stock: item.stock,
   unit: item.unit ?? 'UNIDAD',
   unitPrice: item.unitPrice != null ? String(item.unitPrice) : '',
@@ -103,6 +107,10 @@ export const validateInventoryItemFormData = (
     validationErrors.stock = 'El stock no puede ser negativo.'
   }
 
+  if (normalizeDescription(formData.description ?? '').length > 200) {
+    validationErrors.description = 'La descripcion supera el largo maximo permitido.'
+  }
+
   return validationErrors
 }
 
@@ -122,6 +130,7 @@ export const toInventoryItem = (formData: InventoryItemFormData, externalBarcode
     sku: normalizeSku(formData.sku),
     externalBarcode: externalBarcode ? normalizeSku(externalBarcode) : undefined,
     productName: normalizeName(formData.productName),
+    description: normalizeDescription(formData.description ?? ''),
     stock,
     unit,
     unitPrice: parseUnitPrice(formData.unitPrice),
@@ -148,6 +157,7 @@ export const mergeInventoryItemFromForm = (item: InventoryItem, formData: Invent
     ...item,
     sku: normalizeSku(formData.sku),
     productName: normalizeName(formData.productName),
+    description: normalizeDescription(formData.description ?? ''),
     stock: normalizedStock,
     unit,
     unitPrice: parseUnitPrice(formData.unitPrice),
@@ -201,6 +211,7 @@ export const createInventoryItemFromBarcode = (
   unitPrice?: number,
   currency: 'ARS' | 'USD' = 'ARS',
   customSku?: string,
+  description?: string,
 ): { nextItems: InventoryItem[]; createdItem: InventoryItem } => {
   const sku = customSku ? normalizeSku(customSku) : generateInternalSku(inventoryItems)
   const stock = normalizeStock(quantity, unit)
@@ -209,6 +220,7 @@ export const createInventoryItemFromBarcode = (
     sku,
     externalBarcode: normalizeSku(barcode),
     productName: normalizeName(productName),
+    description: normalizeDescription(description ?? ''),
     stock,
     unit,
     unitPrice,

@@ -750,6 +750,34 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     $$;
   `)
 
+  // Inventario: campos que el frontend ya usaba pero nunca se habian agregado al schema real
+  // (externalBarcode/unit/unitPrice/currency se perdian al guardar) + descripcion legible del producto.
+  const hasInventoryItemTable = await tableExistsInActiveSchema('InventoryItem')
+  if (hasInventoryItemTable) {
+    const inventorySchema = quoteIdentifier(getNormalizedActiveSchema())
+    for (const [col, type] of [
+      ['externalBarcode', 'TEXT'],
+      ['description', `TEXT NOT NULL DEFAULT ''`],
+      ['unit', `TEXT NOT NULL DEFAULT 'UNIDAD'`],
+      ['unitPrice', 'DOUBLE PRECISION'],
+      ['currency', `TEXT NOT NULL DEFAULT 'ARS'`],
+    ] as const) {
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE ${inventorySchema}."InventoryItem" ADD COLUMN IF NOT EXISTS "${col}" ${type}`)
+      } catch (err) {
+        console.warn(`[DB] ADD COLUMN InventoryItem.${col}:`, err)
+      }
+    }
+    // El frontend permite stock fraccionario (litros/kg/metros); la columna original era entera.
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE ${inventorySchema}."InventoryItem" ALTER COLUMN "stock" TYPE DOUBLE PRECISION USING "stock"::double precision`,
+      )
+    } catch (err) {
+      console.warn('[DB] ALTER COLUMN InventoryItem.stock:', err)
+    }
+  }
+
   // Tareas: asignacion a terceros sin usuario del sistema + fechas de plan (inicio/fin aprox).
   const hasTaskTable = await tableExistsInActiveSchema('Task')
   if (hasTaskTable) {
