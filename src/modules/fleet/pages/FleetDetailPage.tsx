@@ -13,6 +13,7 @@ import {
   normalizeFleetUnit,
 } from '../services/fleetService'
 import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersService'
+import { getMeasurementUnit, maintenanceTypeLabels } from '../../maintenance/services/maintenanceService'
 import type { FleetUnit } from '../../../types/domain'
 import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
 
@@ -179,32 +180,11 @@ export const FleetDetailPage = () => {
     [maintenancePlans, unitId],
   )
 
-  const latestMaintenancePlan = useMemo(() => {
-    if (unitMaintenancePlans.length === 0) {
-      return undefined
-    }
-    return unitMaintenancePlans[unitMaintenancePlans.length - 1]
-  }, [unitMaintenancePlans])
-
-  const latestServiceSchedule = latestMaintenancePlan?.serviceSchedule ?? {
-    motorHours: null,
-    motorKilometers: null,
-    distributionHours: null,
-    distributionKilometers: null,
-    gearboxHours: null,
-    gearboxKilometers: null,
-    coolingHours: null,
-    coolingKilometers: null,
-    differentialHours: null,
-    differentialKilometers: null,
-    steeringHours: null,
-    steeringKilometers: null,
-    clutchHours: null,
-    clutchKilometers: null,
-    brakesHours: null,
-    brakesKilometers: null,
-    hydroCraneHours: null,
-  }
+  const motorMaintenancePlan = useMemo(
+    () => unitMaintenancePlans.find((plan) => plan.maintenanceType === 'MOTOR'),
+    [unitMaintenancePlans],
+  )
+  const motorMeasurementUnit = getMeasurementUnit(selectedUnit?.unitType, 'MOTOR')
 
   const unitAudits = useMemo(() => audits.filter((audit) => audit.unitId === unitId), [audits, unitId])
 
@@ -1199,10 +1179,9 @@ export const FleetDetailPage = () => {
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Proximo service motor</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestServiceSchedule.motorKilometers ?? 'Sin registro'} km
-            </p>
-            <p className="text-xs text-slate-600">
-              {latestServiceSchedule.motorHours ?? 'Sin registro'} hs
+              {motorMaintenancePlan
+                ? `${motorMeasurementUnit === 'KILOMETERS' ? motorMaintenancePlan.nextServiceByKilometers : motorMaintenancePlan.nextServiceByHours} ${motorMeasurementUnit === 'KILOMETERS' ? 'km' : 'hs'}`
+                : 'Sin plan cargado'}
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
@@ -1589,83 +1568,26 @@ export const FleetDetailPage = () => {
             <div className="space-y-4 text-sm text-slate-700">
               <p>Planes registrados: {unitMaintenancePlans.length}</p>
               {unitMaintenancePlans.length > 0 ? (
-                unitMaintenancePlans.map((plan) => (
-                  <div key={plan.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <p className="font-semibold text-slate-900">Estado: {plan.status}</p>
-                    <p className="text-xs text-slate-600">Km actuales: {plan.currentKilometers}</p>
-                    <p className="text-xs text-slate-600">Horas actuales: {plan.currentHours}</p>
-                  </div>
-                ))
+                unitMaintenancePlans.map((plan) => {
+                  const measurementUnit = getMeasurementUnit(selectedUnit.unitType, plan.maintenanceType)
+                  const isKilometers = measurementUnit === 'KILOMETERS'
+                  const current = isKilometers ? plan.currentKilometers : plan.currentHours
+                  const nextServiceBy = isKilometers ? plan.nextServiceByKilometers : plan.nextServiceByHours
+                  const unitLabel = isKilometers ? 'km' : 'hs'
+                  return (
+                    <div key={plan.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="font-semibold text-slate-900">
+                        {maintenanceTypeLabels[plan.maintenanceType] ?? plan.maintenanceType} · Estado: {plan.status}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        Actual: {current} {unitLabel} | Próximo service: {nextServiceBy} {unitLabel}
+                      </p>
+                    </div>
+                  )
+                })
               ) : (
                 <p className="text-xs text-slate-500">Sin planes cargados.</p>
               )}
-
-              {latestMaintenancePlan ? (
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <h4 className="text-sm font-bold text-slate-900">Histórico de próximos services</h4>
-                  <div className="mt-3 grid gap-4 md:grid-cols-2">
-                    {[
-                      {
-                        title: 'Próximos Service motor',
-                        hours: latestServiceSchedule.motorHours,
-                        kilometers: latestServiceSchedule.motorKilometers,
-                      },
-                      {
-                        title: 'Próximos Service distribución',
-                        hours: latestServiceSchedule.distributionHours,
-                        kilometers: latestServiceSchedule.distributionKilometers,
-                      },
-                      {
-                        title: 'Próximos Service caja',
-                        hours: latestServiceSchedule.gearboxHours,
-                        kilometers: latestServiceSchedule.gearboxKilometers,
-                      },
-                      {
-                        title: 'Próximos Service refrigeración',
-                        hours: latestServiceSchedule.coolingHours,
-                        kilometers: latestServiceSchedule.coolingKilometers,
-                      },
-                      {
-                        title: 'Próximos Service diferencial',
-                        hours: latestServiceSchedule.differentialHours,
-                        kilometers: latestServiceSchedule.differentialKilometers,
-                      },
-                      {
-                        title: 'Próximos Service dirección',
-                        hours: latestServiceSchedule.steeringHours,
-                        kilometers: latestServiceSchedule.steeringKilometers,
-                      },
-                      {
-                        title: 'Próximos Service embrague',
-                        hours: latestServiceSchedule.clutchHours,
-                        kilometers: latestServiceSchedule.clutchKilometers,
-                      },
-                      {
-                        title: 'Próximos Service frenos',
-                        hours: latestServiceSchedule.brakesHours,
-                        kilometers: latestServiceSchedule.brakesKilometers,
-                      },
-                      {
-                        title: 'Próximos Service hidrogrúa',
-                        hours: latestServiceSchedule.hydroCraneHours,
-                        kilometers: null,
-                      },
-                    ].map((item) => (
-                      <div key={item.title} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                          <div className="rounded border border-slate-200 bg-white px-2 py-1">
-                            Según HS Motor: {item.hours ?? 'Sin registro'}
-                          </div>
-                          <div className="rounded border border-slate-200 bg-white px-2 py-1">
-                            Según KM Motor: {item.kilometers ?? 'Sin registro'}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : null}
 

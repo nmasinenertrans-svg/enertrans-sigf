@@ -246,38 +246,37 @@ export interface FleetUnitDocuments {
   tracking?: FleetUnitTracking
 }
 
+export const maintenanceTypes = [
+  'MOTOR',
+  'DISTRIBUTION',
+  'GEARBOX',
+  'COOLING',
+  'DIFFERENTIAL',
+  'STEERING',
+  'CLUTCH',
+  'BRAKES',
+  'HYDRO_CRANE',
+] as const
+export type MaintenanceType = (typeof maintenanceTypes)[number]
+
+export type MaintenanceMeasurementUnit = 'KILOMETERS' | 'HOURS'
+
 export interface MaintenancePlan {
   id: string
   unitId: string
+  maintenanceType: MaintenanceType
   currentKilometers: number
   currentHours: number
+  serviceIntervalKilometers?: number | null
+  serviceIntervalHours?: number | null
   nextServiceByKilometers: number
   nextServiceByHours: number
   oils: string[]
   filters: string[]
   notes: string
   status: VisualStatus
-  serviceSchedule: MaintenanceServiceSchedule
-}
-
-export interface MaintenanceServiceSchedule {
-  motorHours: number | null
-  motorKilometers: number | null
-  distributionHours: number | null
-  distributionKilometers: number | null
-  gearboxHours: number | null
-  gearboxKilometers: number | null
-  coolingHours: number | null
-  coolingKilometers: number | null
-  differentialHours: number | null
-  differentialKilometers: number | null
-  steeringHours: number | null
-  steeringKilometers: number | null
-  clutchHours: number | null
-  clutchKilometers: number | null
-  brakesHours: number | null
-  brakesKilometers: number | null
-  hydroCraneHours: number | null
+  /** @deprecated Reemplazado por maintenanceType + serviceInterval*. Se mantiene solo por compatibilidad con planes viejos. */
+  serviceSchedule?: Record<string, unknown>
 }
 
 export interface AuditChecklistItem {

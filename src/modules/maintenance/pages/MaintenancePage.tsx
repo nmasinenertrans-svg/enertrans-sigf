@@ -1,9 +1,10 @@
-﻿import { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { apiRequest } from '../../../services/api/apiClient'
 import { MaintenancePlanCard } from '../components/MaintenancePlanCard'
 import { MaintenancePlanForm } from '../components/MaintenancePlanForm'
 import { MaintenanceSettingsPanel } from '../components/MaintenanceSettingsPanel'
@@ -13,6 +14,8 @@ import {
   buildMaintenanceViewModel,
   createEmptyMaintenancePlanFormData,
   getDefaultMaintenanceSettings,
+  getMeasurementUnit,
+  markMaintenanceServiceDone,
   mergeMaintenancePlanFromForm,
   normalizeMaintenancePlan,
   readMaintenanceSettings,
@@ -29,6 +32,8 @@ const statusPriorityMap = {
   DUE_SOON: 1,
   OK: 2,
 } as const
+
+const isOnline = () => typeof navigator !== 'undefined' && navigator.onLine
 
 export const MaintenancePage = () => {
   const { can } = usePermissions()
@@ -60,7 +65,7 @@ export const MaintenancePage = () => {
         return statusDifference
       }
 
-      return left.plan.nextServiceByKilometers - right.plan.nextServiceByKilometers
+      return left.remainingKilometers + left.remainingHours - (right.remainingKilometers + right.remainingHours)
     })
   }, [fleetUnits, maintenancePlans, settings])
 
@@ -108,15 +113,21 @@ export const MaintenancePage = () => {
     }
 
     if (editingPlanId) {
-      const nextPlanList = maintenancePlans.map((plan) =>
-        plan.id === editingPlanId ? mergeMaintenancePlanFromForm(plan, formData, settings) : plan,
+      const updatedPlan = mergeMaintenancePlanFromForm(
+        maintenancePlans.find((plan) => plan.id === editingPlanId)!,
+        formData,
+        settings,
+        fleetUnits,
       )
-      setMaintenancePlans(nextPlanList)
+      setMaintenancePlans(maintenancePlans.map((plan) => (plan.id === editingPlanId ? updatedPlan : plan)))
+      if (isOnline()) {
+        apiRequest(`/maintenance/${editingPlanId}`, { method: 'PATCH', body: updatedPlan }).catch(() => null)
+      }
       resetForm()
       return
     }
 
-    const createdPlan = toMaintenancePlan(formData, settings)
+    const createdPlan = toMaintenancePlan(formData, settings, fleetUnits)
     setMaintenancePlans([...maintenancePlans, createdPlan])
     enqueueAndSync({
       id: `maintenance.create.${createdPlan.id}`,
@@ -139,7 +150,27 @@ export const MaintenancePage = () => {
     }
 
     setEditingPlanId(planId)
-    setFormData(toMaintenancePlanFormData(normalizeMaintenancePlan(selectedPlan, settings)))
+    setFormData(toMaintenancePlanFormData(normalizeMaintenancePlan(selectedPlan, fleetUnits, settings)))
+  }
+
+  const handleMarkServiceDone = (planId: string) => {
+    if (!canEdit) {
+      return
+    }
+
+    const selectedPlan = maintenancePlans.find((plan) => plan.id === planId)
+    if (!selectedPlan) {
+      return
+    }
+
+    const unit = fleetUnits.find((item) => item.id === selectedPlan.unitId)
+    const measurementUnit = getMeasurementUnit(unit?.unitType, selectedPlan.maintenanceType)
+    const updatedPlan = markMaintenanceServiceDone(selectedPlan, measurementUnit, settings)
+
+    setMaintenancePlans(maintenancePlans.map((plan) => (plan.id === planId ? updatedPlan : plan)))
+    if (isOnline()) {
+      apiRequest(`/maintenance/${planId}`, { method: 'PATCH', body: updatedPlan }).catch(() => null)
+    }
   }
 
   const handleConfirmDelete = () => {
@@ -153,6 +184,9 @@ export const MaintenancePage = () => {
 
     const nextPlanList = maintenancePlans.filter((plan) => plan.id !== planIdPendingDelete)
     setMaintenancePlans(nextPlanList)
+    if (isOnline()) {
+      apiRequest(`/maintenance/${planIdPendingDelete}`, { method: 'DELETE' }).catch(() => null)
+    }
     setPlanIdPendingDelete(null)
 
     if (editingPlanId === planIdPendingDelete) {
@@ -202,7 +236,7 @@ export const MaintenancePage = () => {
       <header>
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Plan de Mantenimiento</h2>
-        <p className="text-sm text-slate-600">Control de próximos services por KM, horas, aceites y filtros.</p>
+        <p className="text-sm text-slate-600">Control de próximos services por sistema: KM para autos/camionetas, horas para camiones.</p>
       </header>
 
       <MaintenanceSummaryCard
@@ -246,6 +280,7 @@ export const MaintenancePage = () => {
                 planView={planView}
                 onEdit={handleEditPlan}
                 onDelete={setPlanIdPendingDelete}
+                onMarkServiceDone={handleMarkServiceDone}
                 canEdit={canEdit}
                 canDelete={canDelete}
               />

@@ -778,6 +778,27 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     }
   }
 
+  // Plan de mantenimiento: tipo de mantenimiento (un plan = un sistema puntual) + intervalo
+  // de service (en vez de que el usuario tenga que escribir a mano el proximo service
+  // absoluto, que al borrarse quedaba en 0 y rompia el calculo de estado).
+  const hasMaintenancePlanTable = await tableExistsInActiveSchema('MaintenancePlan')
+  if (hasMaintenancePlanTable) {
+    const maintenanceSchema = quoteIdentifier(getNormalizedActiveSchema())
+    for (const [col, type] of [
+      ['maintenanceType', `TEXT NOT NULL DEFAULT 'MOTOR'`],
+      ['serviceIntervalKilometers', 'INTEGER'],
+      ['serviceIntervalHours', 'INTEGER'],
+    ] as const) {
+      try {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE ${maintenanceSchema}."MaintenancePlan" ADD COLUMN IF NOT EXISTS "${col}" ${type}`,
+        )
+      } catch (err) {
+        console.warn(`[DB] ADD COLUMN MaintenancePlan.${col}:`, err)
+      }
+    }
+  }
+
   // Tareas: asignacion a terceros sin usuario del sistema + fechas de plan (inicio/fin aprox).
   const hasTaskTable = await tableExistsInActiveSchema('Task')
   if (hasTaskTable) {

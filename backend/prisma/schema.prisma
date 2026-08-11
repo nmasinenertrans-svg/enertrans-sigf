@@ -264,19 +264,22 @@ model PostventaEvent {
 }
 
 model MaintenancePlan {
-  id                      String   @id @default(uuid())
-  unitId                  String
-  currentKilometers       Int
-  currentHours            Int
-  nextServiceByKilometers Int
-  nextServiceByHours      Int
-  oils                    Json
-  filters                 Json
-  notes                   String
-  status                  VisualStatus
-  serviceSchedule         Json
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  id                        String   @id @default(uuid())
+  unitId                    String
+  maintenanceType           String   @default("MOTOR")
+  currentKilometers         Int
+  currentHours              Int
+  serviceIntervalKilometers Int?
+  serviceIntervalHours      Int?
+  nextServiceByKilometers   Int
+  nextServiceByHours        Int
+  oils                      Json
+  filters                   Json
+  notes                     String
+  status                    VisualStatus
+  serviceSchedule           Json
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   unit FleetUnit @relation(fields: [unitId], references: [id])
 }
