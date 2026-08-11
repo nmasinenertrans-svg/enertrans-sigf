@@ -31,7 +31,7 @@ import { buildAppNotifications } from '../notifications/notifications'
 
 const SIDEBAR_KEY = 'enertrans.sidebar.open'
 const RETRYABLE_SYNC_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
-const WORK_ORDERS_SYNC_INTERVAL_MS = 20000
+const WORK_ORDERS_SYNC_INTERVAL_MS = 45000
 
 const waitMs = (ms: number) => new Promise<void>((resolve) => globalThis.setTimeout(resolve, ms))
 
@@ -295,7 +295,6 @@ export const AppLayout = () => {
         const activeFlags = featureFlagsRef.current
         const shouldSyncMaintenance = activeFlags.showMaintenanceModule
         const shouldSyncAudits = activeFlags.showAuditsModule
-        const shouldSyncWorkOrders = activeFlags.showWorkOrdersModule
         const shouldSyncRepairs = activeFlags.showRepairsModule
         const shouldSyncSuppliers = activeFlags.showSuppliersModule
         const shouldSyncExternalRequests = activeFlags.showExternalRequestsModule
@@ -303,12 +302,14 @@ export const AppLayout = () => {
         const shouldSyncClients = activeFlags.showClientsModule
         const shouldSyncDeliveries = activeFlags.showDeliveriesModule
         const shouldSyncInventory = activeFlags.showInventoryModule
+        // /work-orders NO se pide aca: el poller dedicado de abajo (refreshWorkOrders) ya cubre
+        // la carga inicial y el refresco periodico. Pedirlo tambien aca duplicaba la carga sobre
+        // el endpoint mas pesado del sistema y disparaba el mismo error de sync dos veces.
         const [
           usersResponse,
           fleetResponse,
           maintenanceResponse,
           auditsResponse,
-          workOrdersResponse,
           repairsResponse,
           suppliersResponse,
           externalRequestsResponse,
@@ -323,9 +324,6 @@ export const AppLayout = () => {
           safeRequest<FleetUnit[]>('/fleet'),
           shouldSyncMaintenance ? safeRequest<MaintenancePlan[]>('/maintenance', { silent: true }) : Promise.resolve(null),
           shouldSyncAudits ? safeRequest<any[]>('/audits', { maxAttempts: 2, timeoutMs: 20000 }) : Promise.resolve(null),
-          shouldSyncWorkOrders
-            ? safeRequest<WorkOrder[]>('/work-orders', { maxAttempts: 3, timeoutMs: 22000 })
-            : Promise.resolve(null),
           shouldSyncRepairs ? safeRequest<RepairRecord[]>('/repairs', { silent: true }) : Promise.resolve(null),
           shouldSyncSuppliers ? safeRequest<Supplier[]>('/suppliers', { silent: true }) : Promise.resolve(null),
           shouldSyncExternalRequests
@@ -434,12 +432,6 @@ export const AppLayout = () => {
           // if an item is not in backend and not in offline queue, it is a local ghost.
           setAudits([...mappedAudits, ...pendingQueuedAudits])
         }
-        if (workOrdersResponse) {
-          setWorkOrders(
-            mergeByIdWithLocal(workOrdersResponse, workOrdersRef.current, getQueuedPayloads('workOrder.create')) ??
-              workOrdersResponse,
-          )
-        }
         if (repairsResponse) {
           setRepairs(
             mergeByIdWithLocal(repairsResponse, repairsRef.current, getQueuedPayloads('repair.create')) ?? repairsResponse,
@@ -497,7 +489,6 @@ export const AppLayout = () => {
     setFleetUnits,
     setMaintenancePlans,
     setAudits,
-    setWorkOrders,
     setRepairs,
     setSuppliers,
     setExternalRequests,
