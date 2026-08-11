@@ -28,7 +28,6 @@ import { ProjectDetailPage } from '../../modules/projects/pages/ProjectDetailPag
 import { PostventaPage } from '../../modules/postventa/pages/PostventaPage'
 import { ServiceOrdersPage } from '../../modules/serviceOrders/pages/ServiceOrdersPage'
 import { ServiceOrderDetailPage } from '../../modules/serviceOrders/pages/ServiceOrderDetailPage'
-import { ChecklistV2Page } from '../../modules/checklistV2/pages/ChecklistV2Page'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
@@ -296,14 +295,6 @@ export const AppRouter = () => (
           element={
             <RequirePermission module="POSTVENTA" action="view">
               <PostventaPage />
-            </RequirePermission>
-          }
-        />
-        <Route
-          path={ROUTE_PATHS.checklistV2}
-          element={
-            <RequirePermission module="CHECKLIST_V2" action="view">
-              <ChecklistV2Page />
             </RequirePermission>
           }
         />

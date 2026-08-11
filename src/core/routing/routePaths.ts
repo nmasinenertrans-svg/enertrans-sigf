@@ -32,7 +32,6 @@
     detail: '/projects/:projectId',
   },
   postventa: '/postventa',
-  checklistV2: '/checklist-v2',
   serviceOrders: {
     list: '/service-orders',
     detail: '/service-orders/:serviceOrderId',

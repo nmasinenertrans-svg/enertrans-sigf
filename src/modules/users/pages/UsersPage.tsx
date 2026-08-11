@@ -28,7 +28,6 @@ const permissionModuleLabelMap: Record<PermissionModule, string> = {
   USERS: 'Usuarios',
   MAINTENANCE_MODE: 'Mantenimiento app',
   POSTVENTA: 'Postventa / Calendario',
-  CHECKLIST_V2: '[BETA] Check List Vehicular',
   SERVICE_ORDERS: 'Órdenes de Servicio',
 }
 
