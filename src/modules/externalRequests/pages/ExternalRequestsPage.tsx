@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { ROUTE_PATHS, buildServiceOrderDetailPath } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
@@ -24,9 +24,11 @@ import type { ExternalRequest } from '../../../types/domain'
 export const ExternalRequestsPage = () => {
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, externalRequests, featureFlags },
+    state: { fleetUnits, externalRequests, serviceOrders, featureFlags },
     actions: { setExternalRequests, setAppError },
   } = useAppContext()
+  const [searchParams] = useSearchParams()
+  const appliedServiceOrderLinkRef = useRef(false)
 
   const canCreate = can('WORK_ORDERS', 'create')
   const canEdit = can('WORK_ORDERS', 'edit')
@@ -62,6 +64,28 @@ export const ExternalRequestsPage = () => {
     () => buildExternalRequestView(externalRequests ?? [], fleetUnits ?? []),
     [externalRequests, fleetUnits],
   )
+
+  const serviceOrderCodeById = useMemo(
+    () => new Map((serviceOrders ?? []).map((order) => [order.id, order.code])),
+    [serviceOrders],
+  )
+
+  useEffect(() => {
+    if (appliedServiceOrderLinkRef.current) {
+      return
+    }
+    const fromServiceOrderId = searchParams.get('fromServiceOrderId') ?? ''
+    const fromUnitId = searchParams.get('unitId') ?? ''
+    if (!fromServiceOrderId) {
+      return
+    }
+    appliedServiceOrderLinkRef.current = true
+    setFormData((previous) => ({ ...previous, unitId: fromUnitId, serviceOrderId: fromServiceOrderId }))
+    const unit = fleetUnits.find((item) => item.id === fromUnitId)
+    if (unit) {
+      setUnitSearch(unit.internalCode)
+    }
+  }, [searchParams, fleetUnits])
 
   const filteredRequests = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase()
@@ -420,6 +444,24 @@ export const ExternalRequestsPage = () => {
                   : 'Asocia unidad, repuestos comprados y presupuesto proveedor.'}
               </p>
 
+              {formData.serviceOrderId ? (
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <span>
+                    Vinculada a la Orden de Servicio{' '}
+                    <span className="font-semibold">
+                      {serviceOrderCodeById.get(formData.serviceOrderId) ?? formData.serviceOrderId}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleFieldChange('serviceOrderId', '')}
+                    className="font-semibold text-amber-700 hover:underline"
+                  >
+                    Quitar vínculo
+                  </button>
+                </div>
+              ) : null}
+
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
                 Unidad
                 <input
@@ -665,6 +707,14 @@ export const ExternalRequestsPage = () => {
                           <span className="rounded-full border border-sky-300 bg-sky-50 px-2 py-1 font-semibold text-sky-700">
                             Vinculada a reparacion
                           </span>
+                        ) : null}
+                        {request.serviceOrderId ? (
+                          <Link
+                            to={buildServiceOrderDetailPath(request.serviceOrderId)}
+                            className="rounded-full border border-violet-300 bg-violet-50 px-2 py-1 font-semibold text-violet-700 hover:bg-violet-100"
+                          >
+                            Origen: {serviceOrderCodeById.get(request.serviceOrderId) ?? 'Orden de Servicio'}
+                          </Link>
                         ) : null}
                       </div>
 

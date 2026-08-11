@@ -378,6 +378,7 @@ model ExternalRequest {
   partsTotal  Float    @default(0)
   eligibilityStatus String @default("PENDING_ATTACHMENT")
   linkedRepairId String?
+  serviceOrderId String?
   providerFileName String   @default("")
   providerFileUrl  String   @default("")
   ocCode           String?
@@ -387,8 +388,10 @@ model ExternalRequest {
 
   unit FleetUnit @relation(fields: [unitId], references: [id])
   linkedRepair RepairRecord? @relation("ExternalRequestsLinkedToRepair", fields: [linkedRepairId], references: [id])
+  serviceOrder ServiceOrder? @relation(fields: [serviceOrderId], references: [id])
 
   @@index([linkedRepairId])
+  @@index([serviceOrderId])
 }
 
 model FleetMovement {
@@ -705,6 +708,7 @@ model ServiceOrder {
   client      ClientAccount? @relation(fields: [clientId], references: [id])
   assignedTo  User?          @relation("ServiceOrderAssignedTo", fields: [assignedToUserId], references: [id])
   createdBy   User           @relation("ServiceOrderCreatedBy", fields: [createdByUserId], references: [id])
+  externalRequests ExternalRequest[]
 
   @@index([unitId, createdAt])
   @@index([status, createdAt])

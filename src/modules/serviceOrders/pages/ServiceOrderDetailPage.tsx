@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiRequest } from '../../../services/api/apiClient'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { usePermissions } from '../../../core/auth/usePermissions'
@@ -68,7 +68,7 @@ export const ServiceOrderDetailPage = () => {
   const navigate = useNavigate()
   const { can } = usePermissions()
   const {
-    state: { serviceOrders },
+    state: { serviceOrders, externalRequests },
     actions: { setServiceOrders },
   } = useAppContext()
 
@@ -196,6 +196,12 @@ export const ServiceOrderDetailPage = () => {
   }
 
   const resolutionTime = calcResolutionHours(os)
+  const linkedExternalRequests = (externalRequests ?? []).filter((request) => request.serviceOrderId === os.id)
+
+  const handleCreateExternalRequest = () => {
+    if (!os.unitId) return
+    navigate(`${ROUTE_PATHS.externalRequests}?fromServiceOrderId=${os.id}&unitId=${os.unitId}`)
+  }
 
   return (
     <div className="space-y-6">
@@ -366,6 +372,42 @@ export const ServiceOrderDetailPage = () => {
               >
                 {os.sparePartsUsed || <span className="text-slate-500 italic">Sin repuestos registrados{canEdit && os.status !== 'CLOSED' ? ' — click para editar' : ''}</span>}
               </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-amber-300 uppercase tracking-wider">Notas de pedido externo</h2>
+              {canEdit && os.status !== 'CLOSED' ? (
+                <button
+                  type="button"
+                  onClick={handleCreateExternalRequest}
+                  disabled={!os.unitId}
+                  title={!os.unitId ? 'Solo disponible para unidades de flota propia.' : undefined}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-40"
+                >
+                  + Crear NDP
+                </button>
+              ) : null}
+            </div>
+            {linkedExternalRequests.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">
+                Sin notas de pedido vinculadas{!os.unitId ? ' (requiere unidad de flota propia)' : ''}.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {linkedExternalRequests.map((request) => (
+                  <li key={request.id}>
+                    <Link
+                      to={ROUTE_PATHS.externalRequests}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
+                    >
+                      <span className="font-mono">{request.code}</span>
+                      <span className="text-xs text-slate-400">{request.companyName}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 

@@ -397,6 +397,7 @@ export interface ExternalRequest {
   partsTotal?: number
   eligibilityStatus?: 'PENDING_ATTACHMENT' | 'READY_FOR_REPAIR'
   linkedRepairId?: string | null
+  serviceOrderId?: string | null
   createdAt?: string
   providerFileName?: string
   providerFileBase64?: string

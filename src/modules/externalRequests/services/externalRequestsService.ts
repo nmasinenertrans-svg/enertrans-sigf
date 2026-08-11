@@ -25,6 +25,7 @@ export interface ExternalRequestFormData {
   providerFileName: string
   providerFileBase64: string
   providerFileUrl: string
+  serviceOrderId: string
 }
 
 export type ExternalRequestFormErrors = Partial<Record<keyof ExternalRequestFormData, string>>
@@ -90,7 +91,7 @@ export const calculatePartsTotal = (partsItems: ExternalRequestPartItemFormData[
       .toFixed(2),
   )
 
-export const createEmptyExternalRequestFormData = (unitId: string): ExternalRequestFormData => ({
+export const createEmptyExternalRequestFormData = (unitId: string, serviceOrderId = ''): ExternalRequestFormData => ({
   unitId,
   companyName: '',
   description: '',
@@ -100,6 +101,7 @@ export const createEmptyExternalRequestFormData = (unitId: string): ExternalRequ
   providerFileName: '',
   providerFileBase64: '',
   providerFileUrl: '',
+  serviceOrderId,
 })
 
 export const validateExternalRequestFormData = (
@@ -157,6 +159,7 @@ export const toExternalRequest = (formData: ExternalRequestFormData, unitCode: s
     partsTotal,
     eligibilityStatus: hasAttachment ? 'READY_FOR_REPAIR' : 'PENDING_ATTACHMENT',
     linkedRepairId: null,
+    serviceOrderId: formData.serviceOrderId || null,
     providerFileName: formData.providerFileName || undefined,
     providerFileBase64: formData.providerFileBase64 || undefined,
     providerFileUrl: formData.providerFileUrl || undefined,
@@ -181,6 +184,7 @@ export const toExternalRequestFormData = (request: ExternalRequest): ExternalReq
   providerFileName: request.providerFileName ?? '',
   providerFileBase64: request.providerFileBase64 ?? '',
   providerFileUrl: request.providerFileUrl ?? '',
+  serviceOrderId: request.serviceOrderId ?? '',
 })
 
 export const buildExternalRequestView = (

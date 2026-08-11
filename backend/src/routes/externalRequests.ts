@@ -30,6 +30,7 @@ const externalRequestSchema = z.object({
   partsTotal: z.number().min(0).optional(),
   eligibilityStatus: z.enum(ELIGIBILITY_VALUES).optional(),
   linkedRepairId: z.string().optional().nullable(),
+  serviceOrderId: z.string().optional().nullable(),
   providerFileName: z.string().optional(),
   providerFileUrl: z.string().optional(),
   createdAt: z.string().optional(),
@@ -57,6 +58,7 @@ type RecoveryExternalRequestRow = {
   partsTotal: number | null
   eligibilityStatus: string | null
   linkedRepairId: string | null
+  serviceOrderId: string | null
   providerFileName: string | null
   providerFileUrl: string | null
   createdAt: Date | string
@@ -171,6 +173,7 @@ const mapRecoveryExternalRequestToPublicShape = (row: RecoveryExternalRequestRow
   eligibilityStatus:
     row.eligibilityStatus === 'READY_FOR_REPAIR' ? ('READY_FOR_REPAIR' as const) : ('PENDING_ATTACHMENT' as const),
   linkedRepairId: row.linkedRepairId ?? null,
+  serviceOrderId: row.serviceOrderId ?? null,
   providerFileName: row.providerFileName ?? '',
   providerFileUrl: row.providerFileUrl ?? '',
   createdAt: asIsoString(row.createdAt),
@@ -269,6 +272,7 @@ const listExternalRequestsFromRecoverySchemas = async () => {
           ? `CASE WHEN COALESCE(${quoteColumn(providerFileUrlColumn)}::text, '') <> '' THEN 'READY_FOR_REPAIR' ELSE 'PENDING_ATTACHMENT' END AS "eligibilityStatus"`
           : `'PENDING_ATTACHMENT'::text AS "eligibilityStatus"`
       const linkedRepairSelect = textSelectOrDefault(['linkedRepairId'], 'linkedRepairId', 'NULL::text')
+      const serviceOrderSelect = textSelectOrDefault(['serviceOrderId'], 'serviceOrderId', 'NULL::text')
       const providerFileNameSelect = textSelectOrDefault(['providerFileName'], 'providerFileName')
       const providerFileUrlSelect = textSelectOrDefault(['providerFileUrl'], 'providerFileUrl')
       const createdAtSelect = `${quoteColumn(createdAtColumn)} AS "createdAt"`
@@ -289,6 +293,7 @@ const listExternalRequestsFromRecoverySchemas = async () => {
           ${partsTotalSelect},
           ${eligibilitySelect},
           ${linkedRepairSelect},
+          ${serviceOrderSelect},
           ${providerFileNameSelect},
           ${providerFileUrlSelect},
           ${createdAtSelect},
@@ -327,6 +332,7 @@ const toCreateData = async (input: ExternalRequestInput) => {
     partsItems: partsItems as any,
     partsTotal: calculatePartsTotal(partsItems),
     eligibilityStatus: resolveEligibilityStatus(providerFileUrl),
+    serviceOrderId: input.serviceOrderId?.trim() || null,
     providerFileName: (input.providerFileName ?? '').trim(),
     providerFileUrl,
     ocCode,
@@ -389,6 +395,9 @@ const toUpdateData = async (input: ExternalRequestUpdateInput, existing: any): P
   }
   if (input.providerFileName !== undefined) {
     data.providerFileName = (input.providerFileName ?? '').trim()
+  }
+  if (input.serviceOrderId !== undefined) {
+    data.serviceOrderId = input.serviceOrderId?.trim() || null
   }
   if (input.createdAt !== undefined && input.createdAt) {
     data.createdAt = new Date(input.createdAt)
