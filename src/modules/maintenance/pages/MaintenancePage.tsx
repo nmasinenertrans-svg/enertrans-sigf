@@ -47,10 +47,10 @@ export const MaintenancePage = () => {
   const canDelete = can('MAINTENANCE', 'delete')
 
   const [settings, setSettings] = useState<MaintenanceSettings>(readMaintenanceSettings)
-  const initialUnitId = fleetUnits[0]?.id ?? ''
   const [formData, setFormData] = useState<MaintenancePlanFormData>(() =>
-    createEmptyMaintenancePlanFormData(initialUnitId, settings),
+    createEmptyMaintenancePlanFormData('', settings),
   )
+  const [unitSearch, setUnitSearch] = useState('')
   const [errors, setErrors] = useState<MaintenanceFormErrors>({})
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [planIdPendingDelete, setPlanIdPendingDelete] = useState<string | null>(null)
@@ -97,7 +97,8 @@ export const MaintenancePage = () => {
   const resetForm = () => {
     setEditingPlanId(null)
     setErrors({})
-    setFormData(createEmptyMaintenancePlanFormData(fleetUnits[0]?.id ?? '', settings))
+    setFormData(createEmptyMaintenancePlanFormData('', settings))
+    setUnitSearch('')
   }
 
   const handleSubmitPlan = () => {
@@ -151,6 +152,8 @@ export const MaintenancePage = () => {
 
     setEditingPlanId(planId)
     setFormData(toMaintenancePlanFormData(normalizeMaintenancePlan(selectedPlan, fleetUnits, settings)))
+    const unit = fleetUnits.find((item) => item.id === selectedPlan.unitId)
+    setUnitSearch(unit?.internalCode ?? '')
   }
 
   const handleMarkServiceDone = (planId: string) => {
@@ -255,6 +258,8 @@ export const MaintenancePage = () => {
                 formData={formData}
                 errors={errors}
                 isEditing={Boolean(editingPlanId)}
+                unitSearch={unitSearch}
+                onUnitSearchChange={setUnitSearch}
                 onFieldChange={handleFieldChange}
                 onSubmit={handleSubmitPlan}
                 onCancelEdit={resetForm}

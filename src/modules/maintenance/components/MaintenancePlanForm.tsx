@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { FormRow } from '../../../components/shared/FormRow'
 import type { FleetUnit } from '../../../types/domain'
 import { getAvailableMaintenanceTypes, getMeasurementUnit, maintenanceTypeLabels } from '../services/maintenanceService'
@@ -8,6 +9,8 @@ interface MaintenancePlanFormProps {
   formData: MaintenancePlanFormData
   errors: MaintenanceFormErrors
   isEditing: boolean
+  unitSearch: string
+  onUnitSearchChange: (value: string) => void
   onFieldChange: <TField extends MaintenanceFormField>(field: TField, value: MaintenancePlanFormData[TField]) => void
   onSubmit: () => void
   onCancelEdit: () => void
@@ -16,11 +19,15 @@ interface MaintenancePlanFormProps {
 const inputClassName =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-amber-400'
 
+const normalizeDomain = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '')
+
 export const MaintenancePlanForm = ({
   fleetUnits,
   formData,
   errors,
   isEditing,
+  unitSearch,
+  onUnitSearchChange,
   onFieldChange,
   onSubmit,
   onCancelEdit,
@@ -35,9 +42,19 @@ export const MaintenancePlanForm = ({
     : formData.currentHours + formData.serviceIntervalHours
   const storedNextService = isKilometers ? formData.nextServiceByKilometers : formData.nextServiceByHours
 
-  const handleUnitChange = (unitId: string) => {
-    onFieldChange('unitId', unitId)
-    const nextUnit = fleetUnits.find((unit) => unit.id === unitId)
+  const matchedUnit = useMemo(() => {
+    const query = normalizeDomain(unitSearch)
+    if (!query) {
+      return null
+    }
+    return fleetUnits.find((unit) => normalizeDomain(unit.internalCode) === query) ?? null
+  }, [fleetUnits, unitSearch])
+
+  const handleUnitSearchChange = (value: string) => {
+    onUnitSearchChange(value)
+    const query = normalizeDomain(value)
+    const nextUnit = query ? fleetUnits.find((unit) => normalizeDomain(unit.internalCode) === query) ?? null : null
+    onFieldChange('unitId', nextUnit?.id ?? '')
     if (formData.maintenanceType === 'HYDRO_CRANE' && !nextUnit?.hasHydroCrane) {
       onFieldChange('maintenanceType', 'MOTOR')
     }
@@ -61,14 +78,19 @@ export const MaintenancePlanForm = ({
         }}
       >
         <FormRow label="Unidad" errorMessage={errors.unitId}>
-          <select className={inputClassName} value={formData.unitId} onChange={(event) => handleUnitChange(event.target.value)}>
-            <option value="">Seleccionar unidad</option>
-            {fleetUnits.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.internalCode} - {unit.ownerCompany}
-              </option>
-            ))}
-          </select>
+          <input
+            className={inputClassName}
+            value={unitSearch}
+            onChange={(event) => handleUnitSearchChange(event.target.value)}
+            placeholder="Escribir dominio (ej: AG216KV)"
+          />
+          {unitSearch.trim() ? (
+            <span className="text-xs font-normal text-slate-500">
+              {matchedUnit
+                ? `Unidad encontrada: ${matchedUnit.internalCode} - ${matchedUnit.ownerCompany}`
+                : 'Sin coincidencia exacta. Escribí la patente completa (ej: AG216KV).'}
+            </span>
+          ) : null}
         </FormRow>
 
         <FormRow label="Tipo de mantenimiento">
@@ -101,7 +123,7 @@ export const MaintenancePlanForm = ({
                 onChange={(event) => onFieldChange('currentKilometers', Number(event.target.value))}
               />
             </FormRow>
-            <FormRow label="Cada cuántos KM corresponde el service" errorMessage={errors.serviceIntervalKilometers}>
+            <FormRow label="Intervalo (KM)" errorMessage={errors.serviceIntervalKilometers}>
               <input
                 type="number"
                 min={1}
@@ -122,7 +144,7 @@ export const MaintenancePlanForm = ({
                 onChange={(event) => onFieldChange('currentHours', Number(event.target.value))}
               />
             </FormRow>
-            <FormRow label="Cada cuántas horas corresponde el service" errorMessage={errors.serviceIntervalHours}>
+            <FormRow label="Intervalo (horas)" errorMessage={errors.serviceIntervalHours}>
               <input
                 type="number"
                 min={1}
