@@ -403,6 +403,7 @@ const sanitizeFleetPatchData = (rawBody: Record<string, unknown>): Partial<z.inf
   setString('semiTrailerLicensePlate')
   setString('semiTrailerBrand')
   setString('semiTrailerModel')
+  setString('semiTrailerChassisNumber')
   setString('logisticsStatusNote')
   setNullableString('profilePhotoUrl')
 
