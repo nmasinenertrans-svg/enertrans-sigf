@@ -66,6 +66,18 @@ const parseDelimitedList = (rawText: string): string[] =>
 
 const serializeList = (itemList: string[]): string => itemList.join(', ')
 
+/** Los inputs numericos se guardan como texto para evitar el bug clasico de React
+ * donde un input controlado por un numero no se resincroniza con el DOM si el valor
+ * parseado no cambia (ej. escribir "0" antes de "10000" queda como "010000" en pantalla). */
+export const parseIntegerInput = (value: string): number => {
+  const digitsOnly = value.replace(/[^\d]/g, '')
+  if (!digitsOnly) {
+    return 0
+  }
+  const parsed = parseInt(digitsOnly, 10)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 export const getDefaultMaintenanceSettings = (): MaintenanceSettings => DEFAULT_MAINTENANCE_SETTINGS
 
 export const readMaintenanceSettings = (): MaintenanceSettings => {
@@ -137,10 +149,10 @@ export const createEmptyMaintenancePlanFormData = (
 ): MaintenancePlanFormData => ({
   unitId,
   maintenanceType: 'MOTOR',
-  currentKilometers: 0,
-  currentHours: 0,
-  serviceIntervalKilometers: DEFAULT_SERVICE_INTERVAL_KILOMETERS,
-  serviceIntervalHours: DEFAULT_SERVICE_INTERVAL_HOURS,
+  currentKilometersInput: '0',
+  currentHoursInput: '0',
+  serviceIntervalKilometersInput: String(DEFAULT_SERVICE_INTERVAL_KILOMETERS),
+  serviceIntervalHoursInput: String(DEFAULT_SERVICE_INTERVAL_HOURS),
   nextServiceByKilometers: 0,
   nextServiceByHours: 0,
   oilsInput: serializeList(settings.defaultOilList),
@@ -151,10 +163,10 @@ export const createEmptyMaintenancePlanFormData = (
 export const toMaintenancePlanFormData = (plan: MaintenancePlan): MaintenancePlanFormData => ({
   unitId: plan.unitId,
   maintenanceType: plan.maintenanceType ?? 'MOTOR',
-  currentKilometers: plan.currentKilometers,
-  currentHours: plan.currentHours,
-  serviceIntervalKilometers: plan.serviceIntervalKilometers ?? DEFAULT_SERVICE_INTERVAL_KILOMETERS,
-  serviceIntervalHours: plan.serviceIntervalHours ?? DEFAULT_SERVICE_INTERVAL_HOURS,
+  currentKilometersInput: String(plan.currentKilometers),
+  currentHoursInput: String(plan.currentHours),
+  serviceIntervalKilometersInput: String(plan.serviceIntervalKilometers ?? DEFAULT_SERVICE_INTERVAL_KILOMETERS),
+  serviceIntervalHoursInput: String(plan.serviceIntervalHours ?? DEFAULT_SERVICE_INTERVAL_HOURS),
   nextServiceByKilometers: plan.nextServiceByKilometers,
   nextServiceByHours: plan.nextServiceByHours,
   oilsInput: serializeList(plan.oils),
@@ -180,18 +192,18 @@ export const validateMaintenancePlanFormData = (
   const measurementUnit = getMeasurementUnit(unit?.unitType, formData.maintenanceType)
 
   if (measurementUnit === 'KILOMETERS') {
-    if (formData.currentKilometers < MIN_VALUE) {
-      validationErrors.currentKilometers = 'Los kilómetros actuales no pueden ser negativos.'
+    if (parseIntegerInput(formData.currentKilometersInput) < MIN_VALUE) {
+      validationErrors.currentKilometersInput = 'Los kilómetros actuales no pueden ser negativos.'
     }
-    if (formData.serviceIntervalKilometers <= MIN_VALUE) {
-      validationErrors.serviceIntervalKilometers = 'Ingresá cada cuántos KM corresponde este service.'
+    if (parseIntegerInput(formData.serviceIntervalKilometersInput) <= MIN_VALUE) {
+      validationErrors.serviceIntervalKilometersInput = 'Ingresá cada cuántos KM corresponde este service.'
     }
   } else {
-    if (formData.currentHours < MIN_VALUE) {
-      validationErrors.currentHours = 'Las horas actuales no pueden ser negativas.'
+    if (parseIntegerInput(formData.currentHoursInput) < MIN_VALUE) {
+      validationErrors.currentHoursInput = 'Las horas actuales no pueden ser negativas.'
     }
-    if (formData.serviceIntervalHours <= MIN_VALUE) {
-      validationErrors.serviceIntervalHours = 'Ingresá cada cuántas horas corresponde este service.'
+    if (parseIntegerInput(formData.serviceIntervalHoursInput) <= MIN_VALUE) {
+      validationErrors.serviceIntervalHoursInput = 'Ingresá cada cuántas horas corresponde este service.'
     }
   }
 
@@ -217,18 +229,21 @@ export const toMaintenancePlan = (
 ): MaintenancePlan => {
   const unit = fleetUnits.find((item) => item.id === formData.unitId)
   const measurementUnit = getMeasurementUnit(unit?.unitType, formData.maintenanceType)
-  const nextServiceByKilometers =
-    measurementUnit === 'KILOMETERS' ? formData.currentKilometers + formData.serviceIntervalKilometers : 0
-  const nextServiceByHours = measurementUnit === 'HOURS' ? formData.currentHours + formData.serviceIntervalHours : 0
+  const currentKilometers = parseIntegerInput(formData.currentKilometersInput)
+  const currentHours = parseIntegerInput(formData.currentHoursInput)
+  const serviceIntervalKilometers = parseIntegerInput(formData.serviceIntervalKilometersInput)
+  const serviceIntervalHours = parseIntegerInput(formData.serviceIntervalHoursInput)
+  const nextServiceByKilometers = measurementUnit === 'KILOMETERS' ? currentKilometers + serviceIntervalKilometers : 0
+  const nextServiceByHours = measurementUnit === 'HOURS' ? currentHours + serviceIntervalHours : 0
 
   return {
     id: createMaintenancePlanId(),
     unitId: formData.unitId,
     maintenanceType: formData.maintenanceType,
-    currentKilometers: formData.currentKilometers,
-    currentHours: formData.currentHours,
-    serviceIntervalKilometers: measurementUnit === 'KILOMETERS' ? formData.serviceIntervalKilometers : null,
-    serviceIntervalHours: measurementUnit === 'HOURS' ? formData.serviceIntervalHours : null,
+    currentKilometers,
+    currentHours,
+    serviceIntervalKilometers: measurementUnit === 'KILOMETERS' ? serviceIntervalKilometers : null,
+    serviceIntervalHours: measurementUnit === 'HOURS' ? serviceIntervalHours : null,
     nextServiceByKilometers,
     nextServiceByHours,
     oils: parseDelimitedList(formData.oilsInput),
@@ -236,7 +251,7 @@ export const toMaintenancePlan = (
     notes: formData.notes.trim(),
     status: calculateMaintenanceStatus(
       measurementUnit,
-      measurementUnit === 'KILOMETERS' ? formData.currentKilometers : formData.currentHours,
+      measurementUnit === 'KILOMETERS' ? currentKilometers : currentHours,
       measurementUnit === 'KILOMETERS' ? nextServiceByKilometers : nextServiceByHours,
       settings,
     ),
@@ -251,15 +266,19 @@ export const mergeMaintenancePlanFromForm = (
 ): MaintenancePlan => {
   const unit = fleetUnits.find((item) => item.id === formData.unitId)
   const measurementUnit = getMeasurementUnit(unit?.unitType, formData.maintenanceType)
+  const currentKilometers = parseIntegerInput(formData.currentKilometersInput)
+  const currentHours = parseIntegerInput(formData.currentHoursInput)
+  const serviceIntervalKilometers = parseIntegerInput(formData.serviceIntervalKilometersInput)
+  const serviceIntervalHours = parseIntegerInput(formData.serviceIntervalHoursInput)
 
   return {
     ...plan,
     unitId: formData.unitId,
     maintenanceType: formData.maintenanceType,
-    currentKilometers: formData.currentKilometers,
-    currentHours: formData.currentHours,
-    serviceIntervalKilometers: measurementUnit === 'KILOMETERS' ? formData.serviceIntervalKilometers : null,
-    serviceIntervalHours: measurementUnit === 'HOURS' ? formData.serviceIntervalHours : null,
+    currentKilometers,
+    currentHours,
+    serviceIntervalKilometers: measurementUnit === 'KILOMETERS' ? serviceIntervalKilometers : null,
+    serviceIntervalHours: measurementUnit === 'HOURS' ? serviceIntervalHours : null,
     nextServiceByKilometers: formData.nextServiceByKilometers,
     nextServiceByHours: formData.nextServiceByHours,
     oils: parseDelimitedList(formData.oilsInput),
@@ -267,7 +286,7 @@ export const mergeMaintenancePlanFromForm = (
     notes: formData.notes.trim(),
     status: calculateMaintenanceStatus(
       measurementUnit,
-      measurementUnit === 'KILOMETERS' ? formData.currentKilometers : formData.currentHours,
+      measurementUnit === 'KILOMETERS' ? currentKilometers : currentHours,
       measurementUnit === 'KILOMETERS' ? formData.nextServiceByKilometers : formData.nextServiceByHours,
       settings,
     ),

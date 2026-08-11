@@ -1,7 +1,12 @@
 import { useMemo } from 'react'
 import { FormRow } from '../../../components/shared/FormRow'
 import type { FleetUnit } from '../../../types/domain'
-import { getAvailableMaintenanceTypes, getMeasurementUnit, maintenanceTypeLabels } from '../services/maintenanceService'
+import {
+  getAvailableMaintenanceTypes,
+  getMeasurementUnit,
+  maintenanceTypeLabels,
+  parseIntegerInput,
+} from '../services/maintenanceService'
 import type { MaintenanceFormErrors, MaintenanceFormField, MaintenancePlanFormData } from '../types'
 
 interface MaintenancePlanFormProps {
@@ -38,8 +43,8 @@ export const MaintenancePlanForm = ({
   const isKilometers = measurementUnit === 'KILOMETERS'
 
   const previewNextService = isKilometers
-    ? formData.currentKilometers + formData.serviceIntervalKilometers
-    : formData.currentHours + formData.serviceIntervalHours
+    ? parseIntegerInput(formData.currentKilometersInput) + parseIntegerInput(formData.serviceIntervalKilometersInput)
+    : parseIntegerInput(formData.currentHoursInput) + parseIntegerInput(formData.serviceIntervalHoursInput)
   const storedNextService = isKilometers ? formData.nextServiceByKilometers : formData.nextServiceByHours
 
   const matchedUnit = useMemo(() => {
@@ -114,43 +119,47 @@ export const MaintenancePlanForm = ({
 
         {isKilometers ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormRow label="KM actuales" errorMessage={errors.currentKilometers}>
+            <FormRow label="KM actuales" errorMessage={errors.currentKilometersInput}>
               <input
-                type="number"
-                min={0}
+                type="text"
+                inputMode="numeric"
                 className={inputClassName}
-                value={formData.currentKilometers}
-                onChange={(event) => onFieldChange('currentKilometers', Number(event.target.value))}
+                value={formData.currentKilometersInput}
+                onChange={(event) => onFieldChange('currentKilometersInput', event.target.value.replace(/[^\d]/g, ''))}
               />
             </FormRow>
-            <FormRow label="Intervalo (KM)" errorMessage={errors.serviceIntervalKilometers}>
+            <FormRow label="Intervalo (KM)" errorMessage={errors.serviceIntervalKilometersInput}>
               <input
-                type="number"
-                min={1}
+                type="text"
+                inputMode="numeric"
                 className={inputClassName}
-                value={formData.serviceIntervalKilometers}
-                onChange={(event) => onFieldChange('serviceIntervalKilometers', Number(event.target.value))}
+                value={formData.serviceIntervalKilometersInput}
+                onChange={(event) =>
+                  onFieldChange('serviceIntervalKilometersInput', event.target.value.replace(/[^\d]/g, ''))
+                }
               />
             </FormRow>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormRow label="Horas actuales" errorMessage={errors.currentHours}>
+            <FormRow label="Horas actuales" errorMessage={errors.currentHoursInput}>
               <input
-                type="number"
-                min={0}
+                type="text"
+                inputMode="numeric"
                 className={inputClassName}
-                value={formData.currentHours}
-                onChange={(event) => onFieldChange('currentHours', Number(event.target.value))}
+                value={formData.currentHoursInput}
+                onChange={(event) => onFieldChange('currentHoursInput', event.target.value.replace(/[^\d]/g, ''))}
               />
             </FormRow>
-            <FormRow label="Intervalo (horas)" errorMessage={errors.serviceIntervalHours}>
+            <FormRow label="Intervalo (horas)" errorMessage={errors.serviceIntervalHoursInput}>
               <input
-                type="number"
-                min={1}
+                type="text"
+                inputMode="numeric"
                 className={inputClassName}
-                value={formData.serviceIntervalHours}
-                onChange={(event) => onFieldChange('serviceIntervalHours', Number(event.target.value))}
+                value={formData.serviceIntervalHoursInput}
+                onChange={(event) =>
+                  onFieldChange('serviceIntervalHoursInput', event.target.value.replace(/[^\d]/g, ''))
+                }
               />
             </FormRow>
           </div>

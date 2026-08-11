@@ -10,10 +10,10 @@ export interface MaintenanceSettings {
 export interface MaintenancePlanFormData {
   unitId: string
   maintenanceType: MaintenanceType
-  currentKilometers: number
-  currentHours: number
-  serviceIntervalKilometers: number
-  serviceIntervalHours: number
+  currentKilometersInput: string
+  currentHoursInput: string
+  serviceIntervalKilometersInput: string
+  serviceIntervalHoursInput: string
   nextServiceByKilometers: number
   nextServiceByHours: number
   oilsInput: string
