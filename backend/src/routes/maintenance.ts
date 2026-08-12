@@ -2,33 +2,9 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
-import { sendPushToAllUsers } from '../services/webPush.js'
+import { maintenanceTypeValues, notifyMaintenanceStatus } from '../services/maintenancePlans.js'
 
 const router = Router()
-
-const maintenanceTypeValues = [
-  'MOTOR',
-  'DISTRIBUTION',
-  'GEARBOX',
-  'COOLING',
-  'DIFFERENTIAL',
-  'STEERING',
-  'CLUTCH',
-  'BRAKES',
-  'HYDRO_CRANE',
-] as const
-
-const maintenanceTypeLabels: Record<(typeof maintenanceTypeValues)[number], string> = {
-  MOTOR: 'Motor',
-  DISTRIBUTION: 'Distribución',
-  GEARBOX: 'Caja',
-  COOLING: 'Refrigeración',
-  DIFFERENTIAL: 'Diferencial',
-  STEERING: 'Dirección',
-  CLUTCH: 'Embrague',
-  BRAKES: 'Frenos',
-  HYDRO_CRANE: 'Hidrogrúa',
-}
 
 const maintenanceSchema = z.object({
   id: z.string().uuid().optional(),
@@ -48,25 +24,6 @@ const maintenanceSchema = z.object({
 })
 
 const maintenanceUpdateSchema = maintenanceSchema.partial()
-
-const notifyMaintenanceStatus = async (unitId: string, maintenanceType: string, status: string) => {
-  if (status !== 'OVERDUE' && status !== 'DUE_SOON') {
-    return
-  }
-  try {
-    const unit = await prisma.fleetUnit.findUnique({ where: { id: unitId }, select: { internalCode: true } })
-    const typeLabel =
-      maintenanceTypeLabels[maintenanceType as (typeof maintenanceTypeValues)[number]] ?? maintenanceType
-    void sendPushToAllUsers({
-      title: status === 'OVERDUE' ? 'Service vencido' : 'Service próximo a vencer',
-      body: `${unit?.internalCode ?? 'Unidad'} - ${typeLabel}`,
-      url: '/maintenance',
-      tag: 'maintenance-status',
-    }).catch(() => undefined)
-  } catch (error) {
-    console.warn('MaintenancePlan notify error:', error)
-  }
-}
 
 router.get('/', async (_req, res) => {
   const plans = await prisma.maintenancePlan.findMany({ orderBy: { createdAt: 'desc' } })

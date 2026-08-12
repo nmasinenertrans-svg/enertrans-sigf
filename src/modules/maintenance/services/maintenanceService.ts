@@ -321,16 +321,36 @@ export const markMaintenanceServiceDone = (
   }
 }
 
+/** Km/horas "en vivo" de la unidad para el tipo de mantenimiento dado (motor vs hidrogrúa). */
+const getLiveMeasurement = (unit: FleetUnit | undefined, maintenanceType: MaintenanceType): number | undefined => {
+  if (!unit) {
+    return undefined
+  }
+  if (maintenanceType === 'HYDRO_CRANE') {
+    return typeof unit.currentHydroHours === 'number' ? unit.currentHydroHours : undefined
+  }
+  return typeof unit.currentEngineHours === 'number' ? unit.currentEngineHours : undefined
+}
+
 export const normalizeMaintenancePlan = (
   plan: MaintenancePlan,
   fleetUnits: FleetUnit[],
   settings: MaintenanceSettings,
 ): MaintenancePlan => {
-  const currentKilometers = typeof plan.currentKilometers === 'number' ? plan.currentKilometers : 0
-  const currentHours = typeof plan.currentHours === 'number' ? plan.currentHours : 0
   const maintenanceType = plan.maintenanceType ?? 'MOTOR'
   const unit = fleetUnits.find((item) => item.id === plan.unitId)
   const measurementUnit = getMeasurementUnit(unit?.unitType, maintenanceType)
+
+  // El plan solo se actualizaba a mano; la unidad ya acumula km/horas reales solos
+  // (auditorias, edicion de flota). Para que la alerta no quede desactualizada, el
+  // "actual" que se usa para mostrar y calcular estado sale de la unidad, no del plan.
+  const liveKilometers = measurementUnit === 'KILOMETERS' ? unit?.currentKilometers : undefined
+  const liveHours = measurementUnit === 'HOURS' ? getLiveMeasurement(unit, maintenanceType) : undefined
+
+  const currentKilometers =
+    typeof liveKilometers === 'number' ? liveKilometers : typeof plan.currentKilometers === 'number' ? plan.currentKilometers : 0
+  const currentHours =
+    typeof liveHours === 'number' ? liveHours : typeof plan.currentHours === 'number' ? plan.currentHours : 0
 
   return {
     ...plan,

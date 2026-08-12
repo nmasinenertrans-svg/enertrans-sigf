@@ -168,7 +168,8 @@ export const MaintenancePage = () => {
 
     const unit = fleetUnits.find((item) => item.id === selectedPlan.unitId)
     const measurementUnit = getMeasurementUnit(unit?.unitType, selectedPlan.maintenanceType)
-    const updatedPlan = markMaintenanceServiceDone(selectedPlan, measurementUnit, settings)
+    const livePlan = normalizeMaintenancePlan(selectedPlan, fleetUnits, settings)
+    const updatedPlan = markMaintenanceServiceDone(livePlan, measurementUnit, settings)
 
     setMaintenancePlans(maintenancePlans.map((plan) => (plan.id === planId ? updatedPlan : plan)))
     if (isOnline()) {

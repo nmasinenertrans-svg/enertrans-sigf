@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { getActiveDbSchema, prisma, runWithSchemaFailover } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
+import { recalculateMaintenancePlansForUnit } from '../services/maintenancePlans.js'
 
 const router = Router()
 
@@ -643,6 +644,19 @@ router.patch('/:id', async (req, res) => {
         operationalStatus,
       },
     })
+
+    if (
+      patchData.currentKilometers !== undefined ||
+      patchData.currentEngineHours !== undefined ||
+      patchData.currentHydroHours !== undefined
+    ) {
+      void recalculateMaintenancePlansForUnit(unit.id, {
+        unitKilometers: unit.currentKilometers,
+        engineHours: unit.currentEngineHours,
+        hydroHours: unit.currentHydroHours,
+      })
+    }
+
     return res.json(unit)
   } catch (error: unknown) {
     console.error('Fleet PATCH error:', error)

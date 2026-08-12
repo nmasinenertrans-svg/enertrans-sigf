@@ -6,6 +6,7 @@ import { getErrorCode } from '../utils/errors.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { supabase, supabaseBucket } from '../storage/supabase.js'
 import { sendPushToAllUsers } from '../services/webPush.js'
+import { recalculateMaintenancePlansForUnit } from '../services/maintenancePlans.js'
 
 const router = Router()
 const AUDIT_DUPLICATE_WINDOW_MS = 10 * 60 * 1000
@@ -355,6 +356,11 @@ router.post('/', async (req, res) => {
           currentEngineHours: parsed.data.engineHours,
           currentHydroHours: parsed.data.hydroHours,
         },
+      })
+      void recalculateMaintenancePlansForUnit(item.unitId, {
+        unitKilometers: parsed.data.unitKilometers,
+        engineHours: parsed.data.engineHours,
+        hydroHours: parsed.data.hydroHours,
       })
     }
 
