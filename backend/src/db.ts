@@ -490,6 +490,7 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
       "code" TEXT NOT NULL,
       "providerName" TEXT NOT NULL,
+      "supplierId" TEXT,
       "invoiceNumber" TEXT NOT NULL DEFAULT '',
       "amount" DOUBLE PRECISION NOT NULL DEFAULT 0,
       "currency" TEXT NOT NULL DEFAULT 'ARS',
@@ -506,8 +507,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       CONSTRAINT "Invoice_pkey" PRIMARY KEY ("id")
     );
   `)
+  await safeExecuteCompatSql(`ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "supplierId" TEXT;`)
   await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_code_key" ON "Invoice"("code");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_repairId_idx" ON "Invoice"("repairId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_supplierId_idx" ON "Invoice"("supplierId");`)
 
   // Si Supplier existe legacy, asegura columnas nuevas.
   await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT NOT NULL DEFAULT '';`)

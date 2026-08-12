@@ -9,6 +9,7 @@ const router = Router()
 
 const invoiceCreateSchema = z.object({
   providerName: z.string().min(1),
+  supplierId: z.string().nullable().optional(),
   invoiceNumber: z.string().optional().default(''),
   amount: z.number().min(0).optional().default(0),
   currency: z.enum(['ARS', 'USD']).optional().default('ARS'),
@@ -76,6 +77,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       data: {
         code,
         providerName: parsed.data.providerName.trim(),
+        supplierId: parsed.data.supplierId || null,
         invoiceNumber: parsed.data.invoiceNumber.trim(),
         amount: parsed.data.amount,
         currency: parsed.data.currency,
@@ -121,6 +123,9 @@ router.patch('/:id', async (req, res) => {
   }
   if (parsed.data.repairId !== undefined) {
     data.repairId = parsed.data.repairId || null
+  }
+  if (parsed.data.supplierId !== undefined) {
+    data.supplierId = parsed.data.supplierId || null
   }
 
   try {

@@ -371,6 +371,7 @@ export interface Invoice {
   id: string
   code: string
   providerName: string
+  supplierId?: string | null
   invoiceNumber?: string
   amount: number
   currency: 'ARS' | 'USD'

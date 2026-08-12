@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { FormRow } from '../../../components/shared/FormRow'
-import type { FleetUnit, InventoryItem, RepairRecord } from '../../../types/domain'
+import type { FleetUnit, InventoryItem, RepairRecord, Supplier } from '../../../types/domain'
 import type { InvoiceFormData, InvoiceFormErrors, InvoiceFormField } from '../types'
 
 interface InvoiceFormProps {
@@ -9,6 +9,7 @@ interface InvoiceFormProps {
   repairs: RepairRecord[]
   fleetUnits: FleetUnit[]
   inventoryItems: InventoryItem[]
+  suppliers: Supplier[]
   isSaving: boolean
   onFieldChange: <TField extends InvoiceFormField>(field: TField, value: InvoiceFormData[TField]) => void
   onFileSelected: (file: File | null) => void
@@ -24,6 +25,7 @@ export const InvoiceForm = ({
   repairs,
   fleetUnits,
   inventoryItems,
+  suppliers,
   isSaving,
   onFieldChange,
   onFileSelected,
@@ -31,6 +33,23 @@ export const InvoiceForm = ({
 }: InvoiceFormProps) => {
   const [repairSearch, setRepairSearch] = useState('')
   const [inventorySearch, setInventorySearch] = useState('')
+  const [supplierSearch, setSupplierSearch] = useState('')
+
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === formData.supplierId)
+
+  const filteredSuppliers = useMemo(() => {
+    const query = supplierSearch.trim().toLowerCase()
+    if (!query) {
+      return suppliers.slice(0, 8)
+    }
+    return suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query)).slice(0, 8)
+  }, [suppliers, supplierSearch])
+
+  const handleSelectSupplier = (supplier: Supplier) => {
+    onFieldChange('supplierId', supplier.id)
+    onFieldChange('providerName', supplier.name)
+    setSupplierSearch('')
+  }
 
   const unitCodeById = useMemo(() => new Map(fleetUnits.map((unit) => [unit.id, unit.internalCode])), [fleetUnits])
 
@@ -89,24 +108,58 @@ export const InvoiceForm = ({
           onSubmit()
         }}
       >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <FormRow label="Proveedor" errorMessage={errors.providerName}>
-            <input
-              className={inputClassName}
-              value={formData.providerName}
-              onChange={(event) => onFieldChange('providerName', event.target.value)}
-              placeholder="Nombre del proveedor"
-            />
-          </FormRow>
-          <FormRow label="N° de factura (opcional)">
-            <input
-              className={inputClassName}
-              value={formData.invoiceNumber}
-              onChange={(event) => onFieldChange('invoiceNumber', event.target.value)}
-              placeholder="0001-00012345"
-            />
-          </FormRow>
-        </div>
+        <FormRow label="Proveedor" errorMessage={errors.providerName}>
+          {selectedSupplier ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span>Proveedor registrado: {selectedSupplier.name}</span>
+              <button
+                type="button"
+                onClick={() => onFieldChange('supplierId', '')}
+                className="font-semibold text-amber-700 hover:underline"
+              >
+                Quitar vínculo
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                className={inputClassName}
+                value={supplierSearch}
+                onChange={(event) => setSupplierSearch(event.target.value)}
+                placeholder="Buscar proveedor registrado..."
+              />
+              {supplierSearch.trim() && filteredSuppliers.length > 0 ? (
+                <div className="mt-2 max-h-32 space-y-1 overflow-y-auto">
+                  {filteredSuppliers.map((supplier) => (
+                    <button
+                      key={supplier.id}
+                      type="button"
+                      onClick={() => handleSelectSupplier(supplier)}
+                      className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                    >
+                      {supplier.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+          <input
+            className={`${inputClassName} mt-2`}
+            value={formData.providerName}
+            onChange={(event) => onFieldChange('providerName', event.target.value)}
+            placeholder="Nombre del proveedor (o corregilo si no está registrado)"
+          />
+        </FormRow>
+
+        <FormRow label="N° de factura (opcional)">
+          <input
+            className={inputClassName}
+            value={formData.invoiceNumber}
+            onChange={(event) => onFieldChange('invoiceNumber', event.target.value)}
+            placeholder="0001-00012345"
+          />
+        </FormRow>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <FormRow label="Monto" errorMessage={errors.amountInput}>

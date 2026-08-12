@@ -16,6 +16,7 @@ const parseMoney = (value: string): number => {
 
 export const createEmptyInvoiceFormData = (): InvoiceFormData => ({
   providerName: '',
+  supplierId: '',
   invoiceNumber: '',
   amountInput: '',
   currency: 'ARS',
@@ -46,6 +47,7 @@ export const toInvoicePayload = (formData: InvoiceFormData): Invoice => ({
   id: createId(),
   code: '',
   providerName: formData.providerName.trim(),
+  supplierId: formData.supplierId || null,
   invoiceNumber: formData.invoiceNumber.trim(),
   amount: parseMoney(formData.amountInput),
   currency: formData.currency,

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
+import { sendPushToAllUsers } from '../services/webPush.js'
 
 const router = Router()
 
@@ -16,6 +17,18 @@ const maintenanceTypeValues = [
   'BRAKES',
   'HYDRO_CRANE',
 ] as const
+
+const maintenanceTypeLabels: Record<(typeof maintenanceTypeValues)[number], string> = {
+  MOTOR: 'Motor',
+  DISTRIBUTION: 'Distribución',
+  GEARBOX: 'Caja',
+  COOLING: 'Refrigeración',
+  DIFFERENTIAL: 'Diferencial',
+  STEERING: 'Dirección',
+  CLUTCH: 'Embrague',
+  BRAKES: 'Frenos',
+  HYDRO_CRANE: 'Hidrogrúa',
+}
 
 const maintenanceSchema = z.object({
   id: z.string().uuid().optional(),
@@ -36,6 +49,25 @@ const maintenanceSchema = z.object({
 
 const maintenanceUpdateSchema = maintenanceSchema.partial()
 
+const notifyMaintenanceStatus = async (unitId: string, maintenanceType: string, status: string) => {
+  if (status !== 'OVERDUE' && status !== 'DUE_SOON') {
+    return
+  }
+  try {
+    const unit = await prisma.fleetUnit.findUnique({ where: { id: unitId }, select: { internalCode: true } })
+    const typeLabel =
+      maintenanceTypeLabels[maintenanceType as (typeof maintenanceTypeValues)[number]] ?? maintenanceType
+    void sendPushToAllUsers({
+      title: status === 'OVERDUE' ? 'Service vencido' : 'Service próximo a vencer',
+      body: `${unit?.internalCode ?? 'Unidad'} - ${typeLabel}`,
+      url: '/maintenance',
+      tag: 'maintenance-status',
+    }).catch(() => undefined)
+  } catch (error) {
+    console.warn('MaintenancePlan notify error:', error)
+  }
+}
+
 router.get('/', async (_req, res) => {
   const plans = await prisma.maintenancePlan.findMany({ orderBy: { createdAt: 'desc' } })
   return res.json(plans)
@@ -54,6 +86,7 @@ router.post('/', async (req, res) => {
         serviceSchedule: parsed.data.serviceSchedule as any,
       },
     })
+    void notifyMaintenanceStatus(plan.unitId, plan.maintenanceType, plan.status)
     return res.status(201).json(plan)
   } catch (error: unknown) {
     if (getErrorCode(error) === 'P2002') {
@@ -70,6 +103,7 @@ router.patch('/:id', async (req, res) => {
   }
 
   try {
+    const existing = await prisma.maintenancePlan.findUnique({ where: { id: req.params.id }, select: { status: true } })
     const plan = await prisma.maintenancePlan.update({
       where: { id: req.params.id },
       data: {
@@ -77,6 +111,9 @@ router.patch('/:id', async (req, res) => {
         serviceSchedule: parsed.data.serviceSchedule !== undefined ? (parsed.data.serviceSchedule as any) : undefined,
       },
     })
+    if (plan.status !== existing?.status) {
+      void notifyMaintenanceStatus(plan.unitId, plan.maintenanceType, plan.status)
+    }
     return res.json(plan)
   } catch (error: unknown) {
     if (getErrorCode(error) === 'P2025') {

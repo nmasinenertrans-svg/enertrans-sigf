@@ -7,6 +7,13 @@ import { pushUserNotifications, resolveOperationalNotificationRecipients } from 
 
 const router = Router()
 
+// El base64 de la factura solo sirve como respaldo temporal mientras no haya
+// invoiceFileUrl (repair creada offline, upload pendiente). Una vez que existe
+// la URL, mandarlo en cada carga infla el listado general sin ningun uso real.
+const trimStaleInvoiceBase64 = <T extends { invoiceFileUrl?: string | null; invoiceFileBase64?: string | null }>(
+  item: T,
+): T => (item.invoiceFileUrl ? { ...item, invoiceFileBase64: '' } : item)
+
 const CURRENCY_CODES = ['ARS', 'USD'] as const
 const REPAIR_OPERATIONAL_COLUMNS = [
   'performedAt',
@@ -580,17 +587,17 @@ router.get('/', async (_req, res) => {
     if (supportsOperational) {
       const items = await runWithSchemaFailover(() => prisma.repairRecord.findMany({ orderBy: { createdAt: 'desc' } }))
       const recovered = await recoveryPromise
-      return res.json(mergeRepairCollections(items, recovered))
+      return res.json(mergeRepairCollections(items, recovered).map(trimStaleInvoiceBase64))
     }
-    return res.json(await recoveryPromise)
+    return res.json((await recoveryPromise).map(trimStaleInvoiceBase64))
   } catch (error) {
     if (!supportsOperational || isMissingOperationalColumnError(error)) {
-      return res.json(await recoveryPromise)
+      return res.json((await recoveryPromise).map(trimStaleInvoiceBase64))
     }
     console.error('Repairs GET error:', error)
     const recovered = await recoveryPromise
     if (recovered.length > 0) {
-      return res.json(recovered)
+      return res.json(recovered.map(trimStaleInvoiceBase64))
     }
     return res.status(500).json({ message: 'No se pudieron cargar las reparaciones.' })
   }

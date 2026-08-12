@@ -359,6 +359,7 @@ model Invoice {
   id               String    @id @default(uuid())
   code             String    @unique
   providerName     String
+  supplierId       String?
   invoiceNumber    String    @default("")
   amount           Float     @default(0)
   currency         String    @default("ARS")
@@ -374,9 +375,11 @@ model Invoice {
   updatedAt        DateTime  @updatedAt
 
   repair    RepairRecord? @relation(fields: [repairId], references: [id])
+  supplier  Supplier?     @relation(fields: [supplierId], references: [id])
   createdBy User          @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
 
   @@index([repairId])
+  @@index([supplierId])
 }
 
 model InventoryItem {
@@ -556,6 +559,7 @@ model Supplier {
   updatedAt     DateTime @updatedAt
 
   repairs       RepairRecord[]
+  invoices      Invoice[]
 }
 
 model DeliveryOperation {

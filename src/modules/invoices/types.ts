@@ -1,5 +1,6 @@
 export interface InvoiceFormData {
   providerName: string
+  supplierId: string
   invoiceNumber: string
   amountInput: string
   currency: 'ARS' | 'USD'

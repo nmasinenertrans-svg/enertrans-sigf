@@ -27,7 +27,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 export const InvoicesPage = () => {
   const { can } = usePermissions()
   const {
-    state: { invoices, repairs, fleetUnits, inventoryItems },
+    state: { invoices, repairs, fleetUnits, inventoryItems, suppliers },
     actions: { setInvoices, setAppError },
   } = useAppContext()
 
@@ -169,6 +169,7 @@ export const InvoicesPage = () => {
               repairs={repairs}
               fleetUnits={fleetUnits}
               inventoryItems={inventoryItems}
+              suppliers={suppliers}
               isSaving={isSaving}
               onFieldChange={handleFieldChange}
               onFileSelected={handleFileSelected}
