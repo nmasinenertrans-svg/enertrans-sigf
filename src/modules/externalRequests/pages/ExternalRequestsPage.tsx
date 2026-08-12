@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { ROUTE_PATHS, buildServiceOrderDetailPath } from '../../../core/routing/routePaths'
+import { ROUTE_PATHS, buildServiceOrderDetailPath, buildInvoiceFromExternalRequestPath } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
@@ -790,6 +790,14 @@ export const ExternalRequestsPage = () => {
                           >
                             Imprimir OC
                           </button>
+                        ) : null}
+                        {request.linkedRepairId ? (
+                          <Link
+                            to={buildInvoiceFromExternalRequestPath(request.id)}
+                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                          >
+                            Cargar factura
+                          </Link>
                         ) : null}
                         {canDelete ? (
                           <button

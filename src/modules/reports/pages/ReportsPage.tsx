@@ -13,6 +13,7 @@ import {
   type ExternalRequest,
   type FleetOperationalStatus,
   type FleetUnit,
+  type Invoice,
   type RepairRecord,
   type TaskRecord,
   type WorkOrder,
@@ -35,6 +36,21 @@ type AssigneeCompliance = {
   total: number
   done: number
   completionRate: number
+}
+
+type InvoiceProviderMetrics = {
+  providerName: string
+  count: number
+  totalARS: number
+  totalUSD: number
+}
+
+type InvoiceMonthMetrics = {
+  monthKey: string
+  monthLabel: string
+  count: number
+  totalARS: number
+  totalUSD: number
 }
 
 type OccupancyPdfSegment = {
@@ -396,7 +412,7 @@ const getOccupancyDimensionValue = (unit: FleetUnit, dimension: OccupancyDimensi
 
 export const ReportsPage = () => {
   const {
-    state: { audits, workOrders, repairs, fleetUnits, externalRequests, featureFlags },
+    state: { audits, workOrders, repairs, fleetUnits, externalRequests, invoices, featureFlags },
     actions: { setAppError },
   } = useAppContext()
 
@@ -478,6 +494,7 @@ export const ReportsPage = () => {
     () => new Map(externalRequests.map((request) => [request.id, request])),
     [externalRequests],
   )
+  const repairMap = useMemo(() => new Map(repairs.map((repair) => [repair.id, repair])), [repairs])
 
   const filteredAudits = useMemo(
     () => audits.filter((audit) => isWithinRange(audit.performedAt, startDate, endDate)),
@@ -497,6 +514,11 @@ export const ReportsPage = () => {
   const filteredTasks = useMemo(
     () => tasks.filter((task) => isWithinRange(task.createdAt, startDate, endDate)),
     [tasks, startDate, endDate],
+  )
+
+  const filteredInvoices = useMemo(
+    () => invoices.filter((invoice) => isWithinRange(invoice.issuedAt ?? invoice.createdAt, startDate, endDate)),
+    [invoices, startDate, endDate],
   )
 
   const rangeLabel = startDate || endDate ? `Periodo: ${startDate || 'Inicio'} -> ${endDate || 'Hoy'}` : 'Periodo completo'
@@ -805,6 +827,55 @@ export const ReportsPage = () => {
     [filteredRepairs],
   )
 
+  const invoiceProviderMetrics = useMemo<InvoiceProviderMetrics[]>(() => {
+    const map = new Map<string, InvoiceProviderMetrics>()
+    filteredInvoices.forEach((invoice) => {
+      const providerName = invoice.providerName?.trim() || 'Sin proveedor'
+      const current = map.get(providerName) ?? { providerName, count: 0, totalARS: 0, totalUSD: 0 }
+      current.count += 1
+      if (invoice.currency === 'USD') {
+        current.totalUSD += invoice.amount ?? 0
+      } else {
+        current.totalARS += invoice.amount ?? 0
+      }
+      map.set(providerName, current)
+    })
+    return Array.from(map.values()).sort((a, b) => b.totalARS + b.totalUSD - (a.totalARS + a.totalUSD))
+  }, [filteredInvoices])
+
+  const invoiceMonthMetrics = useMemo<InvoiceMonthMetrics[]>(() => {
+    const map = new Map<string, InvoiceMonthMetrics>()
+    filteredInvoices.forEach((invoice) => {
+      const dateValue = invoice.issuedAt ?? invoice.createdAt
+      const date = dateValue ? new Date(dateValue) : null
+      const hasValidDate = date && !Number.isNaN(date.getTime())
+      const monthKey = hasValidDate ? `${date!.getFullYear()}-${String(date!.getMonth() + 1).padStart(2, '0')}` : 'sin-fecha'
+      const monthLabel = hasValidDate
+        ? date!.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+        : 'Sin fecha'
+      const current = map.get(monthKey) ?? { monthKey, monthLabel, count: 0, totalARS: 0, totalUSD: 0 }
+      current.count += 1
+      if (invoice.currency === 'USD') {
+        current.totalUSD += invoice.amount ?? 0
+      } else {
+        current.totalARS += invoice.amount ?? 0
+      }
+      map.set(monthKey, current)
+    })
+    return Array.from(map.values()).sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+  }, [filteredInvoices])
+
+  const totalInvoicesARS = useMemo(
+    () => filteredInvoices.filter((invoice) => invoice.currency !== 'USD').reduce((sum, invoice) => sum + (invoice.amount ?? 0), 0),
+    [filteredInvoices],
+  )
+  const totalInvoicesUSD = useMemo(
+    () => filteredInvoices.filter((invoice) => invoice.currency === 'USD').reduce((sum, invoice) => sum + (invoice.amount ?? 0), 0),
+    [filteredInvoices],
+  )
+  const topInvoiceProvider = invoiceProviderMetrics[0] ?? null
+  const maxInvoiceProviderTotal = topInvoiceProvider ? topInvoiceProvider.totalARS + topInvoiceProvider.totalUSD : 0
+
   const approvedAudits = useMemo(
     () => filteredAudits.filter((audit) => audit.result === 'APPROVED').length,
     [filteredAudits],
@@ -1086,6 +1157,62 @@ export const ReportsPage = () => {
       repair.margin,
     ])
     downloadXlsx('reparaciones.xlsx', headers, rows)
+  }
+
+  const resolveInvoiceRepairLabel = (invoice: Invoice) => {
+    if (!invoice.repairId) {
+      return 'Sin vincular'
+    }
+    const repair = repairMap.get(invoice.repairId)
+    if (!repair) {
+      return 'Sin vincular'
+    }
+    return unitMap.get(repair.unitId)?.domain ?? 'Reparacion vinculada'
+  }
+
+  const exportInvoicesCsv = () => {
+    const headers = ['Codigo', 'Fecha', 'Proveedor', 'N Factura', 'Monto', 'Moneda', 'Reparacion vinculada', 'Notas']
+    const rows = filteredInvoices.map((invoice) => [
+      invoice.code,
+      formatDateTime(invoice.issuedAt ?? invoice.createdAt),
+      invoice.providerName,
+      invoice.invoiceNumber ?? '',
+      invoice.amount,
+      invoice.currency,
+      resolveInvoiceRepairLabel(invoice),
+      invoice.notes ?? '',
+    ])
+    downloadCsv('facturas.csv', buildCsv(headers, rows))
+  }
+
+  const exportInvoicesPdf = () => {
+    const headers = ['Codigo', 'Fecha', 'Proveedor', 'N Factura', 'Monto', 'Moneda', 'Reparacion']
+    const rows = filteredInvoices.map((invoice) => [
+      invoice.code,
+      formatDateTime(invoice.issuedAt ?? invoice.createdAt),
+      invoice.providerName,
+      invoice.invoiceNumber ?? '',
+      invoice.amount.toFixed(2),
+      invoice.currency,
+      resolveInvoiceRepairLabel(invoice),
+    ])
+    const doc = buildPdf('Reporte de Facturas', rangeLabel, headers, rows)
+    doc.save('facturas.pdf')
+  }
+
+  const exportInvoicesXlsx = () => {
+    const headers = ['Codigo', 'Fecha', 'Proveedor', 'N Factura', 'Monto', 'Moneda', 'Reparacion vinculada', 'Notas']
+    const rows = filteredInvoices.map((invoice) => [
+      invoice.code,
+      formatDateTime(invoice.issuedAt ?? invoice.createdAt),
+      invoice.providerName,
+      invoice.invoiceNumber ?? '',
+      invoice.amount,
+      invoice.currency,
+      resolveInvoiceRepairLabel(invoice),
+      invoice.notes ?? '',
+    ])
+    downloadXlsx('facturas.xlsx', headers, rows)
   }
 
   const exportOccupancyPdf = () => {
@@ -2387,6 +2514,90 @@ export const ReportsPage = () => {
         </div>
       </article>
 
+      <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-slate-900">Gasto en Facturas</h3>
+          <span className="text-xs text-slate-500">{filteredInvoices.length} facturas en el periodo</span>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total ARS</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">{formatCurrency(totalInvoicesARS)}</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total USD</p>
+            <p className="mt-1 text-lg font-bold text-slate-900">
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalInvoicesUSD)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Proveedor con mayor gasto</p>
+            <p className="mt-1 text-sm font-bold text-slate-900">{topInvoiceProvider?.providerName ?? 'Sin datos'}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Gasto por proveedor</p>
+            <div className="mt-3 space-y-3">
+              {invoiceProviderMetrics.length === 0 ? (
+                <p className="text-sm text-slate-500">No hay facturas en el rango seleccionado.</p>
+              ) : (
+                invoiceProviderMetrics.slice(0, 6).map((provider) => {
+                  const providerTotal = provider.totalARS + provider.totalUSD
+                  return (
+                    <div key={provider.providerName} className="rounded-lg border border-slate-200 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-800">{provider.providerName}</p>
+                        <p className="text-xs font-semibold text-slate-600">{provider.count} facturas</p>
+                      </div>
+                      <p className="mt-0.5 text-xs text-slate-600">
+                        {provider.totalARS > 0 ? formatCurrency(provider.totalARS) : null}
+                        {provider.totalARS > 0 && provider.totalUSD > 0 ? ' + ' : null}
+                        {provider.totalUSD > 0
+                          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(provider.totalUSD)
+                          : null}
+                      </p>
+                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-amber-500 transition-all"
+                          style={{ width: `${Math.max(6, Math.min(100, (providerTotal / (maxInvoiceProviderTotal || 1)) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-slate-800">Gasto por mes</p>
+            <div className="mt-3 space-y-3">
+              {invoiceMonthMetrics.length === 0 ? (
+                <p className="text-sm text-slate-500">No hay facturas en el rango seleccionado.</p>
+              ) : (
+                invoiceMonthMetrics.map((month) => (
+                  <div key={month.monthKey} className="rounded-lg border border-slate-200 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold capitalize text-slate-800">{month.monthLabel}</p>
+                      <p className="text-xs font-semibold text-slate-600">{month.count} facturas</p>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-600">
+                      {month.totalARS > 0 ? formatCurrency(month.totalARS) : null}
+                      {month.totalARS > 0 && month.totalUSD > 0 ? ' + ' : null}
+                      {month.totalUSD > 0
+                        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(month.totalUSD)
+                        : null}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </article>
+
       <div className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-lg font-bold text-slate-900">Inspecciones</h3>
@@ -2465,6 +2676,34 @@ export const ReportsPage = () => {
             <button
               type="button"
               onClick={exportRepairsXlsx}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              Descargar XLSX
+            </button>
+          </div>
+        </article>
+
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-900">Facturas</h3>
+          <p className="mt-1 text-xs text-slate-500">Registros: {filteredInvoices.length}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={exportInvoicesPdf}
+              className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+            >
+              Descargar PDF
+            </button>
+            <button
+              type="button"
+              onClick={exportInvoicesCsv}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Descargar CSV
+            </button>
+            <button
+              type="button"
+              onClick={exportInvoicesXlsx}
               className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100"
             >
               Descargar XLSX

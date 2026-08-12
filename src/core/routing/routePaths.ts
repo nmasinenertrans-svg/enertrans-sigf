@@ -56,3 +56,6 @@ export const buildProjectDetailPath = (projectId: string): string =>
 const serviceOrderIdPlaceholder = ':serviceOrderId'
 export const buildServiceOrderDetailPath = (serviceOrderId: string): string =>
   ROUTE_PATHS.serviceOrders.detail.replace(serviceOrderIdPlaceholder, serviceOrderId)
+
+export const buildInvoiceFromExternalRequestPath = (externalRequestId: string): string =>
+  `${ROUTE_PATHS.invoices}?fromExternalRequestId=${encodeURIComponent(externalRequestId)}`

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { BackLink } from '../../../components/shared/BackLink'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { usePermissions } from '../../../core/auth/usePermissions'
@@ -27,9 +28,11 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 export const InvoicesPage = () => {
   const { can } = usePermissions()
   const {
-    state: { invoices, repairs, fleetUnits, inventoryItems, suppliers },
+    state: { invoices, repairs, fleetUnits, inventoryItems, suppliers, externalRequests },
     actions: { setInvoices, setAppError },
   } = useAppContext()
+  const [searchParams] = useSearchParams()
+  const appliedExternalRequestPrefillRef = useRef(false)
 
   const canCreate = can('INVOICES', 'create')
   const canDelete = can('INVOICES', 'delete')
@@ -40,6 +43,35 @@ export const InvoicesPage = () => {
   const [isSaving, setIsSaving] = useState(false)
   const [invoiceIdPendingDelete, setInvoiceIdPendingDelete] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [prefillNote, setPrefillNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (appliedExternalRequestPrefillRef.current) {
+      return
+    }
+    const fromExternalRequestId = searchParams.get('fromExternalRequestId') ?? ''
+    if (!fromExternalRequestId) {
+      return
+    }
+    const request = externalRequests.find((item) => item.id === fromExternalRequestId)
+    if (!request) {
+      return
+    }
+    appliedExternalRequestPrefillRef.current = true
+    const matchedSupplier = suppliers.find(
+      (supplier) => supplier.name.trim().toLowerCase() === request.companyName.trim().toLowerCase(),
+    )
+    setFormData((previous) => ({
+      ...previous,
+      providerName: request.companyName,
+      supplierId: matchedSupplier?.id ?? '',
+      amountInput: request.partsTotal ? String(request.partsTotal) : previous.amountInput,
+      currency: request.currency === 'USD' ? 'USD' : 'ARS',
+      repairId: request.linkedRepairId ?? '',
+      notes: `Factura de proveedor para NDP ${request.code}`,
+    }))
+    setPrefillNote(`Precargado desde la NDP ${request.code}. Revisá el monto final antes de guardar.`)
+  }, [searchParams, externalRequests, suppliers])
 
   const inventoryItemLabelById = useMemo(
     () => new Map(inventoryItems.map((item) => [item.id, `${item.sku}`])),
@@ -87,6 +119,7 @@ export const InvoicesPage = () => {
     setFormData(createEmptyInvoiceFormData())
     setErrors({})
     setPendingFile(null)
+    setPrefillNote(null)
   }
 
   const handleSubmit = async () => {
@@ -162,6 +195,11 @@ export const InvoicesPage = () => {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="xl:col-span-1">
+          {prefillNote ? (
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+              {prefillNote}
+            </div>
+          ) : null}
           {canCreate ? (
             <InvoiceForm
               formData={formData}
