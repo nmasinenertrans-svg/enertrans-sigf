@@ -501,6 +501,7 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       "fileUrl" TEXT NOT NULL DEFAULT '',
       "repairId" TEXT,
       "inventoryItemIds" JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "inventoryItemQuantities" JSONB NOT NULL DEFAULT '{}'::jsonb,
       "createdByUserId" TEXT NOT NULL,
       "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -508,6 +509,9 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     );
   `)
   await safeExecuteCompatSql(`ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "supplierId" TEXT;`)
+  await safeExecuteCompatSql(
+    `ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "inventoryItemQuantities" JSONB NOT NULL DEFAULT '{}'::jsonb;`,
+  )
   await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_code_key" ON "Invoice"("code");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_repairId_idx" ON "Invoice"("repairId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_supplierId_idx" ON "Invoice"("supplierId");`)
@@ -885,6 +889,9 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     )
     await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "laborCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
     await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "partsCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
+    await safeExecuteCompatSql(
+      `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "partsUsed" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+    )
   }
 
   if (hasExternalRequestTable) {

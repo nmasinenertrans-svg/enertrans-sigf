@@ -358,6 +358,7 @@ export interface RepairRecord {
   supplierName: string
   laborCost?: number
   partsCost?: number
+  partsUsed?: RepairPartUsed[]
   createdAt?: string
   realCost: number
   invoicedToClient: number
@@ -365,6 +366,15 @@ export interface RepairRecord {
   invoiceFileName?: string
   invoiceFileBase64?: string
   invoiceFileUrl?: string
+}
+
+export interface RepairPartUsed {
+  id?: string
+  inventoryItemId?: string | null
+  description: string
+  quantity: number
+  unitPrice: number
+  lineTotal?: number
 }
 
 export interface Invoice {
@@ -382,6 +392,7 @@ export interface Invoice {
   fileUrl?: string
   repairId?: string | null
   inventoryItemIds: string[]
+  inventoryItemQuantities?: Record<string, number>
   createdByUserId: string
   createdByUserName?: string
   createdAt?: string

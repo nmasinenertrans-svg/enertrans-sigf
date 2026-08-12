@@ -74,6 +74,11 @@ export const RepairsHistoryCard = ({
         <p>
           <span className="font-semibold">Repuestos:</span> {moneyFormatter.format(item.partsCost)}
         </p>
+        {item.partsUsedLabels.length > 0 ? (
+          <p className="text-xs text-slate-600">
+            <span className="font-semibold">Repuestos utilizados:</span> {item.partsUsedLabels.join(', ')}
+          </p>
+        ) : null}
         <p>
           <span className="font-semibold">Costo total real:</span> {moneyFormatter.format(item.realCost)}
         </p>

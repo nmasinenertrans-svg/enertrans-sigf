@@ -1,5 +1,5 @@
-import type { ExternalRequest, FleetUnit, RepairRecord, WorkOrder } from '../../../types/domain'
-import type { RepairFormData, RepairFormErrors, RepairViewItem } from '../types'
+import type { ExternalRequest, FleetUnit, RepairPartUsed, RepairRecord, WorkOrder } from '../../../types/domain'
+import type { RepairFormData, RepairFormErrors, RepairPartUsedFormItem, RepairViewItem } from '../types'
 
 const MAX_SUPPLIER_LENGTH = 120
 const pad2 = (value: number) => String(value).padStart(2, '0')
@@ -65,6 +65,41 @@ export const calculateInvoicedFromSurcharge = (realCost: number, surchargePercen
   return Number((normalized * (1 + percent / 100)).toFixed(2))
 }
 
+const createPartUsedId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `part-used-${Date.now()}-${Math.round(Math.random() * 10000)}`
+}
+
+const resolvePartsUsedFromForm = (items: RepairPartUsedFormItem[]): RepairPartUsed[] =>
+  items
+    .filter((item) => item.description.trim() && parseNumber(item.quantityInput) > 0)
+    .map((item) => {
+      const quantity = Math.max(0, parseNumber(item.quantityInput))
+      const unitPrice = Math.max(0, parseNumber(item.unitPriceInput))
+      return {
+        id: item.id,
+        inventoryItemId: item.inventoryItemId || null,
+        description: item.description.trim(),
+        quantity,
+        unitPrice,
+        lineTotal: normalizeMoney(quantity * unitPrice),
+      }
+    })
+
+const calculatePartsUsedCost = (items: RepairPartUsedFormItem[]): number =>
+  normalizeMoney(resolvePartsUsedFromForm(items).reduce((sum, item) => sum + item.lineTotal!, 0))
+
+const toPartsUsedFormItems = (partsUsed: RepairPartUsed[] | undefined): RepairPartUsedFormItem[] =>
+  (partsUsed ?? []).map((item) => ({
+    id: item.id ?? createPartUsedId(),
+    inventoryItemId: item.inventoryItemId ?? null,
+    description: item.description,
+    quantityInput: String(item.quantity ?? ''),
+    unitPriceInput: String(item.unitPrice ?? ''),
+  }))
+
 const calculatePartsCostFromRequests = (externalRequests: ExternalRequest[], linkedIds: string[]): number => {
   const byId = new Map(externalRequests.map((request) => [request.id, request]))
   const total = linkedIds.reduce((sum, id) => {
@@ -105,6 +140,7 @@ export const createEmptyRepairFormData = (workOrderId: string): RepairFormData =
   supplierName: '',
   laborCostInput: '',
   surchargePercentInput: '',
+  partsUsed: [],
   invoiceFileName: '',
   invoiceFileBase64: '',
   invoiceFileUrl: '',
@@ -121,6 +157,7 @@ export const toRepairFormData = (repair: RepairRecord): RepairFormData => ({
   supplierName: repair.supplierName,
   laborCostInput: String(Number.isFinite(repair.laborCost) ? repair.laborCost : repair.realCost),
   surchargePercentInput: '',
+  partsUsed: toPartsUsedFormItems(repair.partsUsed),
   invoiceFileName: repair.invoiceFileName ?? '',
   invoiceFileBase64: repair.invoiceFileBase64 ?? '',
   invoiceFileUrl: repair.invoiceFileUrl ?? '',
@@ -195,12 +232,22 @@ export const validateRepairFormData = (
     validationErrors.surchargePercentInput = 'El porcentaje no puede ser negativo.'
   }
 
+  const hasInvalidPartUsed = formData.partsUsed.some((item) => {
+    const hasDescription = Boolean(item.description.trim())
+    const hasQuantity = parseNumber(item.quantityInput) > 0
+    return hasDescription !== hasQuantity
+  })
+  if (hasInvalidPartUsed) {
+    validationErrors.partsUsed = 'Completá descripción y cantidad en todos los repuestos cargados.'
+  }
+
   return validationErrors
 }
 
 const resolveRepairCosts = (formData: RepairFormData, externalRequests: ExternalRequest[]) => {
   const linkedIds = uniqueIds(formData.linkedExternalRequestIds)
-  const partsCost = calculatePartsCostFromRequests(externalRequests, linkedIds)
+  const partsUsed = resolvePartsUsedFromForm(formData.partsUsed)
+  const partsCost = normalizeMoney(calculatePartsCostFromRequests(externalRequests, linkedIds) + calculatePartsUsedCost(formData.partsUsed))
   const laborCost = normalizeMoney(parseNumber(formData.laborCostInput))
   const realCost = normalizeMoney(laborCost + partsCost)
   const surchargePercent = parseNumber(formData.surchargePercentInput)
@@ -209,6 +256,7 @@ const resolveRepairCosts = (formData: RepairFormData, externalRequests: External
 
   return {
     linkedIds,
+    partsUsed,
     partsCost,
     laborCost,
     realCost,
@@ -240,6 +288,7 @@ export const toRepairRecord = (
     supplierName: formData.supplierName.trim(),
     laborCost: costs.laborCost,
     partsCost: costs.partsCost,
+    partsUsed: costs.partsUsed,
     createdAt: new Date().toISOString(),
     realCost: costs.realCost,
     invoicedToClient: Number(costs.invoicedToClient.toFixed(2)),
@@ -275,6 +324,7 @@ export const mergeRepairFromForm = (
     supplierName: formData.supplierName.trim(),
     laborCost: costs.laborCost,
     partsCost: costs.partsCost,
+    partsUsed: costs.partsUsed,
     createdAt: repair.createdAt ?? new Date().toISOString(),
     realCost: costs.realCost,
     invoicedToClient: Number(costs.invoicedToClient.toFixed(2)),
@@ -301,6 +351,9 @@ export const buildRepairView = (
     const linkedExternalRequestLabels = linkedExternalRequests.map((request) => request.code ?? request.id.slice(0, 8))
     const laborCost = Number.isFinite(repair.laborCost) ? Number(repair.laborCost) : repair.realCost
     const partsCost = Number.isFinite(repair.partsCost) ? Number(repair.partsCost) : 0
+    const partsUsedLabels = (repair.partsUsed ?? []).map(
+      (item) => `${item.description} x${item.quantity}${item.inventoryItemId ? ' (stock)' : ''}`,
+    )
 
     return {
       id: repair.id,
@@ -324,6 +377,7 @@ export const buildRepairView = (
       supplierName: repair.supplierName,
       laborCost: normalizeMoney(laborCost),
       partsCost: normalizeMoney(partsCost),
+      partsUsedLabels,
       realCost: normalizeMoney(repair.realCost),
       invoicedToClient: normalizeMoney(repair.invoicedToClient),
       margin: normalizeMoney(repair.margin),

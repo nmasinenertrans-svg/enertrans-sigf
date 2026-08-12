@@ -340,6 +340,7 @@ model RepairRecord {
   linkedExternalRequestIds Json   @default("[]")
   laborCost         Float   @default(0)
   partsCost         Float   @default(0)
+  partsUsed         Json    @default("[]")
   realCost         Float
   invoicedToClient Float
   margin           Float
@@ -370,6 +371,7 @@ model Invoice {
   fileUrl          String    @default("")
   repairId         String?
   inventoryItemIds Json      @default("[]")
+  inventoryItemQuantities Json @default("{}")
   createdByUserId  String
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

@@ -25,6 +25,14 @@ const REPAIR_OPERATIONAL_COLUMNS = [
 ] as const
 const REPAIR_COLUMNS_CACHE_MS = 5 * 60 * 1000
 
+const partsUsedItemSchema = z.object({
+  id: z.string().optional(),
+  inventoryItemId: z.string().nullable().optional(),
+  description: z.string().min(1),
+  quantity: z.number().positive(),
+  unitPrice: z.number().min(0).optional().default(0),
+})
+
 const repairSchema = z.object({
   id: z.string().min(1).optional(),
   unitId: z.string().min(1),
@@ -39,6 +47,7 @@ const repairSchema = z.object({
   supplierName: z.string().min(1),
   laborCost: z.number().min(0).optional(),
   partsCost: z.number().min(0).optional(),
+  partsUsed: z.array(partsUsedItemSchema).optional(),
   realCost: z.number().min(0).optional(),
   invoicedToClient: z.number().min(0),
   margin: z.number().optional(),
@@ -46,6 +55,82 @@ const repairSchema = z.object({
   invoiceFileBase64: z.string().optional(),
   invoiceFileUrl: z.string().optional(),
 })
+
+type PartsUsedItem = z.infer<typeof partsUsedItemSchema>
+
+const parsePartsUsed = (raw: unknown): PartsUsedItem[] => {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  const result: PartsUsedItem[] = []
+  raw.forEach((entry) => {
+    const parsed = partsUsedItemSchema.safeParse(entry)
+    if (parsed.success) {
+      result.push(parsed.data)
+    }
+  })
+  return result
+}
+
+const normalizePartsUsed = (items: PartsUsedItem[]): (PartsUsedItem & { lineTotal: number })[] =>
+  items.map((item) => ({
+    ...item,
+    quantity: Number(item.quantity.toFixed(3)),
+    unitPrice: toNonNegativeNumber(item.unitPrice, 0),
+    lineTotal: Number((item.quantity * toNonNegativeNumber(item.unitPrice, 0)).toFixed(2)),
+  }))
+
+const sumPartsUsedCost = (items: PartsUsedItem[]): number =>
+  Number(items.reduce((total, item) => total + item.quantity * toNonNegativeNumber(item.unitPrice, 0), 0).toFixed(2))
+
+/**
+ * Consumo neto por producto de inventario: positivo = se descuenta stock.
+ * Se usa para pasar de "consumo anterior" a "consumo nuevo" sin duplicar descuentos en ediciones.
+ */
+const buildInventoryConsumptionMap = (items: PartsUsedItem[]): Map<string, number> => {
+  const map = new Map<string, number>()
+  items.forEach((item) => {
+    if (!item.inventoryItemId) {
+      return
+    }
+    map.set(item.inventoryItemId, (map.get(item.inventoryItemId) ?? 0) + item.quantity)
+  })
+  return map
+}
+
+const applyInventoryStockDeltas = async (
+  tx: { inventoryItem: { update: (args: any) => Promise<unknown> } },
+  incrementByItemId: Map<string, number>,
+) => {
+  for (const [inventoryItemId, delta] of incrementByItemId.entries()) {
+    if (!delta) {
+      continue
+    }
+    try {
+      await tx.inventoryItem.update({
+        where: { id: inventoryItemId },
+        data: { stock: { increment: delta } },
+      })
+    } catch (error) {
+      console.warn(`No se pudo ajustar stock del producto ${inventoryItemId}:`, error)
+    }
+  }
+}
+
+/** increment a aplicar a stock = consumo previo - consumo nuevo (restaura lo viejo, descuenta lo nuevo) */
+const buildStockIncrementMap = (previousItems: PartsUsedItem[], nextItems: PartsUsedItem[]): Map<string, number> => {
+  const previous = buildInventoryConsumptionMap(previousItems)
+  const next = buildInventoryConsumptionMap(nextItems)
+  const ids = new Set([...previous.keys(), ...next.keys()])
+  const increments = new Map<string, number>()
+  ids.forEach((id) => {
+    const delta = (previous.get(id) ?? 0) - (next.get(id) ?? 0)
+    if (delta !== 0) {
+      increments.set(id, delta)
+    }
+  })
+  return increments
+}
 
 const repairUpdateSchema = repairSchema.partial()
 
@@ -105,6 +190,7 @@ type ExternalRequestLinkRow = {
 
 type FinancialParams = {
   linkedRequests: ExternalRequestLinkRow[]
+  partsUsedCost?: number
   laborCostInput?: number
   realCostInput?: number
   existingLaborCost?: number
@@ -203,7 +289,10 @@ const resolveLinkedExternalRequestIds = (
 
 const calculateFinancials = (params: FinancialParams) => {
   const partsCost = Number(
-    params.linkedRequests.reduce((total, request) => total + toNonNegativeNumber(request.partsTotal, 0), 0).toFixed(2),
+    (
+      params.linkedRequests.reduce((total, request) => total + toNonNegativeNumber(request.partsTotal, 0), 0) +
+      toNonNegativeNumber(params.partsUsedCost, 0)
+    ).toFixed(2),
   )
 
   let laborCost = 0
@@ -252,6 +341,7 @@ const mapRecoveryRepairToPublicShape = (row: RecoveryRepairRow) => ({
   supplierName: row.supplierName,
   laborCost: toNonNegativeNumber(row.laborCost, 0),
   partsCost: toNonNegativeNumber(row.partsCost, 0),
+  partsUsed: [] as PartsUsedItem[],
   createdAt: asIsoString(row.createdAt),
   realCost: row.realCost,
   invoicedToClient: row.invoicedToClient,
@@ -418,6 +508,7 @@ const mapLegacyRepairToPublicShape = (row: LegacyRepairRow) => ({
   supplierName: row.supplierName,
   laborCost: row.realCost,
   partsCost: 0,
+  partsUsed: [] as PartsUsedItem[],
   createdAt: row.createdAt.toISOString(),
   realCost: row.realCost,
   invoicedToClient: row.invoicedToClient,
@@ -652,9 +743,11 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
         : 'ARS')
     const currency = normalizeCurrency(inferredCurrency)
     const linkedRequests = await fetchAndValidateLinkedExternalRequests(linkedExternalRequestIds, currency)
+    const partsUsed = parsePartsUsed(parsed.data.partsUsed)
 
     const financials = calculateFinancials({
       linkedRequests,
+      partsUsedCost: sumPartsUsedCost(partsUsed),
       laborCostInput: parsed.data.laborCost,
       realCostInput: parsed.data.realCost,
       invoicedInput: parsed.data.invoicedToClient,
@@ -680,6 +773,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
               supplierName: normalizedSupplierName,
               laborCost: financials.laborCost,
               partsCost: financials.partsCost,
+              partsUsed: normalizePartsUsed(partsUsed) as any,
               realCost: financials.realCost,
               invoicedToClient: financials.invoicedToClient,
               margin: financials.margin,
@@ -695,6 +789,8 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
               data: { linkedRepairId: created.id },
             })
           }
+
+          await applyInventoryStockDeltas(tx, buildStockIncrementMap([], partsUsed))
 
           return created
         }),
@@ -830,8 +926,12 @@ router.patch('/:id', async (req, res) => {
       const linkedUnitId = linkedRequests[0]?.unitId
       const unitId = linkedUnitId ?? parsed.data.unitId ?? existing.unitId
 
+      const existingPartsUsed = parsePartsUsed((existing as any).partsUsed)
+      const nextPartsUsed = parsed.data.partsUsed !== undefined ? parsePartsUsed(parsed.data.partsUsed) : existingPartsUsed
+
       const financials = calculateFinancials({
         linkedRequests,
+        partsUsedCost: sumPartsUsedCost(nextPartsUsed),
         laborCostInput: parsed.data.laborCost,
         realCostInput: parsed.data.realCost,
         existingLaborCost: (existing as any).laborCost,
@@ -871,7 +971,7 @@ router.patch('/:id', async (req, res) => {
             })
           }
 
-          return tx.repairRecord.update({
+          const result = await tx.repairRecord.update({
             where: { id: repairId },
             data: {
               unitId,
@@ -894,6 +994,7 @@ router.patch('/:id', async (req, res) => {
               currency: inferredCurrency,
               laborCost: financials.laborCost,
               partsCost: financials.partsCost,
+              partsUsed: normalizePartsUsed(nextPartsUsed) as any,
               realCost: financials.realCost,
               invoicedToClient: financials.invoicedToClient,
               margin: financials.margin,
@@ -905,6 +1006,10 @@ router.patch('/:id', async (req, res) => {
                 parsed.data.invoiceFileUrl !== undefined ? parsed.data.invoiceFileUrl : existing.invoiceFileUrl,
             },
           })
+
+          await applyInventoryStockDeltas(tx, buildStockIncrementMap(existingPartsUsed, nextPartsUsed))
+
+          return result
         }),
       )
 
@@ -1017,7 +1122,7 @@ router.delete('/:id', async (req, res) => {
       prisma.$transaction(async (tx) => {
         const repair = await tx.repairRecord.findUnique({
           where: { id: repairId },
-          select: { id: true, linkedExternalRequestIds: true },
+          select: { id: true, linkedExternalRequestIds: true, partsUsed: true },
         })
         if (!repair) {
           throw new RepairRequestError('Reparacion no encontrada.', 404, 'REPAIR_NOT_FOUND')
@@ -1033,6 +1138,9 @@ router.delete('/:id', async (req, res) => {
             data: { linkedRepairId: null },
           })
         }
+
+        const partsUsed = parsePartsUsed((repair as any).partsUsed)
+        await applyInventoryStockDeltas(tx, buildStockIncrementMap(partsUsed, []))
 
         await tx.repairRecord.delete({ where: { id: repairId } })
       }),

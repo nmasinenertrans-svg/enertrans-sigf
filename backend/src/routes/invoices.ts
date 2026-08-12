@@ -20,6 +20,7 @@ const invoiceCreateSchema = z.object({
   fileUrl: z.string().optional().default(''),
   repairId: z.string().nullable().optional(),
   inventoryItemIds: z.array(z.string()).optional().default([]),
+  inventoryItemQuantities: z.record(z.string(), z.number().positive()).optional().default({}),
 })
 
 const invoiceUpdateSchema = invoiceCreateSchema.partial()
@@ -30,6 +31,59 @@ const mapInvoice = (invoice: Record<string, unknown> & { createdBy?: { fullName?
     ...rest,
     createdByUserName: createdBy?.fullName ?? '',
     inventoryItemIds: Array.isArray(invoice.inventoryItemIds) ? invoice.inventoryItemIds : [],
+    inventoryItemQuantities:
+      invoice.inventoryItemQuantities && typeof invoice.inventoryItemQuantities === 'object'
+        ? invoice.inventoryItemQuantities
+        : {},
+  }
+}
+
+const parseQuantitiesMap = (raw: unknown): Record<string, number> => {
+  if (!raw || typeof raw !== 'object') {
+    return {}
+  }
+  const result: Record<string, number> = {}
+  Object.entries(raw as Record<string, unknown>).forEach(([id, value]) => {
+    const quantity = Number(value)
+    if (id && Number.isFinite(quantity) && quantity > 0) {
+      result[id] = quantity
+    }
+  })
+  return result
+}
+
+/** increment a aplicar a stock = cantidades nuevas - cantidades previas (compra suma stock) */
+const buildInvoiceStockIncrementMap = (
+  previous: Record<string, number>,
+  next: Record<string, number>,
+): Map<string, number> => {
+  const ids = new Set([...Object.keys(previous), ...Object.keys(next)])
+  const increments = new Map<string, number>()
+  ids.forEach((id) => {
+    const delta = (next[id] ?? 0) - (previous[id] ?? 0)
+    if (delta !== 0) {
+      increments.set(id, delta)
+    }
+  })
+  return increments
+}
+
+const applyInvoiceStockDeltas = async (
+  tx: { inventoryItem: { update: (args: any) => Promise<unknown> } },
+  incrementByItemId: Map<string, number>,
+) => {
+  for (const [inventoryItemId, delta] of incrementByItemId.entries()) {
+    if (!delta) {
+      continue
+    }
+    try {
+      await tx.inventoryItem.update({
+        where: { id: inventoryItemId },
+        data: { stock: { increment: delta } },
+      })
+    } catch (error) {
+      console.warn(`No se pudo sumar stock del producto ${inventoryItemId}:`, error)
+    }
   }
 }
 
@@ -71,26 +125,33 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
+  const userId = req.userId
   try {
     const code = formatCode('FC', await getNextSequence('invoice'))
-    const item = await prisma.invoice.create({
-      data: {
-        code,
-        providerName: parsed.data.providerName.trim(),
-        supplierId: parsed.data.supplierId || null,
-        invoiceNumber: parsed.data.invoiceNumber.trim(),
-        amount: parsed.data.amount,
-        currency: parsed.data.currency,
-        issuedAt: parsed.data.issuedAt ? new Date(parsed.data.issuedAt) : null,
-        notes: parsed.data.notes.trim(),
-        fileName: parsed.data.fileName,
-        fileBase64: parsed.data.fileBase64,
-        fileUrl: parsed.data.fileUrl,
-        repairId: parsed.data.repairId || null,
-        inventoryItemIds: parsed.data.inventoryItemIds,
-        createdByUserId: req.userId,
-      },
-      include: { createdBy: { select: { fullName: true } } },
+    const quantities = parseQuantitiesMap(parsed.data.inventoryItemQuantities)
+    const item = await prisma.$transaction(async (tx) => {
+      const created = await tx.invoice.create({
+        data: {
+          code,
+          providerName: parsed.data.providerName.trim(),
+          supplierId: parsed.data.supplierId || null,
+          invoiceNumber: parsed.data.invoiceNumber.trim(),
+          amount: parsed.data.amount,
+          currency: parsed.data.currency,
+          issuedAt: parsed.data.issuedAt ? new Date(parsed.data.issuedAt) : null,
+          notes: parsed.data.notes.trim(),
+          fileName: parsed.data.fileName,
+          fileBase64: parsed.data.fileBase64,
+          fileUrl: parsed.data.fileUrl,
+          repairId: parsed.data.repairId || null,
+          inventoryItemIds: parsed.data.inventoryItemIds,
+          inventoryItemQuantities: quantities,
+          createdByUserId: userId,
+        },
+        include: { createdBy: { select: { fullName: true } } },
+      })
+      await applyInvoiceStockDeltas(tx, buildInvoiceStockIncrementMap({}, quantities))
+      return created
     })
     return res.status(201).json(mapInvoice(item as unknown as Record<string, unknown>))
   } catch (error: unknown) {
@@ -128,11 +189,31 @@ router.patch('/:id', async (req, res) => {
     data.supplierId = parsed.data.supplierId || null
   }
 
+  const nextQuantities =
+    parsed.data.inventoryItemQuantities !== undefined ? parseQuantitiesMap(parsed.data.inventoryItemQuantities) : undefined
+  if (nextQuantities !== undefined) {
+    data.inventoryItemQuantities = nextQuantities
+  }
+
   try {
-    const item = await prisma.invoice.update({
-      where: { id: req.params.id },
-      data,
-      include: { createdBy: { select: { fullName: true } } },
+    const item = await prisma.$transaction(async (tx) => {
+      if (nextQuantities !== undefined) {
+        const existing = await tx.invoice.findUnique({
+          where: { id: req.params.id },
+          select: { inventoryItemQuantities: true },
+        })
+        if (!existing) {
+          throw Object.assign(new Error('La factura no existe.'), { code: 'P2025' })
+        }
+        const previousQuantities = parseQuantitiesMap((existing as any).inventoryItemQuantities)
+        await applyInvoiceStockDeltas(tx, buildInvoiceStockIncrementMap(previousQuantities, nextQuantities))
+      }
+
+      return tx.invoice.update({
+        where: { id: req.params.id },
+        data,
+        include: { createdBy: { select: { fullName: true } } },
+      })
     })
     return res.json(mapInvoice(item as unknown as Record<string, unknown>))
   } catch (error: unknown) {
@@ -149,7 +230,18 @@ router.patch('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await prisma.invoice.delete({ where: { id: req.params.id } })
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.invoice.findUnique({
+        where: { id: req.params.id },
+        select: { inventoryItemQuantities: true },
+      })
+      if (!existing) {
+        throw Object.assign(new Error('La factura no existe.'), { code: 'P2025' })
+      }
+      const quantities = parseQuantitiesMap((existing as any).inventoryItemQuantities)
+      await applyInvoiceStockDeltas(tx, buildInvoiceStockIncrementMap(quantities, {}))
+      await tx.invoice.delete({ where: { id: req.params.id } })
+    })
     return res.status(204).send()
   } catch (error: unknown) {
     if (getErrorCode(error) === 'P2025') {

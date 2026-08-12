@@ -26,7 +26,7 @@ const toCurrency = (value: string | undefined): 'ARS' | 'USD' => (value === 'USD
 export const RepairsPage = () => {
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, workOrders, externalRequests, repairs, suppliers, invoices },
+    state: { fleetUnits, workOrders, externalRequests, repairs, suppliers, invoices, inventoryItems },
     actions: { setRepairs },
   } = useAppContext()
 
@@ -247,6 +247,7 @@ export const RepairsPage = () => {
               workOrders={workOrders}
               externalRequests={externalRequests}
               suppliers={suppliers}
+              inventoryItems={inventoryItems}
               formData={formData}
               errors={errors}
               isEditing={Boolean(editingRepairId)}

@@ -28,6 +28,7 @@ export const InventoryItemCard = ({
 }: InventoryItemCardProps) => {
   const unit = item.unit ?? 'UNIDAD'
   const threshold = lowStockThreshold[unit] ?? 5
+  const isNegativeStock = item.stock < 0
   const isLowStock = item.stock <= threshold
   const latestMovement = item.movementHistory[item.movementHistory.length - 1] ?? 'Sin movimientos'
   const totalValue = item.unitPrice != null ? item.stock * item.unitPrice : null
@@ -50,14 +51,22 @@ export const InventoryItemCard = ({
 
         <span
           className={`rounded-full border px-2 py-1 text-xs font-semibold ${
-            isLowStock
-              ? 'border-amber-300 bg-amber-50 text-amber-700'
-              : 'border-emerald-300 bg-emerald-50 text-emerald-700'
+            isNegativeStock
+              ? 'border-rose-300 bg-rose-50 text-rose-700'
+              : isLowStock
+                ? 'border-amber-300 bg-amber-50 text-amber-700'
+                : 'border-emerald-300 bg-emerald-50 text-emerald-700'
           }`}
         >
           {formatStock(item.stock, unit)}
         </span>
       </div>
+
+      {isNegativeStock ? (
+        <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-semibold text-rose-700">
+          Stock negativo: se usó más de lo que había cargado. Revisá y reponé.
+        </p>
+      ) : null}
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
         {item.unitPrice != null && (

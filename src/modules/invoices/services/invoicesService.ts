@@ -27,6 +27,7 @@ export const createEmptyInvoiceFormData = (): InvoiceFormData => ({
   fileUrl: '',
   repairId: '',
   inventoryItemIds: [],
+  inventoryItemQuantityInputs: {},
 })
 
 export const validateInvoiceFormData = (formData: InvoiceFormData): InvoiceFormErrors => {
@@ -41,6 +42,17 @@ export const validateInvoiceFormData = (formData: InvoiceFormData): InvoiceFormE
   }
 
   return errors
+}
+
+const buildInventoryItemQuantities = (formData: InvoiceFormData): Record<string, number> => {
+  const quantities: Record<string, number> = {}
+  formData.inventoryItemIds.forEach((id) => {
+    const quantity = parseMoney(formData.inventoryItemQuantityInputs[id] ?? '')
+    if (quantity > 0) {
+      quantities[id] = quantity
+    }
+  })
+  return quantities
 }
 
 export const toInvoicePayload = (formData: InvoiceFormData): Invoice => ({
@@ -58,6 +70,7 @@ export const toInvoicePayload = (formData: InvoiceFormData): Invoice => ({
   fileUrl: formData.fileUrl,
   repairId: formData.repairId || null,
   inventoryItemIds: formData.inventoryItemIds,
+  inventoryItemQuantities: buildInventoryItemQuantities(formData),
   createdByUserId: '',
 })
 

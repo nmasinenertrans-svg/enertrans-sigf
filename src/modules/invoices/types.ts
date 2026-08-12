@@ -11,6 +11,7 @@ export interface InvoiceFormData {
   fileUrl: string
   repairId: string
   inventoryItemIds: string[]
+  inventoryItemQuantityInputs: Record<string, string>
 }
 
 export type InvoiceFormField = keyof InvoiceFormData

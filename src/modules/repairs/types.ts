@@ -1,3 +1,11 @@
+export interface RepairPartUsedFormItem {
+  id: string
+  inventoryItemId: string | null
+  description: string
+  quantityInput: string
+  unitPriceInput: string
+}
+
 export interface RepairFormData {
   sourceType: 'WORK_ORDER' | 'EXTERNAL_REQUEST'
   workOrderId: string
@@ -10,6 +18,7 @@ export interface RepairFormData {
   supplierName: string
   laborCostInput: string
   surchargePercentInput: string
+  partsUsed: RepairPartUsedFormItem[]
   invoiceFileName: string
   invoiceFileBase64: string
   invoiceFileUrl: string
@@ -36,6 +45,7 @@ export interface RepairViewItem {
   supplierName: string
   laborCost: number
   partsCost: number
+  partsUsedLabels: string[]
   realCost: number
   invoicedToClient: number
   margin: number
