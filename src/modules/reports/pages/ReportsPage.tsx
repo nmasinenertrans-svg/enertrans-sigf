@@ -2386,8 +2386,9 @@ export const ReportsPage = () => {
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-lg font-semibold text-slate-900">Quien realizo mas reparaciones</h3>
-            <span className="text-xs text-slate-500">Ranking por proveedor</span>
+            <span className="text-xs text-slate-500">Ranking por proveedor (costo estimado)</span>
           </div>
+          <p className="mt-1 text-xs text-slate-400">Segun costo de reparaciones cargadas, no segun facturas.</p>
           <div className="mt-4 space-y-3">
             {providerMetrics.length === 0 ? (
               <p className="text-sm text-slate-500">No hay reparaciones en el rango seleccionado.</p>
@@ -2423,6 +2424,7 @@ export const ReportsPage = () => {
           <h3 className="text-lg font-semibold text-slate-900">Proveedor vs proveedor (tiempo y plata)</h3>
           <span className="text-xs text-slate-500">{providerMetrics.length} proveedores detectados</span>
         </div>
+        <p className="mt-1 text-xs text-slate-400">Costo estimado de reparaciones, no monto facturado real.</p>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Proveedor A
@@ -2495,7 +2497,8 @@ export const ReportsPage = () => {
       </article>
 
       <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900">Resultado economico del periodo</h3>
+        <h3 className="text-lg font-semibold text-slate-900">Resultado economico estimado del periodo</h3>
+        <p className="mt-1 text-xs text-slate-400">Segun costo de reparaciones cargadas (mano de obra + repuestos), no segun facturas reales.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Costo total reparaciones</p>
@@ -2516,9 +2519,12 @@ export const ReportsPage = () => {
 
       <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-lg font-semibold text-slate-900">Gasto en Facturas</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Gasto real facturado a proveedores</h3>
           <span className="text-xs text-slate-500">{filteredInvoices.length} facturas en el periodo</span>
         </div>
+        <p className="mt-1 text-xs text-slate-400">
+          Monto real de las facturas cargadas (incluye compras sin reparacion asociada, ej: insumos para stock). No es lo mismo que el costo estimado de reparaciones de arriba.
+        </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total ARS</p>
