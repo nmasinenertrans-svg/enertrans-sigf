@@ -36,6 +36,7 @@
     list: '/service-orders',
     detail: '/service-orders/:serviceOrderId',
   },
+  invoices: '/invoices',
 } as const
 
 const unitIdPlaceholder = ':unitId'

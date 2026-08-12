@@ -147,6 +147,7 @@ const COMPAT_TABLE_NAMES = [
   'PostventaEvent',
   'ServiceOrder',
   'PushSubscription',
+  'Invoice',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -481,6 +482,32 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     `CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");`,
   )
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "PushSubscription_userId_idx" ON "PushSubscription"("userId");`)
+
+  // Facturas: una factura puede cubrir varios items de inventario (inventoryItemIds)
+  // y/o quedar vinculada a una reparacion puntual (repairId).
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "Invoice" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "code" TEXT NOT NULL,
+      "providerName" TEXT NOT NULL,
+      "invoiceNumber" TEXT NOT NULL DEFAULT '',
+      "amount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "currency" TEXT NOT NULL DEFAULT 'ARS',
+      "issuedAt" TIMESTAMP(3),
+      "notes" TEXT NOT NULL DEFAULT '',
+      "fileName" TEXT NOT NULL DEFAULT '',
+      "fileBase64" TEXT NOT NULL DEFAULT '',
+      "fileUrl" TEXT NOT NULL DEFAULT '',
+      "repairId" TEXT,
+      "inventoryItemIds" JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "createdByUserId" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Invoice_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_code_key" ON "Invoice"("code");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_repairId_idx" ON "Invoice"("repairId");`)
 
   // Si Supplier existe legacy, asegura columnas nuevas.
   await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT NOT NULL DEFAULT '';`)

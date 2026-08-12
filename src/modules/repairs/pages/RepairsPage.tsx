@@ -26,7 +26,7 @@ const toCurrency = (value: string | undefined): 'ARS' | 'USD' => (value === 'USD
 export const RepairsPage = () => {
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, workOrders, externalRequests, repairs, suppliers },
+    state: { fleetUnits, workOrders, externalRequests, repairs, suppliers, invoices },
     actions: { setRepairs },
   } = useAppContext()
 
@@ -297,6 +297,7 @@ export const RepairsPage = () => {
                   <RepairsHistoryCard
                     key={item.id}
                     item={item}
+                    linkedInvoices={invoices.filter((invoice) => invoice.repairId === item.id)}
                     onEdit={handleEdit}
                     onDelete={setRepairIdPendingDelete}
                     canEdit={canEdit}

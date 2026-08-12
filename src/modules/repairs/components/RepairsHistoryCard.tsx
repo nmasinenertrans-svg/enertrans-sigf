@@ -1,14 +1,23 @@
+import type { Invoice } from '../../../types/domain'
 import type { RepairViewItem } from '../types'
 
 interface RepairsHistoryCardProps {
   item: RepairViewItem
+  linkedInvoices?: Invoice[]
   onEdit: (repairId: string) => void
   onDelete: (repairId: string) => void
   canEdit?: boolean
   canDelete?: boolean
 }
 
-export const RepairsHistoryCard = ({ item, onEdit, onDelete, canEdit = true, canDelete = true }: RepairsHistoryCardProps) => {
+export const RepairsHistoryCard = ({
+  item,
+  linkedInvoices = [],
+  onEdit,
+  onDelete,
+  canEdit = true,
+  canDelete = true,
+}: RepairsHistoryCardProps) => {
   const performedAtDate = new Date(item.performedAt)
   const hasValidDate = !Number.isNaN(performedAtDate.getTime())
   const moneyFormatter = new Intl.NumberFormat(item.currency === 'USD' ? 'en-US' : 'es-AR', {
@@ -82,6 +91,18 @@ export const RepairsHistoryCard = ({ item, onEdit, onDelete, canEdit = true, can
               Ver factura adjunta
             </a>
           </p>
+        ) : null}
+        {linkedInvoices.length > 0 ? (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+            <p className="text-xs font-semibold text-sky-800">Facturas vinculadas ({linkedInvoices.length})</p>
+            <ul className="mt-1 space-y-0.5">
+              {linkedInvoices.map((invoice) => (
+                <li key={invoice.id} className="text-xs text-sky-700">
+                  {invoice.code} · {invoice.providerName}
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
       </div>
 

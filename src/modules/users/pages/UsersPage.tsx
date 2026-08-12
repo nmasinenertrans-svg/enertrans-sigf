@@ -29,6 +29,7 @@ const permissionModuleLabelMap: Record<PermissionModule, string> = {
   MAINTENANCE_MODE: 'Mantenimiento app',
   POSTVENTA: 'Postventa / Calendario',
   SERVICE_ORDERS: 'Órdenes de Servicio',
+  INVOICES: 'Facturas',
 }
 
 const normalizePermissions = (permissions: UserPermissions | undefined, role: UserRole): UserPermissions => {

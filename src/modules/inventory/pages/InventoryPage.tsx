@@ -47,7 +47,7 @@ const unitLabels: Record<string, string> = {
 export const InventoryPage = () => {
   const { can } = usePermissions()
   const {
-    state: { inventoryItems, featureFlags },
+    state: { inventoryItems, invoices, featureFlags },
     actions: { setInventoryItems, setAppError },
   } = useAppContext()
 
@@ -424,6 +424,7 @@ export const InventoryPage = () => {
                   <InventoryItemCard
                     key={item.id}
                     item={item}
+                    linkedInvoices={invoices.filter((invoice) => invoice.inventoryItemIds.includes(item.id))}
                     onEdit={handleEditItem}
                     onDelete={setItemIdPendingDelete}
                     canEdit={canEdit}

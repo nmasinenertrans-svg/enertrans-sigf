@@ -28,6 +28,7 @@ import { ProjectDetailPage } from '../../modules/projects/pages/ProjectDetailPag
 import { PostventaPage } from '../../modules/postventa/pages/PostventaPage'
 import { ServiceOrdersPage } from '../../modules/serviceOrders/pages/ServiceOrdersPage'
 import { ServiceOrderDetailPage } from '../../modules/serviceOrders/pages/ServiceOrderDetailPage'
+import { InvoicesPage } from '../../modules/invoices/pages/InvoicesPage'
 import { ProfilePage } from '../../modules/users/pages/ProfilePage'
 import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
 import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
@@ -311,6 +312,14 @@ export const AppRouter = () => (
           element={
             <RequirePermission module="SERVICE_ORDERS" action="view">
               <ServiceOrderDetailPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.invoices}
+          element={
+            <RequirePermission module="INVOICES" action="view">
+              <InvoicesPage />
             </RequirePermission>
           }
         />

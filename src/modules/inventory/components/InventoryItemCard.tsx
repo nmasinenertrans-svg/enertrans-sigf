@@ -1,8 +1,10 @@
 import { formatStock } from '../services/inventoryService'
+import type { Invoice } from '../../../types/domain'
 import type { InventoryViewItem } from '../types'
 
 interface InventoryItemCardProps {
   item: InventoryViewItem
+  linkedInvoices?: Invoice[]
   onEdit: (itemId: string) => void
   onDelete: (itemId: string) => void
   canEdit?: boolean
@@ -18,6 +20,7 @@ const lowStockThreshold: Record<string, number> = {
 
 export const InventoryItemCard = ({
   item,
+  linkedInvoices = [],
   onEdit,
   onDelete,
   canEdit = true,
@@ -78,6 +81,19 @@ export const InventoryItemCard = ({
           <span className="font-semibold">Último movimiento:</span> {latestMovement}
         </p>
       </div>
+
+      {linkedInvoices.length > 0 ? (
+        <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+          <p className="text-xs font-semibold text-sky-800">Facturas vinculadas ({linkedInvoices.length})</p>
+          <ul className="mt-1 space-y-0.5">
+            {linkedInvoices.map((invoice) => (
+              <li key={invoice.id} className="text-xs text-sky-700">
+                {invoice.code} · {invoice.providerName}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {canEdit || canDelete ? (
         <div className="mt-4 flex gap-2">

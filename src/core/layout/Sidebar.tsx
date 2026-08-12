@@ -32,6 +32,7 @@ const navigationGroups: NavGroup[] = [
         flagKey: 'showExternalRequestsModule',
       },
       { path: ROUTE_PATHS.repairs, label: 'Reparaciones', module: 'REPAIRS', flagKey: 'showRepairsModule' },
+      { path: ROUTE_PATHS.invoices, label: 'Facturas', module: 'INVOICES' },
       { path: ROUTE_PATHS.suppliers, label: 'Proveedores', module: 'SUPPLIERS', flagKey: 'showSuppliersModule' },
     ],
   },

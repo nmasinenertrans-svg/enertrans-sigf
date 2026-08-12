@@ -15,6 +15,7 @@ import type {
   FleetMovement,
   FleetUnit,
   InventoryItem,
+  Invoice,
   MaintenancePlan,
   RepairRecord,
   ServiceOrder,
@@ -104,6 +105,7 @@ export const AppLayout = () => {
       maintenanceStatus,
       featureFlags,
       serviceOrders,
+      invoices,
     },
     actions: {
       setFleetUnits,
@@ -125,6 +127,7 @@ export const AppLayout = () => {
       setMaintenanceStatus,
       setFeatureFlags,
       setServiceOrders,
+      setInvoices,
     },
   } = useAppContext()
 
@@ -142,6 +145,7 @@ export const AppLayout = () => {
   const deliveriesRef = useRef(deliveries)
   const inventoryRef = useRef(inventoryItems)
   const serviceOrdersRef = useRef(serviceOrders)
+  const invoicesRef = useRef(invoices)
   const featureFlagsRef = useRef(featureFlags)
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
   const workOrdersRefreshInProgressRef = useRef(false)
@@ -203,6 +207,10 @@ export const AppLayout = () => {
   useEffect(() => {
     serviceOrdersRef.current = serviceOrders
   }, [serviceOrders])
+
+  useEffect(() => {
+    invoicesRef.current = invoices
+  }, [invoices])
 
   useEffect(() => {
     featureFlagsRef.current = featureFlags
@@ -319,6 +327,7 @@ export const AppLayout = () => {
           inventoryResponse,
           userNotificationsResponse,
           serviceOrdersResponse,
+          invoicesResponse,
         ] = await Promise.all([
           canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
           safeRequest<FleetUnit[]>('/fleet'),
@@ -336,6 +345,9 @@ export const AppLayout = () => {
           safeRequest<UserInboxNotification[]>('/notifications', { silent: true }),
           canUser(currentUserRef.current ?? null, 'SERVICE_ORDERS', 'view')
             ? safeRequest<ServiceOrder[]>('/service-orders', { silent: true })
+            : Promise.resolve(null),
+          canUser(currentUserRef.current ?? null, 'INVOICES', 'view')
+            ? safeRequest<Invoice[]>('/invoices', { silent: true })
             : Promise.resolve(null),
         ])
 
@@ -476,6 +488,12 @@ export const AppLayout = () => {
         if (serviceOrdersResponse) {
           setServiceOrders(mergeByIdWithLocal(serviceOrdersResponse, serviceOrdersRef.current) ?? serviceOrdersResponse)
         }
+        if (invoicesResponse) {
+          setInvoices(
+            mergeByIdWithLocal(invoicesResponse, invoicesRef.current, getQueuedPayloads('invoice.create')) ??
+              invoicesResponse,
+          )
+        }
       } finally {
         setGlobalLoading(false)
         isFetchingRef.current = false
@@ -502,6 +520,7 @@ export const AppLayout = () => {
     setGlobalLoading,
     setCurrentUser,
     setServiceOrders,
+    setInvoices,
   ])
 
   useEffect(() => {

@@ -24,6 +24,7 @@ export const permissionModules = [
   'MAINTENANCE_MODE',
   'POSTVENTA',
   'SERVICE_ORDERS',
+  'INVOICES',
 ] as const
 export type PermissionModule = (typeof permissionModules)[number]
 
@@ -364,6 +365,26 @@ export interface RepairRecord {
   invoiceFileName?: string
   invoiceFileBase64?: string
   invoiceFileUrl?: string
+}
+
+export interface Invoice {
+  id: string
+  code: string
+  providerName: string
+  invoiceNumber?: string
+  amount: number
+  currency: 'ARS' | 'USD'
+  issuedAt?: string | null
+  notes?: string
+  fileName?: string
+  fileBase64?: string
+  fileUrl?: string
+  repairId?: string | null
+  inventoryItemIds: string[]
+  createdByUserId: string
+  createdByUserName?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export const inventoryUnits = ['UNIDAD', 'LITRO', 'KG', 'METRO'] as const

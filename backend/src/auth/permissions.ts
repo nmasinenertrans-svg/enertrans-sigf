@@ -20,6 +20,7 @@ export type PermissionModule =
   | 'MAINTENANCE_MODE'
   | 'POSTVENTA'
   | 'SERVICE_ORDERS'
+  | 'INVOICES'
 
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete'
 
@@ -46,6 +47,7 @@ const permissionModules: PermissionModule[] = [
   'MAINTENANCE_MODE',
   'POSTVENTA',
   'SERVICE_ORDERS',
+  'INVOICES',
 ]
 
 const permissionActions: PermissionAction[] = ['view', 'create', 'edit', 'delete']
@@ -111,6 +113,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     allowModule(permissions, 'INVENTORY', ['view', 'create', 'edit'])
     allowModule(permissions, 'REPORTS', ['view'])
     allowModule(permissions, 'POSTVENTA', ['view', 'create', 'edit', 'delete'])
+    allowModule(permissions, 'INVOICES', ['view', 'create', 'edit'])
     return permissions
   }
 
@@ -131,6 +134,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'INVENTORY', ['view'])
     allowModule(permissions, 'REPORTS', ['view'])
+    allowModule(permissions, 'INVOICES', ['view', 'create'])
     return permissions
   }
 

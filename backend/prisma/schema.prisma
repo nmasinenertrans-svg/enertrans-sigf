@@ -162,6 +162,7 @@ model User {
   fleetProjectItemsAssigned FleetProjectItem[] @relation("FleetProjectItemAssignedTo")
   postventaEventsCreated    PostventaEvent[]   @relation("PostventaEventCreatedBy")
   pushSubscriptions         PushSubscription[]
+  invoicesCreated           Invoice[]          @relation("InvoiceCreatedBy")
 }
 
 model PushSubscription {
@@ -351,6 +352,31 @@ model RepairRecord {
   unit FleetUnit @relation(fields: [unitId], references: [id])
   supplier Supplier? @relation(fields: [supplierId], references: [id])
   externalRequestsLinked ExternalRequest[] @relation("ExternalRequestsLinkedToRepair")
+  invoices Invoice[]
+}
+
+model Invoice {
+  id               String    @id @default(uuid())
+  code             String    @unique
+  providerName     String
+  invoiceNumber    String    @default("")
+  amount           Float     @default(0)
+  currency         String    @default("ARS")
+  issuedAt         DateTime?
+  notes            String    @default("")
+  fileName         String    @default("")
+  fileBase64       String    @default("")
+  fileUrl          String    @default("")
+  repairId         String?
+  inventoryItemIds Json      @default("[]")
+  createdByUserId  String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  repair    RepairRecord? @relation(fields: [repairId], references: [id])
+  createdBy User          @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([repairId])
 }
 
 model InventoryItem {

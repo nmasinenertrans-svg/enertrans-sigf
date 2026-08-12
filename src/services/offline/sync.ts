@@ -23,6 +23,13 @@ type ExternalRequestPayload = {
   providerFileName?: string
 } & Record<string, unknown>
 
+type InvoicePayload = {
+  id: string
+  fileUrl?: string
+  fileBase64?: string
+  fileName?: string
+} & Record<string, unknown>
+
 type FleetUpdatePayload =
   | {
       id: string
@@ -234,6 +241,26 @@ const syncItem = async (item: OfflineQueueItem) => {
     case 'inventory.create':
       await apiRequest('/inventory', { method: 'POST', body: item.payload })
       return
+    case 'invoice.create': {
+      const payload = item.payload as InvoicePayload
+      let fileUrl = payload.fileUrl || ''
+      let fileBase64 = payload.fileBase64 || ''
+
+      if (fileBase64 && !fileUrl) {
+        fileUrl = await uploadDataUrl(fileBase64, payload.fileName || `invoice-${payload.id}.pdf`, 'invoices')
+        fileBase64 = ''
+      }
+
+      await apiRequest('/invoices', {
+        method: 'POST',
+        body: {
+          ...payload,
+          fileUrl,
+          fileBase64,
+        },
+      })
+      return
+    }
     case 'audit.create':
       await syncAudit(item.payload as AuditPayload)
       return
