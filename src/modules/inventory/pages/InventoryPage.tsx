@@ -346,14 +346,13 @@ export const InventoryPage = () => {
                       Stock inicial{formData.unit !== 'UNIDAD' ? ` (${formData.unit === 'LITRO' ? 'L' : formData.unit === 'KG' ? 'kg' : 'm'})` : ''}
                     </span>
                     <input
-                      type="number"
-                      min={0}
-                      step={formData.unit !== 'UNIDAD' ? '0.1' : '1'}
+                      type="text"
+                      inputMode="decimal"
                       className={inputClassName}
-                      value={formData.stock}
-                      onChange={(e) => handleFieldChange('stock', Number(e.target.value))}
+                      value={formData.stockInput}
+                      onChange={(e) => handleFieldChange('stockInput', e.target.value.replace(/[^\d.,]/g, ''))}
                     />
-                    {errors.stock && <span className="text-xs font-semibold text-rose-700">{errors.stock}</span>}
+                    {errors.stockInput && <span className="text-xs font-semibold text-rose-700">{errors.stockInput}</span>}
                   </label>
 
                   <div className="grid grid-cols-3 gap-2">

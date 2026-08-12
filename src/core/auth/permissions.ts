@@ -62,6 +62,7 @@ export const getRolePermissions = (role: UserRole): UserPermissions => {
     allowModule(permissions, 'MAINTENANCE', ['view', 'create', 'edit'])
     allowModule(permissions, 'AUDITS', ['view', 'create'])
     allowModule(permissions, 'WORK_ORDERS', ['view', 'create', 'edit'])
+    allowModule(permissions, 'SERVICE_ORDERS', ['view', 'create', 'edit'])
     allowModule(permissions, 'EXTERNAL_REQUESTS', ['view', 'create', 'edit'])
     allowModule(permissions, 'TASKS', ['view'])
     allowModule(permissions, 'REPAIRS', ['view', 'create', 'edit'])

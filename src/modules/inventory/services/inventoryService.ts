@@ -60,7 +60,7 @@ export const createEmptyInventoryItemFormData = (): InventoryItemFormData => ({
   sku: '',
   productName: '',
   description: '',
-  stock: 0,
+  stockInput: '0',
   unit: 'UNIDAD',
   unitPrice: '',
   currency: 'ARS',
@@ -70,11 +70,16 @@ export const toInventoryItemFormData = (item: InventoryItem): InventoryItemFormD
   sku: item.sku,
   productName: item.productName,
   description: item.description ?? '',
-  stock: item.stock,
+  stockInput: String(item.stock),
   unit: item.unit ?? 'UNIDAD',
   unitPrice: item.unitPrice != null ? String(item.unitPrice) : '',
   currency: item.currency ?? 'ARS',
 })
+
+const parseStockInput = (value: string): number => {
+  const parsed = parseFloat(value.replace(',', '.'))
+  return isNaN(parsed) || parsed < 0 ? 0 : parsed
+}
 
 export const validateInventoryItemFormData = (
   formData: InventoryItemFormData,
@@ -103,8 +108,9 @@ export const validateInventoryItemFormData = (
     validationErrors.productName = 'El producto supera el largo maximo permitido.'
   }
 
-  if (formData.stock < 0) {
-    validationErrors.stock = 'El stock no puede ser negativo.'
+  const rawStock = parseFloat(formData.stockInput.replace(',', '.'))
+  if (Number.isFinite(rawStock) && rawStock < 0) {
+    validationErrors.stockInput = 'El stock no puede ser negativo.'
   }
 
   if (normalizeDescription(formData.description ?? '').length > 200) {
@@ -124,7 +130,7 @@ const normalizeStock = (stock: number, unit: InventoryItem['unit']): number =>
 
 export const toInventoryItem = (formData: InventoryItemFormData, externalBarcode?: string): InventoryItem => {
   const unit = formData.unit ?? 'UNIDAD'
-  const stock = normalizeStock(formData.stock, unit)
+  const stock = normalizeStock(parseStockInput(formData.stockInput), unit)
   return {
     id: createId(),
     sku: normalizeSku(formData.sku),
@@ -142,7 +148,7 @@ export const toInventoryItem = (formData: InventoryItemFormData, externalBarcode
 
 export const mergeInventoryItemFromForm = (item: InventoryItem, formData: InventoryItemFormData): InventoryItem => {
   const unit = formData.unit ?? item.unit ?? 'UNIDAD'
-  const normalizedStock = normalizeStock(formData.stock, unit)
+  const normalizedStock = normalizeStock(parseStockInput(formData.stockInput), unit)
   const delta = normalizedStock - item.stock
 
   const nextMovementHistory =

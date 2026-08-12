@@ -4,7 +4,7 @@ export interface InventoryItemFormData {
   sku: string
   productName: string
   description: string
-  stock: number
+  stockInput: string
   unit: InventoryUnit
   unitPrice: string
   currency: 'ARS' | 'USD'

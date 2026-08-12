@@ -363,20 +363,26 @@ export const ProjectDetailPage = () => {
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">Costo estimado</label>
                   <input
-                    type="number"
-                    min="0"
-                    value={editForm.estimatedCost ?? 0}
-                    onChange={(e) => setEditForm((f) => ({ ...f, estimatedCost: Number(e.target.value) }))}
+                    type="text"
+                    inputMode="decimal"
+                    value={editForm.estimatedCost ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^\d.]/g, '')
+                      setEditForm((f) => ({ ...f, estimatedCost: raw as unknown as number }))
+                    }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">Costo real</label>
                   <input
-                    type="number"
-                    min="0"
-                    value={editForm.actualCost ?? 0}
-                    onChange={(e) => setEditForm((f) => ({ ...f, actualCost: Number(e.target.value) }))}
+                    type="text"
+                    inputMode="decimal"
+                    value={editForm.actualCost ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^\d.]/g, '')
+                      setEditForm((f) => ({ ...f, actualCost: raw as unknown as number }))
+                    }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
                   />
                 </div>
