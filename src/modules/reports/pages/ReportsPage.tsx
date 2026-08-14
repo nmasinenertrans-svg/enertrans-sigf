@@ -5,6 +5,8 @@ import { ROUTE_PATHS, buildFleetDetailPath } from '../../../core/routing/routePa
 import { BackLink } from '../../../components/shared/BackLink'
 import { apiRequest } from '../../../services/api/apiClient'
 import { getFleetUnitTypeLabel, getOperationalStatusLabel, normalizeFleetUnits } from '../../fleet/services/fleetService'
+import { resultLabelMap as auditResultLabelMap } from '../../audits/services/auditsService'
+import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersService'
 import {
   fleetOperationalStatuses,
   fleetUnitTypes,
@@ -1031,7 +1033,7 @@ export const ReportsPage = () => {
       unitMap.get(audit.unitId ?? '')?.client ?? 'Sin cliente',
       unitMap.get(audit.unitId ?? '')?.typeLabel ?? 'Sin tipo',
       audit.auditorName ?? '',
-      audit.result,
+      auditResultLabelMap[audit.result],
     ])
     downloadCsv('inspecciones.csv', buildCsv(headers, rows))
   }
@@ -1045,7 +1047,7 @@ export const ReportsPage = () => {
       unitMap.get(audit.unitId ?? '')?.client ?? 'Sin cliente',
       unitMap.get(audit.unitId ?? '')?.typeLabel ?? 'Sin tipo',
       audit.auditorName ?? '',
-      audit.result,
+      auditResultLabelMap[audit.result],
     ])
     const doc = await buildPdf('Reporte de Inspecciones', rangeLabel, headers, rows)
     doc.save('inspecciones.pdf')
@@ -1060,7 +1062,7 @@ export const ReportsPage = () => {
       unitMap.get(audit.unitId ?? '')?.client ?? 'Sin cliente',
       unitMap.get(audit.unitId ?? '')?.typeLabel ?? 'Sin tipo',
       audit.auditorName ?? '',
-      audit.result,
+      auditResultLabelMap[audit.result],
     ])
     await downloadXlsx('inspecciones.xlsx', headers, rows)
   }
@@ -1073,7 +1075,7 @@ export const ReportsPage = () => {
       unitMap.get(order.unitId ?? '')?.domain ?? 'Unidad no disponible',
       unitMap.get(order.unitId ?? '')?.client ?? 'Sin cliente',
       unitMap.get(order.unitId ?? '')?.typeLabel ?? 'Sin tipo',
-      order.status,
+      workOrderStatusLabelMap[order.status],
       order.taskList.length,
       order.spareParts.length,
       order.pendingReaudit ? 'Si' : 'No',
@@ -1089,7 +1091,7 @@ export const ReportsPage = () => {
       unitMap.get(order.unitId ?? '')?.domain ?? 'Unidad no disponible',
       unitMap.get(order.unitId ?? '')?.client ?? 'Sin cliente',
       unitMap.get(order.unitId ?? '')?.typeLabel ?? 'Sin tipo',
-      order.status,
+      workOrderStatusLabelMap[order.status],
       String(order.taskList.length),
       String(order.spareParts.length),
       order.pendingReaudit ? 'Si' : 'No',
@@ -1106,7 +1108,7 @@ export const ReportsPage = () => {
       unitMap.get(order.unitId ?? '')?.domain ?? 'Unidad no disponible',
       unitMap.get(order.unitId ?? '')?.client ?? 'Sin cliente',
       unitMap.get(order.unitId ?? '')?.typeLabel ?? 'Sin tipo',
-      order.status,
+      workOrderStatusLabelMap[order.status],
       order.taskList.length,
       order.spareParts.length,
       order.pendingReaudit ? 'Si' : 'No',

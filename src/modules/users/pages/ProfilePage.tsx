@@ -5,6 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { apiRequest } from '../../../services/api/apiClient'
 import { clearQueue } from '../../../services/offline/queue'
 import { BackLink } from '../../../components/shared/BackLink'
+import { userRoleLabelMap } from '../../../core/auth/permissions'
 
 export const ProfilePage = () => {
   const navigate = useNavigate()
@@ -156,7 +157,7 @@ export const ProfilePage = () => {
             )}
             <div>
               <p className="text-lg font-semibold text-slate-900">{user.fullName}</p>
-              <p className="text-xs font-semibold uppercase text-slate-500">{user.role}</p>
+              <p className="text-xs font-semibold uppercase text-slate-500">{userRoleLabelMap[user.role]}</p>
             </div>
             <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:border-amber-300 hover:bg-amber-100">
               Cambiar foto
@@ -176,7 +177,7 @@ export const ProfilePage = () => {
             </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Rol</p>
-              <p className="font-semibold text-slate-900">{user.role}</p>
+              <p className="font-semibold text-slate-900">{userRoleLabelMap[user.role]}</p>
             </div>
           </div>
         </div>

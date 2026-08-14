@@ -210,7 +210,7 @@ export const NotificationsPage = () => {
               <option value="UNREAD">No leidas</option>
               <option value="DANGER">Urgentes</option>
               <option value="WARNING">Atencion</option>
-              <option value="INFO">Info</option>
+              <option value="INFO">Informativas</option>
             </select>
           </label>
           <button
@@ -266,7 +266,7 @@ export const NotificationsPage = () => {
                       <span
                         className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${severityBadgeClass(item.severity)}`}
                       >
-                        {item.severity === 'danger' ? 'Urgente' : item.severity === 'warning' ? 'Atencion' : 'Info'}
+                        {item.severity === 'danger' ? 'Urgente' : item.severity === 'warning' ? 'Atencion' : 'Informativa'}
                       </span>
                     </div>
                   </div>

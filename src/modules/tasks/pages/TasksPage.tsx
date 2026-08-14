@@ -853,7 +853,8 @@ export const TasksPage = () => {
                                       <p>{formatDateTime(event.createdAt)}</p>
                                       {event.fromStatus || event.toStatus ? (
                                         <p>
-                                          Estado: {event.fromStatus || '-'} {'->'} {event.toStatus || '-'}
+                                          Estado: {event.fromStatus ? statusLabelMap[event.fromStatus] : '-'} {'->'}{' '}
+                                          {event.toStatus ? statusLabelMap[event.toStatus] : '-'}
                                         </p>
                                       ) : null}
                                     </div>

@@ -6,6 +6,7 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { DeliveryOperation, FleetLogisticsStatus, FleetUnit } from '../../../types/domain'
 import { exportDeliveryOperationPdf } from '../services/deliveryPdfService'
+import { getOperationalStatusLabel } from '../../fleet/services/fleetService'
 
 type DeliveryFormState = {
   unitId: string
@@ -421,7 +422,7 @@ export const DeliveriesPage = () => {
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2 text-sm text-slate-700 md:grid-cols-2">
                 <p>
-                  <span className="font-semibold">Estado tecnico:</span> {selectedUnit.operationalStatus}
+                  <span className="font-semibold">Estado tecnico:</span> {getOperationalStatusLabel(selectedUnit.operationalStatus)}
                 </p>
                 <p>
                   <span className="font-semibold">Estado logistico:</span>{' '}

@@ -16,6 +16,8 @@ import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersSer
 import { getMeasurementUnit, maintenanceTypeLabels } from '../../maintenance/services/maintenanceService'
 import type { FleetUnit } from '../../../types/domain'
 import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
+import { StatusPill } from '../../../components/ui/StatusPill'
+import { resultLabelMap as auditResultLabelMap } from '../../audits/services/auditsService'
 
 const detailTabs = [
   { id: 'maintenancePlan', label: 'Plan de mantenimiento' },
@@ -105,11 +107,6 @@ const documentStatusClassMap: Record<'overdue' | 'soon' | 'ok' | 'missing' | 'na
   ok: 'border-emerald-300 bg-emerald-50 text-emerald-700',
   missing: 'border-slate-200 bg-slate-100 text-slate-600',
   na: 'border-slate-200 bg-slate-50 text-slate-500',
-}
-
-const auditResultLabelMap: Record<'APPROVED' | 'REJECTED', string> = {
-  APPROVED: 'APROBADO',
-  REJECTED: 'RECHAZADO',
 }
 
 const operationalStatusClassMap = {
@@ -1576,8 +1573,9 @@ export const FleetDetailPage = () => {
                   const unitLabel = isKilometers ? 'km' : 'hs'
                   return (
                     <div key={plan.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                      <p className="font-semibold text-slate-900">
-                        {maintenanceTypeLabels[plan.maintenanceType] ?? plan.maintenanceType} · Estado: {plan.status}
+                      <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
+                        {maintenanceTypeLabels[plan.maintenanceType] ?? plan.maintenanceType}
+                        <StatusPill status={plan.status} />
                       </p>
                       <p className="text-xs text-slate-600">
                         Actual: {current} {unitLabel} | Próximo service: {nextServiceBy} {unitLabel}
@@ -1607,8 +1605,7 @@ export const FleetDetailPage = () => {
               {unitAudits.length > 0 ? (
                 unitAudits.map((audit) => (
                   <div key={audit.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                    <p className="font-semibold text-slate-900">{audit.result}</p>
-                    <p className="text-xs font-semibold text-slate-700">{auditResultLabelMap[audit.result]}</p>
+                    <p className="font-semibold text-slate-900">{auditResultLabelMap[audit.result]}</p>
                     <p className="text-xs text-slate-600">Auditor: {audit.auditorName || 'No definido'}</p>
                     <p className="text-xs text-slate-600">Fecha: {formatDateTime(audit.performedAt)}</p>
                   </div>

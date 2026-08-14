@@ -1,5 +1,6 @@
 import type { ExternalRequest, FleetUnit, RepairPartUsed, RepairRecord, WorkOrder } from '../../../types/domain'
 import type { RepairFormData, RepairFormErrors, RepairPartUsedFormItem, RepairViewItem } from '../types'
+import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersService'
 
 const MAX_SUPPLIER_LENGTH = 120
 const pad2 = (value: number) => String(value).padStart(2, '0')
@@ -362,7 +363,7 @@ export const buildRepairView = (
       sourceType: repair.sourceType ?? (linkedIds.length > 0 ? 'EXTERNAL_REQUEST' : 'WORK_ORDER'),
       workOrderId: repair.workOrderId,
       workOrderLabel: linkedWorkOrder
-        ? `${linkedWorkOrder.code ?? linkedWorkOrder.id.slice(0, 8)} - ${linkedWorkOrder.status}`
+        ? `${linkedWorkOrder.code ?? linkedWorkOrder.id.slice(0, 8)} - ${workOrderStatusLabelMap[linkedWorkOrder.status]}`
         : 'OT no disponible',
       externalRequestId: linkedIds[0] ?? '',
       linkedExternalRequestIds: linkedIds,

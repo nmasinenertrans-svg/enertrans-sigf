@@ -18,6 +18,7 @@ import {
   createWorkOrderFromAudit,
   readImageAsCompressedDataUrl,
   readFileAsDataUrl,
+  resultLabelMap,
   toAuditRecord,
   validateAuditFormData,
 } from '../services/auditsService'
@@ -1383,7 +1384,7 @@ export const AuditsPage = () => {
               </div>
               <div className="flex items-center gap-2">
                 <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${viewAuditSummary?.resultClassName ?? ''}`}>
-                  {viewAuditSummary?.resultLabel ?? viewAudit.result}
+                  {viewAuditSummary?.resultLabel ?? resultLabelMap[viewAudit.result]}
                 </span>
                 <button
                   type="button"

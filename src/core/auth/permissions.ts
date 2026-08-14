@@ -9,6 +9,14 @@ import type {
 } from '../../types/domain'
 import { permissionActions, permissionModules } from '../../types/domain'
 
+export const userRoleLabelMap: Record<UserRole, string> = {
+  DEV: 'Desarrollador',
+  GERENTE: 'Gerente',
+  COORDINADOR: 'Coordinador',
+  AUDITOR: 'Auditor',
+  MECANICO: 'Mecánico',
+}
+
 const buildEmptyPermissions = (): UserPermissions =>
   permissionModules.reduce((accumulator, moduleKey) => {
     accumulator[moduleKey] = permissionActions.reduce((actions, action) => {

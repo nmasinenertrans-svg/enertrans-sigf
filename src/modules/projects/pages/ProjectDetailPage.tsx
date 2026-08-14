@@ -596,7 +596,7 @@ export const ProjectDetailPage = () => {
                           if (e.key === 'Escape') setEditingItemId(null)
                         }}
                       />
-                      <button type="button" onClick={() => void handleSaveItemTitle(item)} className="text-xs font-semibold text-emerald-600">OK</button>
+                      <button type="button" onClick={() => void handleSaveItemTitle(item)} className="text-xs font-semibold text-emerald-600">Listo</button>
                       <button type="button" onClick={() => setEditingItemId(null)} className="text-xs text-slate-400">✕</button>
                     </div>
                   ) : (
@@ -646,7 +646,9 @@ export const ProjectDetailPage = () => {
             </span>
           </span>
         )}
-        renderCandidate={(wo) => `${wo.code || wo.id.slice(0, 8)} — ${wo.status}`}
+        renderCandidate={(wo) =>
+          `${wo.code || wo.id.slice(0, 8)} — ${wo.status === 'OPEN' ? 'Abierta' : wo.status === 'IN_PROGRESS' ? 'En progreso' : 'Cerrada'}`
+        }
         searchOpen={woSearchOpen}
         setSearchOpen={setWoSearchOpen}
         onLink={(id) => void handleLinkWorkOrder(id)}

@@ -623,7 +623,7 @@ export const readImageAsCompressedDataUrl = async (
   }
 }
 
-const resultLabelMap: Record<'APPROVED' | 'REJECTED', string> = {
+export const resultLabelMap: Record<'APPROVED' | 'REJECTED', string> = {
   APPROVED: 'APROBADO',
   REJECTED: 'RECHAZADO',
 }

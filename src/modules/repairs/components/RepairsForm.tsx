@@ -3,6 +3,7 @@ import { FormRow } from '../../../components/shared/FormRow'
 import type { ExternalRequest, InventoryItem, Supplier, WorkOrder } from '../../../types/domain'
 import type { RepairFormData, RepairFormErrors, RepairFormField, RepairPartUsedFormItem } from '../types'
 import { calculateInvoicedFromSurcharge, calculateMargin, isExternalRequestEligibleForRepair } from '../services/repairsService'
+import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersService'
 
 interface RepairsFormProps {
   workOrders: WorkOrder[]
@@ -156,7 +157,7 @@ export const RepairsForm = ({
                 <option value="">Seleccionar OT</option>
                 {workOrders.map((workOrder) => (
                   <option key={workOrder.id} value={workOrder.id}>
-                    {workOrder.code ?? workOrder.id.slice(0, 8)} - {workOrder.status}
+                    {workOrder.code ?? workOrder.id.slice(0, 8)} - {workOrderStatusLabelMap[workOrder.status]}
                   </option>
                 ))}
               </select>

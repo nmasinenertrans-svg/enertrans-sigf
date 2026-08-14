@@ -5,7 +5,7 @@ import { BackLink } from '../../../components/shared/BackLink'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
 import { permissionActions, permissionModules, userRoles, type PermissionAction, type PermissionModule, type UserPermissions, type UserRole } from '../../../types/domain'
-import { getRolePermissions } from '../../../core/auth/permissions'
+import { getRolePermissions, userRoleLabelMap } from '../../../core/auth/permissions'
 
 const buildEmptyPermissions = (): UserPermissions => getRolePermissions('AUDITOR')
 
@@ -30,6 +30,13 @@ const permissionModuleLabelMap: Record<PermissionModule, string> = {
   POSTVENTA: 'Postventa / Calendario',
   SERVICE_ORDERS: 'Órdenes de Servicio',
   INVOICES: 'Facturas',
+}
+
+const permissionActionLabelMap: Record<PermissionAction, string> = {
+  view: 'Ver',
+  create: 'Crear',
+  edit: 'Editar',
+  delete: 'Eliminar',
 }
 
 const normalizePermissions = (permissions: UserPermissions | undefined, role: UserRole): UserPermissions => {
@@ -455,7 +462,7 @@ export const UsersPage = () => {
             >
               {userRoles.map((role) => (
                 <option key={role} value={role}>
-                  {role}
+                  {userRoleLabelMap[role]}
                 </option>
               ))}
             </select>
@@ -494,7 +501,7 @@ export const UsersPage = () => {
                 <span>Módulo</span>
                 {permissionActions.map((action) => (
                   <span key={action} className="text-center">
-                    {action}
+                    {permissionActionLabelMap[action]}
                   </span>
                 ))}
               </div>
@@ -561,7 +568,7 @@ export const UsersPage = () => {
                     >
                       {permissionActions.map((action) => (
                         <option key={action} value={action}>
-                          {action}
+                          {permissionActionLabelMap[action]}
                         </option>
                       ))}
                     </select>
@@ -606,7 +613,7 @@ export const UsersPage = () => {
                   <>
                     <p className="text-sm font-semibold text-slate-900">{user.fullName}</p>
                     <p className="text-xs text-slate-600">{user.username}</p>
-                    <p className="text-xs text-slate-500">Rol: {user.role}</p>
+                    <p className="text-xs text-slate-500">Rol: {userRoleLabelMap[user.role]}</p>
                     <p className="text-xs text-slate-500">Último acceso: {formatLastLogin(lastAccess)}</p>
                     <p className={`text-xs font-semibold ${accessState.className}`}>Uso: {accessState.label}</p>
                   </>
