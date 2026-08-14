@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { ErrorBanner } from '../../components/shared/ErrorBanner'
 import { GlobalLoader } from '../../components/shared/GlobalLoader'
@@ -150,6 +150,7 @@ export const AppLayout = () => {
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
   const workOrdersRefreshInProgressRef = useRef(false)
   const basicViewBlockedAtRef = useRef(0)
+  const lastVisibilityRefreshAtRef = useRef(0)
 
 
   useEffect(() => {
@@ -222,10 +223,8 @@ export const AppLayout = () => {
     return buildAppNotifications({ fleetUnits, audits, workOrders, userNotifications })
   }, [audits, fleetUnits, workOrders, userNotifications])
 
-  useEffect(() => {
-    const currentUserId = currentUserRef.current?.id ?? null
-
-    const loadRemoteData = async () => {
+  const loadRemoteData = useCallback(async () => {
+      const currentUserId = currentUserRef.current?.id ?? null
       if (!currentUserId || !syncStatus.isOnline) {
         return
       }
@@ -329,25 +328,44 @@ export const AppLayout = () => {
           serviceOrdersResponse,
           invoicesResponse,
         ] = await Promise.all([
-          canViewUsers ? safeRequest<AppUser[]>('/users') : Promise.resolve(null),
-          safeRequest<FleetUnit[]>('/fleet'),
-          shouldSyncMaintenance ? safeRequest<MaintenancePlan[]>('/maintenance', { silent: true }) : Promise.resolve(null),
-          shouldSyncAudits ? safeRequest<any[]>('/audits', { maxAttempts: 2, timeoutMs: 20000 }) : Promise.resolve(null),
-          shouldSyncRepairs ? safeRequest<RepairRecord[]>('/repairs', { silent: true }) : Promise.resolve(null),
-          shouldSyncSuppliers ? safeRequest<Supplier[]>('/suppliers', { silent: true }) : Promise.resolve(null),
-          shouldSyncExternalRequests
-            ? safeRequest<ExternalRequest[]>('/external-requests', { silent: true })
+          // Datos de negocio: 3 intentos con timeout creciente para sobrevivir un "cold start"
+          // del backend (Render lo duerme tras inactividad), y NUNCA en silencio — si de verdad
+          // no se puede sincronizar, el usuario tiene que enterarse en vez de ver datos viejos
+          // sin saberlo (ver incidente de remitos "perdidos" que en realidad estaban en el
+          // servidor pero el fetch fallaba una sola vez y se rendia sin avisar).
+          canViewUsers ? safeRequest<AppUser[]>('/users', { maxAttempts: 3, timeoutMs: 20000 }) : Promise.resolve(null),
+          safeRequest<FleetUnit[]>('/fleet', { maxAttempts: 3, timeoutMs: 20000 }),
+          shouldSyncMaintenance
+            ? safeRequest<MaintenancePlan[]>('/maintenance', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
-          shouldSyncMovements ? safeRequest<FleetMovement[]>('/movements', { silent: true }) : Promise.resolve(null),
-          shouldSyncClients ? safeRequest<ClientAccount[]>('/clients', { silent: true }) : Promise.resolve(null),
-          shouldSyncDeliveries ? safeRequest<DeliveryOperation[]>('/deliveries', { silent: true }) : Promise.resolve(null),
-          shouldSyncInventory ? safeRequest<InventoryItem[]>('/inventory', { silent: true }) : Promise.resolve(null),
-          safeRequest<UserInboxNotification[]>('/notifications', { silent: true }),
+          shouldSyncAudits ? safeRequest<any[]>('/audits', { maxAttempts: 3, timeoutMs: 20000 }) : Promise.resolve(null),
+          shouldSyncRepairs
+            ? safeRequest<RepairRecord[]>('/repairs', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          shouldSyncSuppliers
+            ? safeRequest<Supplier[]>('/suppliers', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          shouldSyncExternalRequests
+            ? safeRequest<ExternalRequest[]>('/external-requests', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          shouldSyncMovements
+            ? safeRequest<FleetMovement[]>('/movements', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          shouldSyncClients
+            ? safeRequest<ClientAccount[]>('/clients', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          shouldSyncDeliveries
+            ? safeRequest<DeliveryOperation[]>('/deliveries', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          shouldSyncInventory
+            ? safeRequest<InventoryItem[]>('/inventory', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          safeRequest<UserInboxNotification[]>('/notifications', { silent: true, maxAttempts: 2 }),
           canUser(currentUserRef.current ?? null, 'SERVICE_ORDERS', 'view')
-            ? safeRequest<ServiceOrder[]>('/service-orders', { silent: true })
+            ? safeRequest<ServiceOrder[]>('/service-orders', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
           canUser(currentUserRef.current ?? null, 'INVOICES', 'view')
-            ? safeRequest<Invoice[]>('/invoices', { silent: true })
+            ? safeRequest<Invoice[]>('/invoices', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
         ])
 
@@ -498,11 +516,7 @@ export const AppLayout = () => {
         setGlobalLoading(false)
         isFetchingRef.current = false
       }
-    }
-
-    loadRemoteData()
   }, [
-    currentUser?.id,
     syncStatus.isOnline,
     setFleetUnits,
     setMaintenancePlans,
@@ -522,6 +536,34 @@ export const AppLayout = () => {
     setServiceOrders,
     setInvoices,
   ])
+
+  useEffect(() => {
+    loadRemoteData()
+  }, [currentUser?.id, loadRemoteData])
+
+  // Si el usuario reabre la app (o vuelve a la pestana) despues de que un fetch
+  // haya fallado en silencio, esto fuerza un refresco real en vez de dejarlo
+  // mirando datos viejos indefinidamente (ver incidente de remitos "perdidos").
+  useEffect(() => {
+    const handleVisibilityRegain = () => {
+      if (document.visibilityState !== 'visible') {
+        return
+      }
+      const now = Date.now()
+      if (now - lastVisibilityRefreshAtRef.current < 20000) {
+        return
+      }
+      lastVisibilityRefreshAtRef.current = now
+      loadRemoteData()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityRegain)
+    window.addEventListener('focus', handleVisibilityRegain)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityRegain)
+      window.removeEventListener('focus', handleVisibilityRegain)
+    }
+  }, [loadRemoteData])
 
   useEffect(() => {
     if (!currentUser?.id || !syncStatus.isOnline) {
