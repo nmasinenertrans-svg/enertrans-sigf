@@ -850,6 +850,14 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     }
   }
 
+  // Remitos: vinculo opcional a Cliente real (antes solo texto libre, generaba
+  // duplicados/typos que no cruzaban con el modulo Clientes).
+  const hasFleetMovementTable = await tableExistsInActiveSchema('FleetMovement')
+  if (hasFleetMovementTable) {
+    await safeExecuteCompatSql(`ALTER TABLE "FleetMovement" ADD COLUMN IF NOT EXISTS "clientId" TEXT;`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetMovement_clientId_idx" ON "FleetMovement"("clientId");`)
+  }
+
   // NDP/Reparaciones: solo aplica cambios si tablas existen en schema activo.
   const hasExternalRequestTable = await tableExistsInActiveSchema('ExternalRequest')
   const hasRepairRecordTable = await tableExistsInActiveSchema('RepairRecord')

@@ -433,6 +433,7 @@ model FleetMovement {
   movementType         FleetMovementType
   remitoNumber         String            @default("")
   remitoDate           DateTime?
+  clientId             String?
   clientName           String            @default("")
   workLocation         String            @default("")
   equipmentDescription String            @default("")
@@ -451,7 +452,10 @@ model FleetMovement {
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
-  units FleetMovementUnit[]
+  client ClientAccount? @relation(fields: [clientId], references: [id])
+  units  FleetMovementUnit[]
+
+  @@index([clientId])
 }
 
 model FleetMovementUnit {
@@ -542,6 +546,7 @@ model ClientAccount {
   deliveries    DeliveryOperation[]
   crmDeals      CrmDeal[]
   serviceOrders ServiceOrder[]
+  movements     FleetMovement[]
 }
 
 model Supplier {

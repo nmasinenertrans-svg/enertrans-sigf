@@ -450,6 +450,7 @@ export interface FleetMovement {
   movementType: FleetMovementType
   remitoNumber: string
   remitoDate?: string
+  clientId?: string | null
   clientName: string
   workLocation: string
   equipmentDescription: string

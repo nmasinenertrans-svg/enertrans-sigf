@@ -4,6 +4,7 @@ import pdfParse from 'pdf-parse'
 import { prisma } from '../db.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { getNextSequence } from '../utils/sequence.js'
+import { getErrorCode } from '../utils/errors.js'
 
 const router = Router()
 
@@ -12,6 +13,7 @@ const movementSchema = z.object({
   movementType: z.enum(['ENTRY', 'RETURN']),
   remitoNumber: z.string().optional().default(''),
   remitoDate: z.string().optional().default(''),
+  clientId: z.string().nullable().optional(),
   clientName: z.string().optional().default(''),
   workLocation: z.string().optional().default(''),
   equipmentDescription: z.string().optional().default(''),
@@ -40,6 +42,7 @@ const movementUpdateSchema = z.object({
   movementType: z.enum(['ENTRY', 'RETURN']).optional(),
   remitoNumber: z.string().optional(),
   remitoDate: z.string().optional(),
+  clientId: z.string().nullable().optional(),
   clientName: z.string().optional(),
   workLocation: z.string().optional(),
   equipmentDescription: z.string().optional(),
@@ -210,6 +213,7 @@ router.post('/', async (req, res) => {
         movementType: parsed.data.movementType,
         remitoNumber,
         remitoDate: remitoDate ?? undefined,
+        clientId: parsed.data.clientId || null,
         clientName: parsed.data.clientName?.trim() ?? '',
         workLocation: parsed.data.workLocation?.trim() ?? '',
         equipmentDescription: parsed.data.equipmentDescription?.trim() ?? '',
@@ -236,6 +240,9 @@ router.post('/', async (req, res) => {
       unitIds: created.units.map((unit) => unit.unitId),
     })
   } catch (error) {
+    if (getErrorCode(error) === 'P2003') {
+      return res.status(400).json({ message: 'Cliente vinculado invalido.' })
+    }
     console.error('Movements POST error:', error)
     return res.status(500).json({ message: 'No se pudo crear el movimiento.' })
   }
@@ -301,6 +308,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
         movementType: parsed.data.movementType,
         remitoNumber: parsed.data.remitoNumber?.trim(),
         remitoDate: remitoDateValue ? remitoDate : undefined,
+        clientId: parsed.data.clientId !== undefined ? parsed.data.clientId || null : undefined,
         clientName: parsed.data.clientName?.trim(),
         workLocation: parsed.data.workLocation?.trim(),
         equipmentDescription: parsed.data.equipmentDescription?.trim(),
@@ -338,6 +346,9 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       unitIds: updated.units.map((unit) => unit.unitId),
     })
   } catch (error) {
+    if (getErrorCode(error) === 'P2003') {
+      return res.status(400).json({ message: 'Cliente vinculado invalido.' })
+    }
     console.error('Movements PATCH error:', error)
     return res.status(500).json({ message: 'No se pudo editar el movimiento.' })
   }

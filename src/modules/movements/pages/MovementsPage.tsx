@@ -29,7 +29,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 
 export const MovementsPage = () => {
   const {
-    state: { fleetUnits, movements, featureFlags, currentUser },
+    state: { fleetUnits, movements, featureFlags, currentUser, clients },
     actions: { setMovements, setAppError },
   } = useAppContext()
   const [formData, setFormData] = useState<MovementFormData>(createEmptyMovementFormData())
@@ -37,8 +37,19 @@ export const MovementsPage = () => {
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [unitSearch, setUnitSearch] = useState('')
+  const [clientSearch, setClientSearch] = useState('')
   const [nextRemitoNumber, setNextRemitoNumber] = useState('')
   const [editingMovementId, setEditingMovementId] = useState<string | null>(null)
+
+  const selectedClient = clients.find((client) => client.id === formData.clientId)
+
+  const filteredClients = useMemo(() => {
+    const query = clientSearch.trim().toLowerCase()
+    if (!query) {
+      return []
+    }
+    return clients.filter((client) => client.name.toLowerCase().includes(query)).slice(0, 8)
+  }, [clients, clientSearch])
 
   const unitsOptions = useMemo(
     () =>
@@ -117,7 +128,7 @@ export const MovementsPage = () => {
         },
       })
 
-      setFormData((previous) => applyParsedPayload(previous, parsed ?? {}, fleetUnits))
+      setFormData((previous) => applyParsedPayload(previous, parsed ?? {}, fleetUnits, clients))
     } catch {
       setAppError('No se pudo leer el PDF automaticamente. Completa los datos manualmente.')
     } finally {
@@ -163,6 +174,7 @@ export const MovementsPage = () => {
         setMovements(movements.map((movement) => (movement.id === editingMovementId ? updated : movement)))
         setEditingMovementId(null)
         setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
+        setClientSearch('')
       } else {
         const created = await apiRequest<FleetMovement>('/movements', {
           method: 'POST',
@@ -171,6 +183,7 @@ export const MovementsPage = () => {
 
         setMovements([created, ...movements])
         setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
+        setClientSearch('')
         try {
           const response = await apiRequest<NextRemitoResponse>('/movements/next-remito')
           setNextRemitoNumber(response.remitoNumber)
@@ -240,11 +253,13 @@ export const MovementsPage = () => {
 
     const normalizedDate = normalizeRemitoDateInput(selected.remitoDate ?? '')
     setEditingMovementId(selected.id)
+    setClientSearch('')
     setFormData({
       unitIds: selected.unitIds ?? [],
       movementType: selected.movementType,
       remitoNumber: selected.remitoNumber ?? '',
       remitoDate: normalizedDate,
+      clientId: selected.clientId ?? '',
       clientName: selected.clientName ?? '',
       workLocation: selected.workLocation ?? '',
       equipmentDescription: selected.equipmentDescription ?? '',
@@ -377,10 +392,50 @@ export const MovementsPage = () => {
 
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Cliente
+            {selectedClient ? (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <span>Cliente registrado: {selectedClient.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleFieldChange('clientId', '')}
+                  className="font-semibold text-amber-700 hover:underline"
+                >
+                  Quitar vínculo
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  value={clientSearch}
+                  onChange={(event) => setClientSearch(event.target.value)}
+                  placeholder="Buscar cliente registrado..."
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
+                />
+                {clientSearch.trim() && filteredClients.length > 0 ? (
+                  <div className="max-h-32 space-y-1 overflow-y-auto">
+                    {filteredClients.map((client) => (
+                      <button
+                        key={client.id}
+                        type="button"
+                        onClick={() => {
+                          handleFieldChange('clientId', client.id)
+                          handleFieldChange('clientName', client.name)
+                          setClientSearch('')
+                        }}
+                        className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs font-normal text-slate-700 hover:bg-slate-100"
+                      >
+                        {client.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            )}
             <input
               value={formData.clientName}
               onChange={(event) => handleFieldChange('clientName', event.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              placeholder="Nombre del cliente (o corregilo si no está registrado)"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900"
             />
             {errors.clientName ? <span className="text-xs text-rose-700">{errors.clientName}</span> : null}
           </label>
@@ -513,6 +568,7 @@ export const MovementsPage = () => {
             onClick={() => {
               setEditingMovementId(null)
               setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
+              setClientSearch('')
             }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
           >

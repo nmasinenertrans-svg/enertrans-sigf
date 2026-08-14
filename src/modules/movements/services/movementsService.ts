@@ -1,4 +1,4 @@
-import type { FleetMovement, FleetMovementType, FleetUnit } from '../../../types/domain'
+import type { ClientAccount, FleetMovement, FleetMovementType, FleetUnit } from '../../../types/domain'
 
 const createId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -12,6 +12,7 @@ export interface MovementFormData {
   movementType: FleetMovementType
   remitoNumber: string
   remitoDate: string
+  clientId: string
   clientName: string
   workLocation: string
   equipmentDescription: string
@@ -95,6 +96,7 @@ export const createEmptyMovementFormData = (unitId?: string): MovementFormData =
   movementType: 'ENTRY',
   remitoNumber: '',
   remitoDate: '',
+  clientId: '',
   clientName: '',
   workLocation: '',
   equipmentDescription: '',
@@ -144,6 +146,7 @@ export const toFleetMovement = (formData: MovementFormData): FleetMovement => ({
   movementType: formData.movementType,
   remitoNumber: formData.remitoNumber.trim(),
   remitoDate: normalizeRemitoDateInput(formData.remitoDate.trim()),
+  clientId: formData.clientId || null,
   clientName: formData.clientName.trim(),
   workLocation: formData.workLocation.trim(),
   equipmentDescription: formData.equipmentDescription.trim(),
@@ -195,6 +198,7 @@ export const applyParsedPayload = (
   formData: MovementFormData,
   parsed: Record<string, unknown>,
   fleetUnits: FleetUnit[] = [],
+  clients: ClientAccount[] = [],
 ): MovementFormData => {
   const next = { ...formData, parsedPayload: parsed }
   const rawText = readParsedField(parsed, 'rawText')
@@ -223,12 +227,17 @@ export const applyParsedPayload = (
     : next.unitIds
 
   const expandedUnitIds = expandMovementUnitIdsWithAssociations(mergedUnitIds, fleetUnits)
+  const resolvedClientName = clientName || next.clientName
+  const matchedClient = resolvedClientName
+    ? clients.find((client) => client.name.trim().toLowerCase() === resolvedClientName.trim().toLowerCase())
+    : undefined
 
   return {
     ...next,
     remitoNumber: next.remitoNumber,
     remitoDate: normalizeRemitoDateInput(remitoDate) || next.remitoDate,
-    clientName: clientName || next.clientName,
+    clientId: matchedClient?.id ?? next.clientId,
+    clientName: resolvedClientName,
     workLocation: workLocation || next.workLocation,
     equipmentDescription: equipmentDescription || next.equipmentDescription,
     observations: observations || next.observations,
