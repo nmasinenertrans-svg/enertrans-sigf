@@ -1,41 +1,70 @@
-import type { ReactElement } from 'react'
+import { lazy, Suspense, type ComponentType, type ReactElement } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '../layout/AppLayout'
+import { RouteTransitionLoader } from '../../components/shared/RouteTransitionLoader'
 import { ROUTE_PATHS } from './routePaths'
-import { AuditsPage } from '../../modules/audits/pages/AuditsPage'
-import { DashboardPage } from '../../modules/dashboard/pages/DashboardPage'
-import { FleetCreatePage } from '../../modules/fleet/pages/FleetCreatePage'
-import { FleetDetailPage } from '../../modules/fleet/pages/FleetDetailPage'
-import { FleetEditPage } from '../../modules/fleet/pages/FleetEditPage'
-import { FleetListPage } from '../../modules/fleet/pages/FleetListPage'
-import { InventoryPage } from '../../modules/inventory/pages/InventoryPage'
-import { MaintenancePage } from '../../modules/maintenance/pages/MaintenancePage'
-import { RepairsPage } from '../../modules/repairs/pages/RepairsPage'
-import { MovementsPage } from '../../modules/movements/pages/MovementsPage'
-import { ClientsPage } from '../../modules/clients/pages/ClientsPage'
-import { DeliveriesPage } from '../../modules/deliveries/pages/DeliveriesPage'
-import { TasksPage } from '../../modules/tasks/pages/TasksPage'
-import { WorkOrdersPage } from '../../modules/workOrders/pages/WorkOrdersPage'
-import { ExternalRequestsPage } from '../../modules/externalRequests/pages/ExternalRequestsPage'
-import { LoginPage } from '../../modules/auth/pages/LoginPage'
-import { UsersPage } from '../../modules/users/pages/UsersPage'
-import { ReportsPage } from '../../modules/reports/pages/ReportsPage'
-import { SuppliersPage } from '../../modules/suppliers/pages/SuppliersPage'
-import { SupplierDetailPage } from '../../modules/suppliers/pages/SupplierDetailPage'
-import { CrmPage } from '../../modules/crm/pages/CrmPage'
-import { ProjectsPage } from '../../modules/projects/pages/ProjectsPage'
-import { ProjectDetailPage } from '../../modules/projects/pages/ProjectDetailPage'
-import { PostventaPage } from '../../modules/postventa/pages/PostventaPage'
-import { ServiceOrdersPage } from '../../modules/serviceOrders/pages/ServiceOrdersPage'
-import { ServiceOrderDetailPage } from '../../modules/serviceOrders/pages/ServiceOrderDetailPage'
-import { InvoicesPage } from '../../modules/invoices/pages/InvoicesPage'
-import { ProfilePage } from '../../modules/users/pages/ProfilePage'
-import { MaintenanceModePage } from '../../modules/system/pages/MaintenanceModePage'
-import { NotificationsPage } from '../../modules/system/pages/NotificationsPage'
 import { RequireAuth } from './RequireAuth'
 import { RequirePermission } from './RequirePermission'
 import { useAppContext } from '../hooks/useAppContext'
 import type { FeatureFlags } from '../../types/domain'
+
+/**
+ * Cada pagina se exporta como named export, no default — lazy() necesita un
+ * default, asi que se mapea aca en un solo lugar en vez de repetir el .then()
+ * en cada import. Esto es lo que permite que Vite parta el bundle por pagina
+ * en vez de meter las ~25 paginas (y jspdf/xlsx que usan algunas) en el chunk
+ * principal que se descarga siempre, aunque el usuario nunca las abra.
+ */
+const lazyPage = <TModule extends Record<string, ComponentType<any>>, TKey extends keyof TModule>(
+  loader: () => Promise<TModule>,
+  exportName: TKey,
+) => lazy(() => loader().then((module) => ({ default: module[exportName] })))
+
+const AuditsPage = lazyPage(() => import('../../modules/audits/pages/AuditsPage'), 'AuditsPage')
+const DashboardPage = lazyPage(() => import('../../modules/dashboard/pages/DashboardPage'), 'DashboardPage')
+const FleetCreatePage = lazyPage(() => import('../../modules/fleet/pages/FleetCreatePage'), 'FleetCreatePage')
+const FleetDetailPage = lazyPage(() => import('../../modules/fleet/pages/FleetDetailPage'), 'FleetDetailPage')
+const FleetEditPage = lazyPage(() => import('../../modules/fleet/pages/FleetEditPage'), 'FleetEditPage')
+const FleetListPage = lazyPage(() => import('../../modules/fleet/pages/FleetListPage'), 'FleetListPage')
+const InventoryPage = lazyPage(() => import('../../modules/inventory/pages/InventoryPage'), 'InventoryPage')
+const MaintenancePage = lazyPage(() => import('../../modules/maintenance/pages/MaintenancePage'), 'MaintenancePage')
+const RepairsPage = lazyPage(() => import('../../modules/repairs/pages/RepairsPage'), 'RepairsPage')
+const MovementsPage = lazyPage(() => import('../../modules/movements/pages/MovementsPage'), 'MovementsPage')
+const ClientsPage = lazyPage(() => import('../../modules/clients/pages/ClientsPage'), 'ClientsPage')
+const DeliveriesPage = lazyPage(() => import('../../modules/deliveries/pages/DeliveriesPage'), 'DeliveriesPage')
+const TasksPage = lazyPage(() => import('../../modules/tasks/pages/TasksPage'), 'TasksPage')
+const WorkOrdersPage = lazyPage(() => import('../../modules/workOrders/pages/WorkOrdersPage'), 'WorkOrdersPage')
+const ExternalRequestsPage = lazyPage(
+  () => import('../../modules/externalRequests/pages/ExternalRequestsPage'),
+  'ExternalRequestsPage',
+)
+const LoginPage = lazyPage(() => import('../../modules/auth/pages/LoginPage'), 'LoginPage')
+const UsersPage = lazyPage(() => import('../../modules/users/pages/UsersPage'), 'UsersPage')
+const ReportsPage = lazyPage(() => import('../../modules/reports/pages/ReportsPage'), 'ReportsPage')
+const SuppliersPage = lazyPage(() => import('../../modules/suppliers/pages/SuppliersPage'), 'SuppliersPage')
+const SupplierDetailPage = lazyPage(
+  () => import('../../modules/suppliers/pages/SupplierDetailPage'),
+  'SupplierDetailPage',
+)
+const CrmPage = lazyPage(() => import('../../modules/crm/pages/CrmPage'), 'CrmPage')
+const ProjectsPage = lazyPage(() => import('../../modules/projects/pages/ProjectsPage'), 'ProjectsPage')
+const ProjectDetailPage = lazyPage(() => import('../../modules/projects/pages/ProjectDetailPage'), 'ProjectDetailPage')
+const PostventaPage = lazyPage(() => import('../../modules/postventa/pages/PostventaPage'), 'PostventaPage')
+const ServiceOrdersPage = lazyPage(
+  () => import('../../modules/serviceOrders/pages/ServiceOrdersPage'),
+  'ServiceOrdersPage',
+)
+const ServiceOrderDetailPage = lazyPage(
+  () => import('../../modules/serviceOrders/pages/ServiceOrderDetailPage'),
+  'ServiceOrderDetailPage',
+)
+const InvoicesPage = lazyPage(() => import('../../modules/invoices/pages/InvoicesPage'), 'InvoicesPage')
+const ProfilePage = lazyPage(() => import('../../modules/users/pages/ProfilePage'), 'ProfilePage')
+const MaintenanceModePage = lazyPage(
+  () => import('../../modules/system/pages/MaintenanceModePage'),
+  'MaintenanceModePage',
+)
+const NotificationsPage = lazyPage(() => import('../../modules/system/pages/NotificationsPage'), 'NotificationsPage')
 
 const RequireFeatureFlag = ({
   flag,
@@ -57,8 +86,9 @@ const RequireFeatureFlag = ({
 
 export const AppRouter = () => (
   <BrowserRouter>
-    <Routes>
-      <Route path={ROUTE_PATHS.auth.login} element={<LoginPage />} />
+    <Suspense fallback={<RouteTransitionLoader isActive />}>
+      <Routes>
+        <Route path={ROUTE_PATHS.auth.login} element={<LoginPage />} />
       <Route
         element={
           <RequireAuth>
@@ -325,6 +355,7 @@ export const AppRouter = () => (
         />
         <Route path="*" element={<Navigate to={ROUTE_PATHS.dashboard} replace />} />
       </Route>
-    </Routes>
+      </Routes>
+    </Suspense>
   </BrowserRouter>
 )

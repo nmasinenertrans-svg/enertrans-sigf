@@ -1,4 +1,4 @@
-import { jsPDF } from 'jspdf'
+import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { TaskRecord } from '../../../types/domain'
 
@@ -72,6 +72,7 @@ const formatDate = (value?: string | null) => {
 }
 
 export const downloadTaskPdf = async (task: TaskRecord): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   let logoDataUrl: string | null = null
 
@@ -221,6 +222,7 @@ const getResponsibleLabel = (task: TaskRecord): string => {
 }
 
 export const downloadTasksSummaryPdf = async (tasks: TaskRecord[]): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   let logoDataUrl: string | null = null
 

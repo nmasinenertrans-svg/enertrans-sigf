@@ -1,4 +1,4 @@
-import { jsPDF } from 'jspdf'
+import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { ClientAccount, DeliveryOperation, FleetUnit } from '../../../types/domain'
 
@@ -46,6 +46,7 @@ const buildFileName = (operation: DeliveryOperation) => {
 }
 
 export const exportDeliveryOperationPdf = async ({ operation, unit, client }: DeliveryPdfPayload): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageWidth = pdf.internal.pageSize.getWidth()
 

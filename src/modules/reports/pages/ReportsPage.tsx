@@ -1,7 +1,5 @@
 ﻿import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { jsPDF } from 'jspdf'
-import * as XLSX from 'xlsx'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS, buildFleetDetailPath } from '../../../core/routing/routePaths'
 import { BackLink } from '../../../components/shared/BackLink'
@@ -118,14 +116,20 @@ const downloadCsv = (filename: string, csv: string) => {
   document.body.removeChild(link)
 }
 
-const downloadXlsx = (filename: string, headers: string[], rows: Array<Array<string | number | null | undefined>>) => {
+const downloadXlsx = async (
+  filename: string,
+  headers: string[],
+  rows: Array<Array<string | number | null | undefined>>,
+) => {
+  const XLSX = await import('xlsx')
   const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Reporte')
   XLSX.writeFile(workbook, filename)
 }
 
-const buildPdf = (title: string, subtitle: string, headers: string[], rows: string[][]) => {
+const buildPdf = async (title: string, subtitle: string, headers: string[], rows: string[][]) => {
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
   const marginX = 40
   let cursorY = 48
@@ -1032,7 +1036,7 @@ export const ReportsPage = () => {
     downloadCsv('inspecciones.csv', buildCsv(headers, rows))
   }
 
-  const exportAuditsPdf = () => {
+  const exportAuditsPdf = async () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo', 'Auditor', 'Resultado']
     const rows = filteredAudits.map((audit) => [
       audit.code ?? 'INS-LEGACY',
@@ -1043,11 +1047,11 @@ export const ReportsPage = () => {
       audit.auditorName ?? '',
       audit.result,
     ])
-    const doc = buildPdf('Reporte de Inspecciones', rangeLabel, headers, rows)
+    const doc = await buildPdf('Reporte de Inspecciones', rangeLabel, headers, rows)
     doc.save('inspecciones.pdf')
   }
 
-  const exportAuditsXlsx = () => {
+  const exportAuditsXlsx = async () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Auditor', 'Resultado']
     const rows = filteredAudits.map((audit) => [
       audit.code ?? 'INS-LEGACY',
@@ -1058,7 +1062,7 @@ export const ReportsPage = () => {
       audit.auditorName ?? '',
       audit.result,
     ])
-    downloadXlsx('inspecciones.xlsx', headers, rows)
+    await downloadXlsx('inspecciones.xlsx', headers, rows)
   }
 
   const exportWorkOrdersCsv = () => {
@@ -1077,7 +1081,7 @@ export const ReportsPage = () => {
     downloadCsv('ordenes-trabajo.csv', buildCsv(headers, rows))
   }
 
-  const exportWorkOrdersPdf = () => {
+  const exportWorkOrdersPdf = async () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo', 'Estado', 'Tareas', 'Repuestos', 'Pend. Reaudit']
     const rows = filteredWorkOrders.map((order) => [
       order.code ?? 'OT-LEGACY',
@@ -1090,11 +1094,11 @@ export const ReportsPage = () => {
       String(order.spareParts.length),
       order.pendingReaudit ? 'Si' : 'No',
     ])
-    const doc = buildPdf('Reporte de Ordenes de Trabajo', rangeLabel, headers, rows)
+    const doc = await buildPdf('Reporte de Ordenes de Trabajo', rangeLabel, headers, rows)
     doc.save('ordenes-trabajo.pdf')
   }
 
-  const exportWorkOrdersXlsx = () => {
+  const exportWorkOrdersXlsx = async () => {
     const headers = ['Codigo', 'Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Estado', 'Tareas', 'Repuestos', 'Pendiente Reaudit']
     const rows = filteredWorkOrders.map((order) => [
       order.code ?? 'OT-LEGACY',
@@ -1107,7 +1111,7 @@ export const ReportsPage = () => {
       order.spareParts.length,
       order.pendingReaudit ? 'Si' : 'No',
     ])
-    downloadXlsx('ordenes-trabajo.xlsx', headers, rows)
+    await downloadXlsx('ordenes-trabajo.xlsx', headers, rows)
   }
 
   const exportRepairsCsv = () => {
@@ -1126,7 +1130,7 @@ export const ReportsPage = () => {
     downloadCsv('reparaciones.csv', buildCsv(headers, rows))
   }
 
-  const exportRepairsPdf = () => {
+  const exportRepairsPdf = async () => {
     const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo', 'Origen', 'Proveedor', 'Costo', 'Facturado', 'Margen']
     const rows = filteredRepairs.map((repair) => [
       formatDateTime(repair.createdAt),
@@ -1139,11 +1143,11 @@ export const ReportsPage = () => {
       repair.invoicedToClient.toFixed(2),
       repair.margin.toFixed(2),
     ])
-    const doc = buildPdf('Reporte de Reparaciones', rangeLabel, headers, rows)
+    const doc = await buildPdf('Reporte de Reparaciones', rangeLabel, headers, rows)
     doc.save('reparaciones.pdf')
   }
 
-  const exportRepairsXlsx = () => {
+  const exportRepairsXlsx = async () => {
     const headers = ['Fecha', 'Dominio', 'Cliente', 'Tipo unidad', 'Origen', 'Proveedor', 'Costo', 'Facturado', 'Margen']
     const rows = filteredRepairs.map((repair) => [
       formatDateTime(repair.createdAt),
@@ -1156,7 +1160,7 @@ export const ReportsPage = () => {
       repair.invoicedToClient,
       repair.margin,
     ])
-    downloadXlsx('reparaciones.xlsx', headers, rows)
+    await downloadXlsx('reparaciones.xlsx', headers, rows)
   }
 
   const resolveInvoiceRepairLabel = (invoice: Invoice) => {
@@ -1185,7 +1189,7 @@ export const ReportsPage = () => {
     downloadCsv('facturas.csv', buildCsv(headers, rows))
   }
 
-  const exportInvoicesPdf = () => {
+  const exportInvoicesPdf = async () => {
     const headers = ['Codigo', 'Fecha', 'Proveedor', 'N Factura', 'Monto', 'Moneda', 'Reparacion']
     const rows = filteredInvoices.map((invoice) => [
       invoice.code,
@@ -1196,11 +1200,11 @@ export const ReportsPage = () => {
       invoice.currency,
       resolveInvoiceRepairLabel(invoice),
     ])
-    const doc = buildPdf('Reporte de Facturas', rangeLabel, headers, rows)
+    const doc = await buildPdf('Reporte de Facturas', rangeLabel, headers, rows)
     doc.save('facturas.pdf')
   }
 
-  const exportInvoicesXlsx = () => {
+  const exportInvoicesXlsx = async () => {
     const headers = ['Codigo', 'Fecha', 'Proveedor', 'N Factura', 'Monto', 'Moneda', 'Reparacion vinculada', 'Notas']
     const rows = filteredInvoices.map((invoice) => [
       invoice.code,
@@ -1212,10 +1216,11 @@ export const ReportsPage = () => {
       resolveInvoiceRepairLabel(invoice),
       invoice.notes ?? '',
     ])
-    downloadXlsx('facturas.xlsx', headers, rows)
+    await downloadXlsx('facturas.xlsx', headers, rows)
   }
 
-  const exportOccupancyPdf = () => {
+  const exportOccupancyPdf = async () => {
+    const { jsPDF } = await import('jspdf')
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
@@ -1555,7 +1560,8 @@ export const ReportsPage = () => {
     doc.save('ocupacion-flota-por-cliente.pdf')
   }
 
-  const exportOccupancyXlsx = () => {
+  const exportOccupancyXlsx = async () => {
+    const XLSX = await import('xlsx')
     const groupLabel = occupancyDimensionLabelMap[occupancyGroupBy]
     const breakdownLabel = occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy]
 

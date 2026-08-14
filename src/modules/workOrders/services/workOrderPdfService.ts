@@ -1,4 +1,4 @@
-﻿import { jsPDF } from 'jspdf'
+﻿import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { FleetUnit, WorkOrder } from '../../../types/domain'
 import { normalizeTaskList, workOrderStatusLabelMap } from './workOrdersService'
@@ -126,6 +126,7 @@ const clampText = (pdf: jsPDF, value: unknown, maxWidth: number) => {
 }
 
 export const exportWorkOrderPdf = async ({ workOrder, unit }: WorkOrderPdfPayload): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   let logoDataUrl: string | null = null
 

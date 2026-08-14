@@ -1,4 +1,4 @@
-﻿import { jsPDF } from 'jspdf'
+﻿import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { ExternalRequest, FleetUnit } from '../../../types/domain'
 
@@ -75,6 +75,7 @@ const addWatermark = (pdf: jsPDF, logoDataUrl: string | null) => {
 }
 
 export const exportExternalRequestPdf = async ({ request, unit }: ExternalRequestPdfPayload): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   let logoDataUrl: string | null = null
 

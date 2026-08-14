@@ -1,4 +1,4 @@
-﻿import { jsPDF } from 'jspdf'
+﻿import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { AuditRecord, FleetUnit } from '../../../types/domain'
 import { statusLabelMap } from './auditsService'
@@ -123,6 +123,7 @@ const drawRowBorders = (pdf: jsPDF, columns: { width: number }[], x: number, y: 
 }
 
 export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   let logoDataUrl: string | null = null
 
