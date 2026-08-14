@@ -46,11 +46,24 @@ const takeTaskSchema = z.object({
   status: z.enum(taskStatusValues).optional().default('ASSIGNED'),
 })
 
+const commentSchema = z.object({
+  message: z.string().trim().min(1).max(2000),
+})
+
 const managerRoles = new Set<UserRole>(['DEV', 'GERENTE'])
 const bankTakerRoles = new Set<UserRole>(['AUDITOR', 'MECANICO'])
 
 const isManagerRole = (role: UserRole) => managerRoles.has(role)
 const canTakeFromBankRole = (role: UserRole) => bankTakerRoles.has(role)
+
+const canAccessTask = (
+  actor: { id: string; role: UserRole },
+  task: { assignedToUserId: string | null; assignedByUserId: string | null; createdByUserId: string },
+): boolean =>
+  isManagerRole(actor.role) ||
+  task.assignedToUserId === actor.id ||
+  task.assignedByUserId === actor.id ||
+  task.createdByUserId === actor.id
 
 const normalizeExternalName = (value: string | null | undefined): string => (value ?? '').trim().replace(/\s+/g, ' ')
 
@@ -82,6 +95,9 @@ const mapTask = (task: any) => ({
   createdAt: task.createdAt?.toISOString?.() ?? task.createdAt,
   updatedAt: task.updatedAt?.toISOString?.() ?? task.updatedAt,
   closedAt: task.closedAt ? (task.closedAt.toISOString?.() ?? task.closedAt) : null,
+  viewedAt: task.viewedAt ? (task.viewedAt.toISOString?.() ?? task.viewedAt) : null,
+  viewedByUserId: task.viewedByUserId ?? null,
+  viewedByUserName: task.viewedBy?.fullName ?? '',
   events: Array.isArray(task.events)
     ? task.events.map((event: any) => ({
         id: event.id,
@@ -103,6 +119,7 @@ const includeTaskRelations = {
   assignedTo: { select: { id: true, fullName: true } },
   assignedBy: { select: { id: true, fullName: true } },
   createdBy: { select: { id: true, fullName: true } },
+  viewedBy: { select: { id: true, fullName: true } },
   events: {
     orderBy: { createdAt: 'desc' as const },
     include: { actor: { select: { id: true, fullName: true } } },
@@ -387,6 +404,11 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     }
 
     const closedAt = nextStatus === TaskStatus.DONE ? (current.closedAt ?? new Date()) : null
+    // Si se reasigna a otra persona (o se saca la asignacion), el "visto" de la persona
+    // anterior ya no aplica — vuelve a quedar pendiente hasta que la nueva persona la abra.
+    const reassignedToSomeoneElse = nextAssignedToUserId !== current.assignedToUserId
+    const nextViewedAt = reassignedToSomeoneElse ? null : current.viewedAt
+    const nextViewedByUserId = reassignedToSomeoneElse ? null : current.viewedByUserId
 
     const task = await prisma.$transaction(async (tx) => {
       const updated = await tx.task.update({
@@ -399,6 +421,8 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
           assignedToUserId: nextAssignedToUserId,
           assignedToExternalName: nextAssignedToExternalName,
           assignedByUserId: nextAssignedByUserId,
+          viewedAt: nextViewedAt,
+          viewedByUserId: nextViewedByUserId,
           isInTaskBank: nextIsInTaskBank,
           startDate: nextStartDate,
           estimatedFinishDate: nextEstimatedFinishDate,
@@ -537,6 +561,119 @@ router.post('/:id/take', async (req: AuthenticatedRequest, res) => {
     }
     console.error('Tasks TAKE error:', error)
     return res.status(500).json({ message: 'No se pudo tomar la tarea.' })
+  }
+})
+
+router.post('/:id/comments', async (req: AuthenticatedRequest, res) => {
+  const parsed = commentSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'El mensaje no puede estar vacio.' })
+  }
+
+  const actor = await getAuthenticatedUser(req)
+  if (!actor) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
+  const rawTaskId = req.params.id
+  const taskId = Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId
+  if (!taskId) {
+    return res.status(400).json({ message: 'Id de tarea requerido.' })
+  }
+
+  try {
+    const current = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!current) {
+      return res.status(404).json({ message: 'Tarea no encontrada.' })
+    }
+    if (!canAccessTask(actor, current)) {
+      return res.status(403).json({ message: 'No tenes permisos para comentar esta tarea.' })
+    }
+
+    const task = await prisma.$transaction(async (tx) => {
+      await tx.taskEvent.create({
+        data: {
+          taskId: current.id,
+          type: TaskEventType.COMMENT,
+          actorUserId: actor.id,
+          notes: parsed.data.message,
+        },
+      })
+      return tx.task.findUniqueOrThrow({
+        where: { id: current.id },
+        include: includeTaskRelations,
+      })
+    })
+
+    // El chat es de ida y vuelta: si escribe el asignado le avisa a quien asigno (o creo)
+    // la tarea; si escribe el que asigna/gerencia, le avisa al asignado.
+    const isActorTheAssignee = current.assignedToUserId === actor.id
+    const notifyUserId = isActorTheAssignee ? current.assignedByUserId ?? current.createdByUserId : current.assignedToUserId
+
+    if (notifyUserId && notifyUserId !== actor.id) {
+      void sendPushToUser(notifyUserId, {
+        title: `Nuevo mensaje de ${actor.fullName}`,
+        body: parsed.data.message.slice(0, 140),
+        url: '/tasks',
+        tag: 'task-comment',
+      }).catch(() => undefined)
+    }
+
+    return res.status(201).json(mapTask(task))
+  } catch (error) {
+    console.error('Tasks COMMENT error:', error)
+    return res.status(500).json({ message: 'No se pudo enviar el mensaje.' })
+  }
+})
+
+router.post('/:id/view', async (req: AuthenticatedRequest, res) => {
+  const actor = await getAuthenticatedUser(req)
+  if (!actor) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
+  const rawTaskId = req.params.id
+  const taskId = Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId
+  if (!taskId) {
+    return res.status(400).json({ message: 'Id de tarea requerido.' })
+  }
+
+  try {
+    const current = await prisma.task.findUnique({ where: { id: taskId } })
+    if (!current) {
+      return res.status(404).json({ message: 'Tarea no encontrada.' })
+    }
+    if (current.assignedToUserId !== actor.id) {
+      return res.status(403).json({ message: 'Solo la persona asignada puede marcar la tarea como vista.' })
+    }
+
+    if (current.viewedAt) {
+      const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, include: includeTaskRelations })
+      return res.json(mapTask(task))
+    }
+
+    const task = await prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: taskId },
+        data: { viewedAt: new Date(), viewedByUserId: actor.id },
+      })
+      await tx.taskEvent.create({
+        data: {
+          taskId: current.id,
+          type: TaskEventType.VIEWED,
+          actorUserId: actor.id,
+        },
+      })
+      return tx.task.findUniqueOrThrow({
+        where: { id: current.id },
+        include: includeTaskRelations,
+      })
+    })
+
+    return res.json(mapTask(task))
+  } catch (error) {
+    console.error('Tasks VIEW error:', error)
+    return res.status(500).json({ message: 'No se pudo marcar la tarea como vista.' })
   }
 })
 

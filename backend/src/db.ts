@@ -177,6 +177,21 @@ const safeExecuteCompatSql = async (sql: string): Promise<void> => {
   }
 }
 
+// Agrega un valor nuevo a un enum ya existente (ej. sumar 'COMMENT' a TaskEventType)
+// sin depender de que `prisma db push` haya corrido contra el schema activo.
+const safeAddEnumValue = async (typeName: string, value: string): Promise<void> => {
+  const schema = getNormalizedActiveSchema()
+  const quotedSchema = quoteIdentifier(schema)
+  const quotedType = quoteIdentifier(typeName)
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TYPE ${quotedSchema}.${quotedType} ADD VALUE IF NOT EXISTS '${value.replace(/'/g, "''")}';`,
+    )
+  } catch (error) {
+    console.warn(`[DB] error agregando valor ${value} a enum ${schema}.${typeName}:`, error)
+  }
+}
+
 // Crea un tipo enum en el esquema activo de forma explícita (sin depender de current_schema() en SQL).
 // Usa el nombre del esquema activo desde TypeScript para evitar ambigüedad de search_path.
 const safeCreateEnumType = async (typeName: string, values: string[]): Promise<void> => {
@@ -833,7 +848,8 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     }
   }
 
-  // Tareas: asignacion a terceros sin usuario del sistema + fechas de plan (inicio/fin aprox).
+  // Tareas: asignacion a terceros sin usuario del sistema + fechas de plan (inicio/fin aprox)
+  // + chat/notas por tarea (TaskEvent tipo COMMENT) + registro de "visto" por el asignado.
   const hasTaskTable = await tableExistsInActiveSchema('Task')
   if (hasTaskTable) {
     const taskSchema = quoteIdentifier(getNormalizedActiveSchema())
@@ -841,6 +857,8 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       ['assignedToExternalName', `TEXT NOT NULL DEFAULT ''`],
       ['startDate', 'TIMESTAMP(3)'],
       ['estimatedFinishDate', 'TIMESTAMP(3)'],
+      ['viewedAt', 'TIMESTAMP(3)'],
+      ['viewedByUserId', 'TEXT'],
     ] as const) {
       try {
         await prisma.$executeRawUnsafe(`ALTER TABLE ${taskSchema}."Task" ADD COLUMN IF NOT EXISTS "${col}" ${type}`)
@@ -848,6 +866,11 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
         console.warn(`[DB] ADD COLUMN Task.${col}:`, err)
       }
     }
+  }
+  const hasTaskEventTable = await tableExistsInActiveSchema('TaskEvent')
+  if (hasTaskEventTable) {
+    await safeAddEnumValue('TaskEventType', 'COMMENT')
+    await safeAddEnumValue('TaskEventType', 'VIEWED')
   }
 
   // Remitos: vinculo opcional a Cliente real (antes solo texto libre, generaba

@@ -84,6 +84,26 @@ const formatDateOnly = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
 }
 
+const isTaskOverdue = (task: TaskRecord): boolean => {
+  if (!task.estimatedFinishDate || task.status === 'DONE' || task.status === 'CANCELED') {
+    return false
+  }
+  const due = new Date(task.estimatedFinishDate)
+  return !Number.isNaN(due.getTime()) && due.getTime() < Date.now()
+}
+
+const taskEventTypeLabelMap: Partial<Record<string, string>> = {
+  CREATED: 'Tarea creada',
+  UPDATED: 'Tarea editada',
+  ASSIGNED: 'Asignacion',
+  UNASSIGNED: 'Se quito la asignacion',
+  MOVED_TO_BANK: 'Enviada al banco',
+  REMOVED_FROM_BANK: 'Sacada del banco',
+  TAKEN_FROM_BANK: 'Tomada del banco',
+  STATUS_CHANGED: 'Cambio de estado',
+  VIEWED: 'Vista por el asignado',
+}
+
 export const TasksPage = () => {
   const { currentUser, can } = usePermissions()
   const {
@@ -102,6 +122,9 @@ export const TasksPage = () => {
   const [bankFilter, setBankFilter] = useState<'ALL' | 'BANK' | 'ASSIGNED'>('ALL')
   const [assignDrafts, setAssignDrafts] = useState<Record<string, { userId: string; externalName: string }>>({})
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [sendingCommentTaskId, setSendingCommentTaskId] = useState<string | null>(null)
+  const [markingViewedTaskIds, setMarkingViewedTaskIds] = useState<Set<string>>(new Set())
 
   const isManager = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
   const canViewTasks = can('TASKS', 'view')
@@ -256,6 +279,38 @@ export const TasksPage = () => {
     } catch (error) {
       setAppError(String((error as Error)?.message ?? 'No se pudo actualizar el estado.'))
     }
+  }
+
+  const handleSendComment = async (taskId: string) => {
+    const message = (commentDrafts[taskId] ?? '').trim()
+    if (!message) {
+      return
+    }
+    setSendingCommentTaskId(taskId)
+    try {
+      const updated = await apiRequest<TaskRecord>(`/tasks/${taskId}/comments`, {
+        method: 'POST',
+        body: { message },
+      })
+      setTasks((previous) => previous.map((task) => (task.id === updated.id ? updated : task)))
+      setCommentDrafts((previous) => ({ ...previous, [taskId]: '' }))
+    } catch (error) {
+      setAppError(String((error as Error)?.message ?? 'No se pudo enviar el mensaje.'))
+    } finally {
+      setSendingCommentTaskId(null)
+    }
+  }
+
+  const handleOpenTaskDetail = (task: TaskRecord) => {
+    if (!currentUser || task.assignedToUserId !== currentUser.id || task.viewedAt || markingViewedTaskIds.has(task.id)) {
+      return
+    }
+    setMarkingViewedTaskIds((previous) => new Set(previous).add(task.id))
+    apiRequest<TaskRecord>(`/tasks/${task.id}/view`, { method: 'POST', body: {} })
+      .then((updated) => {
+        setTasks((previous) => previous.map((item) => (item.id === updated.id ? updated : item)))
+      })
+      .catch(() => undefined)
   }
 
   const filteredTasks = useMemo(() => {
@@ -673,6 +728,15 @@ export const TasksPage = () => {
                 ) : (
                   assignedTasks.map((task) => {
                     const canEditThisTask = isManager || (currentUser?.id && task.assignedToUserId === currentUser.id && can('TASKS', 'edit'))
+                    const canCommentOnTask =
+                      isManager ||
+                      Boolean(
+                        currentUser?.id &&
+                          (task.assignedToUserId === currentUser.id ||
+                            task.assignedByUserId === currentUser.id ||
+                            task.createdByUserId === currentUser.id),
+                      )
+                    const overdue = isTaskOverdue(task)
                     return (
                       <div key={task.id} className="rounded-lg border border-slate-200 bg-white p-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -684,6 +748,11 @@ export const TasksPage = () => {
                               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600">
                                 {statusLabelMap[task.status]}
                               </span>
+                              {overdue ? (
+                                <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                                  Vencida
+                                </span>
+                              ) : null}
                             </div>
                             <p className="mt-2 text-sm font-semibold text-slate-900">{task.title || 'Tarea sin titulo'}</p>
                             <p className="mt-1 text-sm text-slate-600">{task.description}</p>
@@ -697,6 +766,17 @@ export const TasksPage = () => {
                               Inicio: {formatDateOnly(task.startDate || task.createdAt)} | Fin aprox.:{' '}
                               {formatDateOnly(task.estimatedFinishDate)}
                             </p>
+                            {task.assignedToUserId ? (
+                              <p className="mt-1 text-xs">
+                                {task.viewedAt ? (
+                                  <span className="font-semibold text-emerald-700">
+                                    Vista por {task.viewedByUserName || task.assignedToUserName} el {formatDateTime(task.viewedAt)}
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-amber-700">Todavia no la vio el asignado</span>
+                                )}
+                              </p>
+                            ) : null}
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <button
@@ -735,29 +815,74 @@ export const TasksPage = () => {
                           </div>
                         ) : null}
 
-                        <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                        <details
+                          className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2"
+                          onToggle={(event) => {
+                            if (event.currentTarget.open) {
+                              handleOpenTaskDetail(task)
+                            }
+                          }}
+                        >
                           <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                            Historico ({task.events.length})
+                            Historico y mensajes ({task.events.length})
                           </summary>
                           <div className="mt-2 space-y-2">
                             {task.events.length === 0 ? (
                               <p className="text-xs text-slate-500">Sin eventos registrados.</p>
                             ) : (
-                              task.events.map((event) => (
-                                <div key={event.id} className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs text-slate-600">
-                                  <p className="font-semibold text-slate-800">
-                                    {event.type} | {event.actorName || event.actorUserId}
-                                  </p>
-                                  <p>{formatDateTime(event.createdAt)}</p>
-                                  {(event.fromStatus || event.toStatus) ? (
-                                    <p>
-                                      Estado: {event.fromStatus || '-'} {'->'} {event.toStatus || '-'}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ))
+                              [...task.events]
+                                .sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime())
+                                .map((event) =>
+                                  event.type === 'COMMENT' ? (
+                                    <div
+                                      key={event.id}
+                                      className="rounded-md border border-sky-200 bg-sky-50 px-2 py-2 text-xs text-slate-700"
+                                    >
+                                      <p className="font-semibold text-sky-800">{event.actorName || event.actorUserId}</p>
+                                      <p className="mt-0.5 whitespace-pre-wrap">{event.notes}</p>
+                                      <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(event.createdAt)}</p>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      key={event.id}
+                                      className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs text-slate-600"
+                                    >
+                                      <p className="font-semibold text-slate-800">
+                                        {taskEventTypeLabelMap[event.type] ?? event.type} | {event.actorName || event.actorUserId}
+                                      </p>
+                                      <p>{formatDateTime(event.createdAt)}</p>
+                                      {event.fromStatus || event.toStatus ? (
+                                        <p>
+                                          Estado: {event.fromStatus || '-'} {'->'} {event.toStatus || '-'}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  ),
+                                )
                             )}
                           </div>
+
+                          {canCommentOnTask ? (
+                            <div className="mt-3 flex flex-col gap-2 border-t border-slate-200 pt-2">
+                              <textarea
+                                rows={2}
+                                value={commentDrafts[task.id] ?? ''}
+                                onChange={(event) =>
+                                  setCommentDrafts((previous) => ({ ...previous, [task.id]: event.target.value }))
+                                }
+                                placeholder="Escribir un mensaje o aclaracion..."
+                                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-400"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSendComment(task.id)}
+                                disabled={sendingCommentTaskId === task.id || !(commentDrafts[task.id] ?? '').trim()}
+                                className="self-end rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50"
+                              >
+                                {sendingCommentTaskId === task.id ? 'Enviando...' : 'Enviar mensaje'}
+                              </button>
+                            </div>
+                          ) : null}
                         </details>
                       </div>
                     )

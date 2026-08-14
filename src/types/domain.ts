@@ -89,6 +89,8 @@ export const taskEventTypes = [
   'REMOVED_FROM_BANK',
   'TAKEN_FROM_BANK',
   'STATUS_CHANGED',
+  'COMMENT',
+  'VIEWED',
 ] as const
 export type TaskEventType = (typeof taskEventTypes)[number]
 
@@ -662,6 +664,9 @@ export interface TaskRecord {
   createdAt?: string
   updatedAt?: string
   closedAt?: string | null
+  viewedAt?: string | null
+  viewedByUserId?: string | null
+  viewedByUserName?: string
   events: TaskEventRecord[]
 }
 
