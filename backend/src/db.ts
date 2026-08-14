@@ -315,6 +315,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "logisticsUpdatedAt" TIMESTAMP(3);`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "engineCylinders" INTEGER;`)
     await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "profilePhotoUrl" TEXT;`)
+    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetUnit_clientId_idx" ON "FleetUnit"("clientId");`)
+    await safeExecuteCompatSql(
+      `CREATE INDEX IF NOT EXISTS "FleetUnit_logisticsStatus_idx" ON "FleetUnit"("logisticsStatus");`,
+    )
 
     // ServiceOrder: crea enum types y tabla
     await safeCreateEnumType('ServiceOrderStatus', ['OPEN', 'IN_PROGRESS', 'WAITING_PARTS', 'CLOSED'])
