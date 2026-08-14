@@ -180,7 +180,8 @@ router.get('/', async (_req, res) => {
       unitIds: item.units.map((unit) => unit.unitId),
     }))
     return res.json(mapped)
-  } catch {
+  } catch (error) {
+    console.error('Movements GET error:', error)
     return res.status(500).json({ message: 'No se pudieron cargar los movimientos.' })
   }
 })

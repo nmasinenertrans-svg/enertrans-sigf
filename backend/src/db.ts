@@ -875,10 +875,27 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
 
   // Remitos: vinculo opcional a Cliente real (antes solo texto libre, generaba
   // duplicados/typos que no cruzaban con el modulo Clientes).
+  // OJO: FleetMovement no esta en COMPAT_TABLE_NAMES, asi que safeExecuteCompatSql
+  // (que solo qualifica esa lista de tablas) NO le agrega el prefijo de schema y la
+  // sentencia termina corriendo contra el schema por default de la conexion en vez
+  // del schema activo real — exactamente el bug que dejo esta columna sin crear en
+  // produccion en silencio. Por eso acá se qualifica el schema a mano, igual que
+  // ya se hace para MaintenancePlan/Task/InventoryItem mas abajo/arriba.
   const hasFleetMovementTable = await tableExistsInActiveSchema('FleetMovement')
   if (hasFleetMovementTable) {
-    await safeExecuteCompatSql(`ALTER TABLE "FleetMovement" ADD COLUMN IF NOT EXISTS "clientId" TEXT;`)
-    await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "FleetMovement_clientId_idx" ON "FleetMovement"("clientId");`)
+    const movementSchema = quoteIdentifier(getNormalizedActiveSchema())
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE ${movementSchema}."FleetMovement" ADD COLUMN IF NOT EXISTS "clientId" TEXT`)
+    } catch (err) {
+      console.warn('[DB] ADD COLUMN FleetMovement.clientId:', err)
+    }
+    try {
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "FleetMovement_clientId_idx" ON ${movementSchema}."FleetMovement"("clientId")`,
+      )
+    } catch (err) {
+      console.warn('[DB] CREATE INDEX FleetMovement_clientId_idx:', err)
+    }
   }
 
   // NDP/Reparaciones: solo aplica cambios si tablas existen en schema activo.
