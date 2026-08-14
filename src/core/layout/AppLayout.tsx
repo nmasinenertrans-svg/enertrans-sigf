@@ -223,7 +223,8 @@ export const AppLayout = () => {
     return buildAppNotifications({ fleetUnits, audits, workOrders, userNotifications })
   }, [audits, fleetUnits, workOrders, userNotifications])
 
-  const loadRemoteData = useCallback(async () => {
+  const loadRemoteData = useCallback(async (options?: { background?: boolean }) => {
+      const isBackground = options?.background ?? false
       const currentUserId = currentUserRef.current?.id ?? null
       if (!currentUserId || !syncStatus.isOnline) {
         return
@@ -296,7 +297,9 @@ export const AppLayout = () => {
         return null
       }
 
-      setGlobalLoading(true)
+      if (!isBackground) {
+        setGlobalLoading(true)
+      }
       try {
         const canViewUsers = canUser(currentUserRef.current ?? null, 'USERS', 'view')
         const activeFlags = featureFlagsRef.current
@@ -513,7 +516,9 @@ export const AppLayout = () => {
           )
         }
       } finally {
-        setGlobalLoading(false)
+        if (!isBackground) {
+          setGlobalLoading(false)
+        }
         isFetchingRef.current = false
       }
   }, [
@@ -554,7 +559,7 @@ export const AppLayout = () => {
         return
       }
       lastVisibilityRefreshAtRef.current = now
-      loadRemoteData()
+      loadRemoteData({ background: true })
     }
 
     document.addEventListener('visibilitychange', handleVisibilityRegain)
