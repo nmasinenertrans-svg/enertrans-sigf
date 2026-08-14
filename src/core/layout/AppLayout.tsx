@@ -543,7 +543,13 @@ export const AppLayout = () => {
   ])
 
   useEffect(() => {
-    loadRemoteData()
+    // La app persiste los datos en localStorage: si ya hay algo cargado de una
+    // sesion anterior (el caso normal, todos los dias), no tiene sentido tapar
+    // la pantalla mientras se actualiza — se ve y se usa lo que ya hay mientras
+    // se refresca atras. Solo bloquea la primera vez de verdad (sesion nueva
+    // sin nada guardado todavia), que no tendria que mostrar mas que vacio.
+    const hasCachedData = fleetUnitsRef.current.length > 0 || usersRef.current.length > 0
+    loadRemoteData({ background: hasCachedData })
   }, [currentUser?.id, loadRemoteData])
 
   // Si el usuario reabre la app (o vuelve a la pestana) despues de que un fetch
