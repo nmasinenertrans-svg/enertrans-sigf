@@ -12,6 +12,9 @@ const isBypassedPath = (path: string) => {
   if (path.startsWith('/settings/maintenance')) {
     return true
   }
+  if (path.startsWith('/integrations')) {
+    return true
+  }
   return false
 }
 

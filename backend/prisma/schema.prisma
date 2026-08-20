@@ -241,6 +241,7 @@ model FleetUnit {
   fleetProjects            FleetProject[]
   postventaEvents          PostventaEvent[]
   serviceOrders            ServiceOrder[]
+  telemetryDevices         TelemetryDevice[]
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -760,4 +761,49 @@ model ServiceOrder {
   @@index([status, createdAt])
   @@index([clientId])
   @@index([assignedToUserId])
+}
+
+// Ingesta de GPS/telemetria de proveedores externos (RSV, Microtrack, etc.)
+// via webhook. Un "device" = un equipo GPS del proveedor, identificado por
+// deviceExternalId+provider, opcionalmente vinculado a una unidad de flota
+// por patente/codigo interno. Cada posicion se guarda como registro
+// historico (nunca se pisa) para poder reconstruir el recorrido despues.
+model TelemetryDevice {
+  id               String    @id @default(uuid())
+  deviceExternalId String
+  provider         String
+  imei             String?
+  unitId           String?
+  lastSeenAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  unit      FleetUnit?          @relation(fields: [unitId], references: [id])
+  positions TelemetryPosition[]
+
+  @@unique([deviceExternalId, provider])
+  @@index([unitId])
+}
+
+model TelemetryPosition {
+  id           String   @id @default(uuid())
+  deviceId     String
+  capturedAt   DateTime
+  receivedAt   DateTime @default(now())
+  latitude     Float
+  longitude    Float
+  speedKph     Float?
+  heading      Float?
+  altitudeM    Float?
+  accuracyM    Float?
+  odometerKm   Float?
+  fuelLevelPct Float?
+  engineOn     Boolean?
+  dtcCodes     Json?
+  rawPayload   Json?
+
+  device TelemetryDevice @relation(fields: [deviceId], references: [id])
+
+  @@index([deviceId, capturedAt])
+  @@index([capturedAt])
 }

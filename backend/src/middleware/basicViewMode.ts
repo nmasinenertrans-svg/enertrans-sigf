@@ -9,6 +9,9 @@ const isBypassedPath = (path: string) => {
   if (path.startsWith('/health')) {
     return true
   }
+  if (path.startsWith('/integrations')) {
+    return true
+  }
   return false
 }
 

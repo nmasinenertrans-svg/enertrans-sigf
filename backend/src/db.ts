@@ -172,6 +172,8 @@ const COMPAT_TABLE_NAMES = [
   'ServiceOrder',
   'PushSubscription',
   'Invoice',
+  'TelemetryDevice',
+  'TelemetryPosition',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -558,6 +560,55 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_code_key" ON "Invoice"("code");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_repairId_idx" ON "Invoice"("repairId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_supplierId_idx" ON "Invoice"("supplierId");`)
+
+  // Telemetria/GPS: ingesta de proveedores externos (RSV, Microtrack, etc.) via
+  // webhook. TelemetryDevice = equipo GPS del proveedor (deviceExternalId+provider,
+  // opcionalmente vinculado a una unidad); TelemetryPosition = historico de puntos,
+  // nunca se pisa. IMPORTANTE: ambas tablas estan en COMPAT_TABLE_NAMES arriba —
+  // si se agrega una columna nueva a estos modelos en el futuro, safeExecuteCompatSql
+  // ya las qualifica solo, no hace falta el patron de qualificar el schema a mano.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "TelemetryDevice" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "deviceExternalId" TEXT NOT NULL,
+      "provider" TEXT NOT NULL,
+      "imei" TEXT,
+      "unitId" TEXT,
+      "lastSeenAt" TIMESTAMP(3),
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "TelemetryDevice_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "TelemetryDevice_deviceExternalId_provider_key" ON "TelemetryDevice"("deviceExternalId", "provider");`,
+  )
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "TelemetryDevice_unitId_idx" ON "TelemetryDevice"("unitId");`)
+
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "TelemetryPosition" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "deviceId" TEXT NOT NULL,
+      "capturedAt" TIMESTAMP(3) NOT NULL,
+      "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "latitude" DOUBLE PRECISION NOT NULL,
+      "longitude" DOUBLE PRECISION NOT NULL,
+      "speedKph" DOUBLE PRECISION,
+      "heading" DOUBLE PRECISION,
+      "altitudeM" DOUBLE PRECISION,
+      "accuracyM" DOUBLE PRECISION,
+      "odometerKm" DOUBLE PRECISION,
+      "fuelLevelPct" DOUBLE PRECISION,
+      "engineOn" BOOLEAN,
+      "dtcCodes" JSONB,
+      "rawPayload" JSONB,
+      CONSTRAINT "TelemetryPosition_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "TelemetryPosition_deviceId_capturedAt_idx" ON "TelemetryPosition"("deviceId", "capturedAt");`,
+  )
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "TelemetryPosition_capturedAt_idx" ON "TelemetryPosition"("capturedAt");`)
 
   // Si Supplier existe legacy, asegura columnas nuevas.
   await safeExecuteCompatSql(`ALTER TABLE "Supplier" ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT NOT NULL DEFAULT '';`)
