@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import { requireAuth } from '../middleware/auth.js'
+import { recalculateMaintenancePlansForUnit } from '../services/maintenancePlans.js'
 
 const router = Router()
 
@@ -160,6 +161,26 @@ const processPosition = async (
         rawPayload: item.rawPayload ?? undefined,
       },
     })
+
+    // El odometro del CAN bus nunca deberia bajar, asi que solo lo tomamos si
+    // supera el valor actual — evita que una lectura ruidosa o un dispositivo
+    // mal calibrado le pise el kilometraje real a la unidad. Reusa el mismo
+    // recalculo de planes de mantenimiento que usa la edicion manual (fleet.ts),
+    // para que las alertas queden al dia sin depender de que el cliente informe km.
+    if (device.unitId && canbus?.odometerKm !== undefined) {
+      const nextKm = Math.round(canbus.odometerKm)
+      const unit = await prisma.fleetUnit.findUnique({
+        where: { id: device.unitId },
+        select: { currentKilometers: true },
+      })
+      if (unit && nextKm > unit.currentKilometers) {
+        await prisma.fleetUnit.update({
+          where: { id: device.unitId },
+          data: { currentKilometers: nextKm },
+        })
+        void recalculateMaintenancePlansForUnit(device.unitId, { unitKilometers: nextKm })
+      }
+    }
 
     return { index, deviceExternalId, ok: true }
   } catch (error) {

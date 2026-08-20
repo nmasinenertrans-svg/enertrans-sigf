@@ -16,6 +16,7 @@ import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersSer
 import { getMeasurementUnit, maintenanceTypeLabels } from '../../maintenance/services/maintenanceService'
 import type { FleetUnit } from '../../../types/domain'
 import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
+import { FleetGpsPanel } from '../components/FleetGpsPanel'
 import { StatusPill } from '../../../components/ui/StatusPill'
 import { resultLabelMap as auditResultLabelMap } from '../../audits/services/auditsService'
 
@@ -26,6 +27,7 @@ const detailTabs = [
   { id: 'repairs', label: 'Reparaciones' },
   { id: 'externalRequests', label: 'Notas externas' },
   { id: 'movements', label: 'Remitos' },
+  { id: 'gpsTelemetry', label: 'GPS / Recorrido' },
   { id: 'inventory', label: 'Inventario asociado' },
   { id: 'serviceOrders', label: 'Órdenes de Servicio' },
 ] as const
@@ -1707,6 +1709,8 @@ export const FleetDetailPage = () => {
               movements={movements}
             />
           ) : null}
+
+          {activeTab === 'gpsTelemetry' ? <FleetGpsPanel unitId={selectedUnit.id} /> : null}
 
           {activeTab === 'inventory' ? (
             <div className="space-y-2 text-sm text-slate-700">
