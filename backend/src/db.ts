@@ -11,6 +11,7 @@ type ProbeResult = {
   hasClientAccountTable: boolean
   hasDeliveryOperationTable: boolean
   hasFleetClientIdColumn: boolean
+  fleetUnitRowCount: number
 }
 
 const DEFAULT_SCHEMA_CANDIDATES = ['enertrans_prod', 'public']
@@ -87,9 +88,29 @@ const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeRe
     const hasDeliveryOperationTable = tableSet.has('DeliveryOperation')
     const hasFleetClientIdColumn = columnRows.length > 0
 
+    // Dos schemas pueden tener exactamente la misma estructura (tablas/columnas)
+    // sin tener los mismos DATOS — uno puede estar vacio y el otro con toda la
+    // operacion real. El puntaje estructural de arriba por si solo puede empatar
+    // en ese caso, y en un empate gana el primero de la lista (el schema del
+    // DATABASE_URL), que puede ser el vacio. Por eso la cantidad real de filas en
+    // FleetUnit pesa muchisimo mas que cualquier combinacion de banderas
+    // estructurales: un schema con datos reales SIEMPRE gana sobre uno vacio,
+    // sin importar que tan "completo" luzca su estructura.
+    let fleetUnitRowCount = 0
+    if (hasFleetUnitTable) {
+      try {
+        const countRows = await probeClient.$queryRawUnsafe<{ count: bigint }[]>(
+          `SELECT COUNT(*)::bigint AS count FROM ${quoteIdentifier(schema)}."FleetUnit"`,
+        )
+        fleetUnitRowCount = Number(countRows[0]?.count ?? 0)
+      } catch {
+        fleetUnitRowCount = 0
+      }
+    }
+
     const isCoreReady = hasUserTable && hasFleetUnitTable && hasRepairRecordTable
 
-    const score =
+    const structuralScore =
       (hasUserTable ? 40 : 0) +
       (hasFleetUnitTable ? 40 : 0) +
       (hasRepairRecordTable ? 20 : 0) +
@@ -97,6 +118,8 @@ const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeRe
       (hasSupplierTable ? 20 : 0) +
       (hasClientAccountTable ? 10 : 0) +
       (hasDeliveryOperationTable ? 10 : 0)
+
+    const score = structuralScore + (fleetUnitRowCount > 0 ? 100000 : 0) + Math.min(fleetUnitRowCount, 5000)
 
     return {
       schema,
@@ -109,6 +132,7 @@ const probeSchema = async (databaseUrl: string, schema: string): Promise<ProbeRe
       hasClientAccountTable,
       hasDeliveryOperationTable,
       hasFleetClientIdColumn,
+      fleetUnitRowCount,
     }
   } catch {
     return null
@@ -1059,7 +1083,7 @@ const probeCandidates = async (): Promise<ProbeResult[]> => {
       `[DB] probe schemas: ${probeResults
         .map(
           (result) =>
-            `${result.schema}(score=${result.score},core=${result.isCoreReady},user=${result.hasUserTable},fleet=${result.hasFleetUnitTable},repair=${result.hasRepairRecordTable},clientId=${result.hasFleetClientIdColumn},supplier=${result.hasSupplierTable},client=${result.hasClientAccountTable},delivery=${result.hasDeliveryOperationTable})`,
+            `${result.schema}(score=${result.score},fleetUnitRows=${result.fleetUnitRowCount},core=${result.isCoreReady},user=${result.hasUserTable},fleet=${result.hasFleetUnitTable},repair=${result.hasRepairRecordTable},clientId=${result.hasFleetClientIdColumn},supplier=${result.hasSupplierTable},client=${result.hasClientAccountTable},delivery=${result.hasDeliveryOperationTable})`,
         )
         .join(' | ')}`,
     )
