@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { prisma, runWithSchemaFailover } from '../db.js'
+import { getActiveDbSchema, prisma, runWithSchemaFailover } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { pushUserNotifications, resolveOperationalNotificationRecipients } from '../services/userNotifications.js'
@@ -389,10 +389,7 @@ const listRepairsFromRecoverySchemas = async (): Promise<ReturnType<typeof mapRe
     .map((row) => row.schema_name)
     .filter((schema) => REPAIR_RECOVERY_SCHEMAS.includes(schema as (typeof REPAIR_RECOVERY_SCHEMAS)[number]))
   if (targetSchemas.length === 0) {
-    const currentSchemaRows = await prisma.$queryRaw<{ schema_name: string }[]>`
-      SELECT current_schema() AS schema_name
-    `
-    const currentSchema = currentSchemaRows[0]?.schema_name
+    const currentSchema = getActiveDbSchema()
     if (currentSchema && REPAIR_RECOVERY_SCHEMAS.includes(currentSchema as (typeof REPAIR_RECOVERY_SCHEMAS)[number])) {
       targetSchemas.push(currentSchema)
     }
@@ -472,10 +469,15 @@ const supportsRepairOperationalColumns = async (): Promise<boolean> => {
   }
 
   try {
+    // current_schema() resuelve al search_path por default de la conexion (a
+    // menudo "public"), no al esquema activo real — hay que pasarlo explicito.
+    // Esto causaba que el backend creyera que faltaban columnas que si existen
+    // en enertrans_prod, y degradara silenciosamente la creacion de reparaciones
+    // vinculadas a mas de una NDP (bug real: reparacion cargada que "desaparecia").
     const rows = await prisma.$queryRaw<{ column_name: string }[]>`
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_schema = current_schema()
+      WHERE table_schema = ${getActiveDbSchema()}
         AND table_name = 'RepairRecord'
         AND column_name IN (
           ${REPAIR_OPERATIONAL_COLUMNS[0]},

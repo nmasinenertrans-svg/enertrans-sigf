@@ -122,11 +122,13 @@ const readLegacyFleetUnitById = async (id: string): Promise<any | null> => {
 
 const hasCrmDealUnitTable = async (): Promise<boolean> => {
   try {
+    // current_schema() resuelve al search_path por default de la conexion (a
+    // menudo "public"), no al esquema activo real — hay que pasarlo explicito.
     const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
       SELECT EXISTS (
         SELECT 1
         FROM information_schema.tables
-        WHERE table_schema = current_schema()
+        WHERE table_schema = ${getActiveDbSchema()}
           AND table_name = 'CrmDealUnit'
       ) AS exists
     `

@@ -137,10 +137,12 @@ const supportsSupplierExtendedColumns = async (): Promise<boolean> => {
   }
 
   try {
+    // current_schema() resuelve al search_path por default de la conexion (a
+    // menudo "public"), no al esquema activo real — hay que pasarlo explicito.
     const rows = await prisma.$queryRaw<{ column_name: string }[]>`
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_schema = current_schema()
+      WHERE table_schema = ${activeSchema}
         AND lower(table_name) = lower('Supplier')
     `
     const available = new Set(rows.map((row) => row.column_name))
