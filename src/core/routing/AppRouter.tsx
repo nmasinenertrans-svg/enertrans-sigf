@@ -29,6 +29,7 @@ const FleetListPage = lazyPage(() => import('../../modules/fleet/pages/FleetList
 const InventoryPage = lazyPage(() => import('../../modules/inventory/pages/InventoryPage'), 'InventoryPage')
 const MaintenancePage = lazyPage(() => import('../../modules/maintenance/pages/MaintenancePage'), 'MaintenancePage')
 const RepairsPage = lazyPage(() => import('../../modules/repairs/pages/RepairsPage'), 'RepairsPage')
+const RepairImportPage = lazyPage(() => import('../../modules/repairs/pages/RepairImportPage'), 'RepairImportPage')
 const MovementsPage = lazyPage(() => import('../../modules/movements/pages/MovementsPage'), 'MovementsPage')
 const ClientsPage = lazyPage(() => import('../../modules/clients/pages/ClientsPage'), 'ClientsPage')
 const DeliveriesPage = lazyPage(() => import('../../modules/deliveries/pages/DeliveriesPage'), 'DeliveriesPage')
@@ -231,6 +232,16 @@ export const AppRouter = () => (
             <RequireFeatureFlag flag="showRepairsModule">
               <RequirePermission module="REPAIRS" action="view">
                 <RepairsPage />
+              </RequirePermission>
+            </RequireFeatureFlag>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.repairsImport}
+          element={
+            <RequireFeatureFlag flag="showRepairsModule">
+              <RequirePermission module="REPAIRS" action="create">
+                <RepairImportPage />
               </RequirePermission>
             </RequireFeatureFlag>
           }

@@ -1157,4 +1157,171 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+// ─── Importacion masiva desde planilla (migracion de historial de otro sistema) ───
+
+const IMPORT_MAX_ROWS = 1000
+
+const repairImportRowSchema = z.object({
+  unitId: z.string().min(1),
+  supplierName: z.string().min(1),
+  performedAt: z.string().datetime(),
+  unitKilometers: z.number().int().min(0).optional(),
+  currency: z.enum(CURRENCY_CODES),
+  description: z.string().min(1),
+  laborCost: z.number().min(0),
+  partsCost: z.number().min(0),
+  realCost: z.number().min(0),
+})
+
+type RepairImportOutcome = {
+  index: number
+  ok: boolean
+  message?: string
+}
+
+router.post('/import', async (req: AuthenticatedRequest, res) => {
+  if (!req.userId) {
+    return res.status(401).json({ message: 'No autenticado.' })
+  }
+
+  const supportsOperational = await supportsRepairOperationalColumns()
+  if (!supportsOperational) {
+    return res.status(503).json({ message: 'La base no soporta aun la importacion masiva. Reintenta en unos minutos.' })
+  }
+
+  const bodySchema = z.object({ items: z.array(z.unknown()).min(1).max(IMPORT_MAX_ROWS) })
+  const parsedBody = bodySchema.safeParse(req.body)
+  if (!parsedBody.success) {
+    return res.status(400).json({ message: `Debe incluir "items" con al menos una fila (maximo ${IMPORT_MAX_ROWS}).` })
+  }
+
+  // Cache de proveedores encontrados/creados durante este import, para no
+  // repetir la busqueda ni intentar crear el mismo proveedor nuevo dos veces
+  // cuando varias filas de la planilla comparten el mismo taller.
+  const supplierCache = new Map<string, { id: string; name: string }>()
+
+  const resolveSupplier = async (rawName: string): Promise<{ id: string; name: string }> => {
+    const trimmed = rawName.trim()
+    const cacheKey = trimmed.toLowerCase()
+    const cached = supplierCache.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
+    const existing = await runWithSchemaFailover(() =>
+      prisma.supplier.findFirst({
+        where: { name: { equals: trimmed, mode: 'insensitive' } },
+        select: { id: true, name: true },
+      }),
+    )
+    if (existing) {
+      supplierCache.set(cacheKey, existing)
+      return existing
+    }
+
+    try {
+      const created = await runWithSchemaFailover(() =>
+        prisma.supplier.create({ data: { name: trimmed }, select: { id: true, name: true } }),
+      )
+      supplierCache.set(cacheKey, created)
+      return created
+    } catch (error) {
+      // Otra fila de este mismo import gano la carrera de creacion (P2002) —
+      // el proveedor ya existe, lo reusamos.
+      if (getErrorCode(error) === 'P2002') {
+        const raceWinner = await runWithSchemaFailover(() =>
+          prisma.supplier.findFirst({
+            where: { name: { equals: trimmed, mode: 'insensitive' } },
+            select: { id: true, name: true },
+          }),
+        )
+        if (raceWinner) {
+          supplierCache.set(cacheKey, raceWinner)
+          return raceWinner
+        }
+      }
+      throw error
+    }
+  }
+
+  const importRow = async (rawItem: unknown, index: number): Promise<RepairImportOutcome> => {
+    const parsed = repairImportRowSchema.safeParse(rawItem)
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues[0]
+      return {
+        index,
+        ok: false,
+        message: firstIssue ? `${firstIssue.path.join('.')}: ${firstIssue.message}` : 'Fila invalida.',
+      }
+    }
+
+    const row = parsed.data
+
+    try {
+      const unit = await runWithSchemaFailover(() =>
+        prisma.fleetUnit.findUnique({ where: { id: row.unitId }, select: { id: true } }),
+      )
+      if (!unit) {
+        return { index, ok: false, message: 'La unidad no existe.' }
+      }
+
+      const supplier = await resolveSupplier(row.supplierName)
+
+      await runWithSchemaFailover(() =>
+        prisma.repairRecord.create({
+          data: {
+            id: createId(),
+            unitId: row.unitId,
+            sourceType: 'WORK_ORDER',
+            workOrderId: null,
+            externalRequestId: null,
+            linkedExternalRequestIds: [],
+            supplierId: supplier.id,
+            supplierName: supplier.name,
+            performedAt: row.performedAt,
+            unitKilometers: row.unitKilometers ?? 0,
+            currency: row.currency,
+            laborCost: row.laborCost,
+            partsCost: row.partsCost,
+            partsUsed: [
+              {
+                id: createId(),
+                description: row.description,
+                quantity: 1,
+                unitPrice: row.realCost,
+              },
+            ] as any,
+            realCost: row.realCost,
+            invoicedToClient: row.realCost,
+            margin: 0,
+            invoiceFileName: '',
+            invoiceFileBase64: '',
+            invoiceFileUrl: '',
+          },
+        }),
+      )
+
+      return { index, ok: true }
+    } catch (error) {
+      console.error('Repair import row error:', error)
+      return { index, ok: false, message: 'Error interno al guardar la fila.' }
+    }
+  }
+
+  const results: RepairImportOutcome[] = []
+  for (let index = 0; index < parsedBody.data.items.length; index += 1) {
+    results.push(await importRow(parsedBody.data.items[index], index))
+  }
+
+  const imported = results.filter((result) => result.ok).length
+  const failed = results.length - imported
+
+  return res.status(failed > 0 && imported === 0 ? 422 : 200).json({
+    received: results.length,
+    imported,
+    failed,
+    errors: results.filter((result) => !result.ok).map(({ index, message }) => ({ index, message })),
+  })
+})
+
 export default router

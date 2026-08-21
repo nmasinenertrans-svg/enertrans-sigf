@@ -18,6 +18,7 @@
   workOrders: '/work-orders',
   externalRequests: '/work-orders/external-requests',
   repairs: '/repairs',
+  repairsImport: '/repairs/import',
   suppliers: '/suppliers',
   supplierDetail: '/suppliers/:supplierId',
   crm: '/crm',
