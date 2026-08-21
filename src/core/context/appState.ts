@@ -11,6 +11,7 @@ import type {
   FleetUnit,
   InventoryItem,
   Invoice,
+  HandoverChecklist,
   MaintenancePlan,
   RentalContract,
   RepairRecord,
@@ -44,6 +45,7 @@ interface PersistedAppState {
   serviceOrders: ServiceOrder[]
   invoices: Invoice[]
   contracts: RentalContract[]
+  handoverChecklists: HandoverChecklist[]
 }
 
 export interface AppState extends PersistedAppState {
@@ -71,6 +73,7 @@ export interface AppActions {
   setServiceOrders: (orders: ServiceOrder[]) => void
   setInvoices: (invoices: Invoice[]) => void
   setContracts: (contracts: RentalContract[]) => void
+  setHandoverChecklists: (checklists: HandoverChecklist[]) => void
   setFeatureFlags: (flags: FeatureFlags) => void
   setGlobalLoading: (value: boolean) => void
   setAppError: (errorMessage: string | null) => void
@@ -133,6 +136,7 @@ const defaultPersistedState: PersistedAppState = {
   serviceOrders: [],
   invoices: [],
   contracts: [],
+  handoverChecklists: [],
 }
 
 const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError'> = {
@@ -190,6 +194,7 @@ export const getInitialAppState = (): AppState => {
     serviceOrders: persistedState.serviceOrders ?? [],
     invoices: persistedState.invoices ?? [],
     contracts: persistedState.contracts ?? [],
+    handoverChecklists: persistedState.handoverChecklists ?? [],
   }
   const fallbackUserId = typeof window !== 'undefined' ? window.localStorage.getItem(CURRENT_USER_KEY) : null
   const sessionUserId =
@@ -230,6 +235,7 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   serviceOrders: state.serviceOrders,
   invoices: state.invoices,
   contracts: state.contracts,
+  handoverChecklists: state.handoverChecklists,
 })
 
 export const persistAppState = (state: AppState): void => {

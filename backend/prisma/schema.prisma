@@ -167,6 +167,7 @@ model User {
   pushSubscriptions         PushSubscription[]
   invoicesCreated           Invoice[]          @relation("InvoiceCreatedBy")
   rentalContractsCreated    RentalContract[]   @relation("RentalContractCreatedBy")
+  handoverChecklistsCreated HandoverChecklist[] @relation("HandoverChecklistCreatedBy")
 }
 
 model PushSubscription {
@@ -245,6 +246,7 @@ model FleetUnit {
   telemetryDevices         TelemetryDevice[]
   invoices                 Invoice[]
   rentalContracts          RentalContract[]
+  handoverChecklists       HandoverChecklist[]
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -561,6 +563,7 @@ model ClientAccount {
   serviceOrders     ServiceOrder[]
   movements         FleetMovement[]
   rentalContracts   RentalContract[]
+  handoverChecklists HandoverChecklist[]
 }
 
 model RentalContract {
@@ -583,10 +586,44 @@ model RentalContract {
   unit      FleetUnit      @relation(fields: [unitId], references: [id])
   client    ClientAccount? @relation(fields: [clientId], references: [id])
   createdBy User           @relation("RentalContractCreatedBy", fields: [createdByUserId], references: [id])
+  handoverChecklists HandoverChecklist[]
 
   @@index([unitId])
   @@index([clientId])
   @@index([endDate])
+}
+
+model HandoverChecklist {
+  id                String   @id @default(uuid())
+  code              String   @default("")
+  type              String
+  unitId            String
+  clientId          String?
+  clientName        String   @default("")
+  contractId        String?
+  responsibleName   String   @default("")
+  performedAt       DateTime
+  unitKilometers    Int      @default(0)
+  engineHours       Int      @default(0)
+  fuelLevelPct      Int      @default(0)
+  checklist         Json     @default("{}")
+  damagesFound      String   @default("")
+  chargeToClientUsd Float    @default(0)
+  photoUrls         Json     @default("[]")
+  signedActUrl      String   @default("")
+  observations      String   @default("")
+  createdByUserId   String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  unit      FleetUnit       @relation(fields: [unitId], references: [id])
+  client    ClientAccount?  @relation(fields: [clientId], references: [id])
+  contract  RentalContract? @relation(fields: [contractId], references: [id])
+  createdBy User            @relation("HandoverChecklistCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([unitId])
+  @@index([clientId])
+  @@index([type, performedAt])
 }
 
 model Supplier {

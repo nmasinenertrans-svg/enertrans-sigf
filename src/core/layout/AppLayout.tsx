@@ -15,6 +15,7 @@ import type {
   FleetMovement,
   FleetUnit,
   InventoryItem,
+  HandoverChecklist,
   Invoice,
   MaintenancePlan,
   RentalContract,
@@ -130,6 +131,7 @@ export const AppLayout = () => {
       setServiceOrders,
       setInvoices,
       setContracts,
+      setHandoverChecklists,
     },
   } = useAppContext()
 
@@ -333,6 +335,7 @@ export const AppLayout = () => {
           serviceOrdersResponse,
           invoicesResponse,
           contractsResponse,
+          handoverChecklistsResponse,
         ] = await Promise.all([
           // Datos de negocio: 3 intentos con timeout creciente para sobrevivir un "cold start"
           // del backend (Render lo duerme tras inactividad), y NUNCA en silencio — si de verdad
@@ -377,6 +380,9 @@ export const AppLayout = () => {
           // cualquier otro rol, asi que ni se pide para no generar error de sync.
           currentUserRef.current?.role === 'DEV'
             ? safeRequest<RentalContract[]>('/contracts', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          currentUserRef.current?.role === 'DEV'
+            ? safeRequest<HandoverChecklist[]>('/handover-checklists', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
         ])
 
@@ -526,6 +532,9 @@ export const AppLayout = () => {
         if (contractsResponse) {
           setContracts(contractsResponse)
         }
+        if (handoverChecklistsResponse) {
+          setHandoverChecklists(handoverChecklistsResponse)
+        }
       } finally {
         if (!isBackground) {
           setGlobalLoading(false)
@@ -552,6 +561,7 @@ export const AppLayout = () => {
     setServiceOrders,
     setInvoices,
     setContracts,
+    setHandoverChecklists,
   ])
 
   useEffect(() => {

@@ -20,6 +20,7 @@
   repairs: '/repairs',
   repairsImport: '/repairs/import',
   contracts: '/contracts',
+  handoverChecklists: '/handover-checklists',
   suppliers: '/suppliers',
   supplierDetail: '/suppliers/:supplierId',
   crm: '/crm',

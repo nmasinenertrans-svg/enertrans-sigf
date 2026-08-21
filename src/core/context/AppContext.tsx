@@ -151,6 +151,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setHandoverChecklists: (handoverChecklists) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, handoverChecklists }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setFeatureFlags: (flags) => {
         setState((previousState) => {
           const nextState = { ...previousState, featureFlags: flags }

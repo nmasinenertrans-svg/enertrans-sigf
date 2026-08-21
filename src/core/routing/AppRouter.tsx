@@ -61,6 +61,10 @@ const ServiceOrderDetailPage = lazyPage(
 )
 const InvoicesPage = lazyPage(() => import('../../modules/invoices/pages/InvoicesPage'), 'InvoicesPage')
 const ContractsPage = lazyPage(() => import('../../modules/contracts/pages/ContractsPage'), 'ContractsPage')
+const HandoverChecklistsPage = lazyPage(
+  () => import('../../modules/handoverChecklists/pages/HandoverChecklistsPage'),
+  'HandoverChecklistsPage',
+)
 const ProfilePage = lazyPage(() => import('../../modules/users/pages/ProfilePage'), 'ProfilePage')
 const MaintenanceModePage = lazyPage(
   () => import('../../modules/system/pages/MaintenanceModePage'),
@@ -388,6 +392,14 @@ export const AppRouter = () => (
           element={
             <RequireDevOnly>
               <ContractsPage />
+            </RequireDevOnly>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.handoverChecklists}
+          element={
+            <RequireDevOnly>
+              <HandoverChecklistsPage />
             </RequireDevOnly>
           }
         />

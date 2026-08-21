@@ -423,6 +423,55 @@ export interface RentalContract {
   updatedAt?: string
 }
 
+export const handoverChecklistTypes = ['DELIVERY', 'RETURN'] as const
+export type HandoverChecklistType = (typeof handoverChecklistTypes)[number]
+
+export const checklistItemStatuses = ['OK', 'REGULAR', 'MALO'] as const
+export type ChecklistItemStatus = (typeof checklistItemStatuses)[number]
+
+export interface ChecklistItem {
+  status: ChecklistItemStatus
+  notes: string
+}
+
+export const checklistItemKeys = [
+  'documentacion',
+  'luces',
+  'cubiertas',
+  'frenos',
+  'cabina',
+  'carroceria',
+  'accesorios',
+  'kitSeguridad',
+] as const
+export type ChecklistItemKey = (typeof checklistItemKeys)[number]
+
+export type ChecklistItems = Record<ChecklistItemKey, ChecklistItem>
+
+export interface HandoverChecklist {
+  id: string
+  code: string
+  type: HandoverChecklistType
+  unitId: string
+  clientId?: string | null
+  clientName: string
+  contractId?: string | null
+  responsibleName: string
+  performedAt: string
+  unitKilometers: number
+  engineHours: number
+  fuelLevelPct: number
+  checklist: ChecklistItems
+  damagesFound: string
+  chargeToClientUsd: number
+  photoUrls: string[]
+  signedActUrl: string
+  observations: string
+  createdByUserId: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const inventoryUnits = ['UNIDAD', 'LITRO', 'KG', 'METRO'] as const
 export type InventoryUnit = (typeof inventoryUnits)[number]
 

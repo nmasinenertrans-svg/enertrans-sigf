@@ -175,6 +175,7 @@ const COMPAT_TABLE_NAMES = [
   'TelemetryDevice',
   'TelemetryPosition',
   'RentalContract',
+  'HandoverChecklist',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -922,6 +923,42 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "RentalContract_unitId_idx" ON "RentalContract"("unitId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "RentalContract_clientId_idx" ON "RentalContract"("clientId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "RentalContract_endDate_idx" ON "RentalContract"("endDate");`)
+
+  // Checklist de entrega/devolucion de equipos (modulo en prueba, DEV-only).
+  // "type" queda en TEXT a proposito (no enum nativo de Postgres) — un enum sin
+  // calificar aca ya nos mordio una vez con RentalContract.currency (ver arriba),
+  // asi que para un campo de 2 valores fijos no vale la pena el riesgo.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "HandoverChecklist" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "code" TEXT NOT NULL DEFAULT '',
+      "type" TEXT NOT NULL,
+      "unitId" TEXT NOT NULL,
+      "clientId" TEXT,
+      "clientName" TEXT NOT NULL DEFAULT '',
+      "contractId" TEXT,
+      "responsibleName" TEXT NOT NULL DEFAULT '',
+      "performedAt" TIMESTAMP(3) NOT NULL,
+      "unitKilometers" INTEGER NOT NULL DEFAULT 0,
+      "engineHours" INTEGER NOT NULL DEFAULT 0,
+      "fuelLevelPct" INTEGER NOT NULL DEFAULT 0,
+      "checklist" JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "damagesFound" TEXT NOT NULL DEFAULT '',
+      "chargeToClientUsd" DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "photoUrls" JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "signedActUrl" TEXT NOT NULL DEFAULT '',
+      "observations" TEXT NOT NULL DEFAULT '',
+      "createdByUserId" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "HandoverChecklist_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "HandoverChecklist_unitId_idx" ON "HandoverChecklist"("unitId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "HandoverChecklist_clientId_idx" ON "HandoverChecklist"("clientId");`)
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "HandoverChecklist_type_performedAt_idx" ON "HandoverChecklist"("type", "performedAt");`,
+  )
 
   // Inventario: campos que el frontend ya usaba pero nunca se habian agregado al schema real
   // (externalBarcode/unit/unitPrice/currency se perdian al guardar) + descripcion legible del producto.
