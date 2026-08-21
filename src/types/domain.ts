@@ -423,6 +423,25 @@ export interface RentalContract {
   updatedAt?: string
 }
 
+export interface Tire {
+  id: string
+  unitId: string
+  position: string
+  brand: string
+  model: string
+  installedAt?: string | null
+  installedKm: number
+  lastRotationKm?: number | null
+  costBase: number
+  currency: 'ARS' | 'USD'
+  notes: string
+  isActive: boolean
+  removedAt?: string | null
+  createdByUserId: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const handoverChecklistTypes = ['DELIVERY', 'RETURN'] as const
 export type HandoverChecklistType = (typeof handoverChecklistTypes)[number]
 

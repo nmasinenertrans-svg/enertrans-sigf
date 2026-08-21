@@ -158,6 +158,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setTires: (tires) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, tires }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setFeatureFlags: (flags) => {
         setState((previousState) => {
           const nextState = { ...previousState, featureFlags: flags }

@@ -30,6 +30,7 @@ import invoicesRoutes from './routes/invoices.js'
 import integrationsRoutes from './routes/integrations.js'
 import contractsRoutes from './routes/contracts.js'
 import handoverChecklistsRoutes from './routes/handoverChecklists.js'
+import tiresRoutes from './routes/tires.js'
 import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
@@ -37,6 +38,7 @@ import { maintenanceGuard } from './middleware/maintenance.js'
 import { basicViewModeGuard } from './middleware/basicViewMode.js'
 import { getCrmAutomationIntervalMinutes, isCrmAutomationEnabled, runCrmAutomations } from './services/crmAutomations.js'
 import { runContractExpirationAutomations } from './services/contractAutomations.js'
+import { runTireWearAutomations } from './services/tireAutomations.js'
 
 const sentryDsn = process.env.SENTRY_DSN || ''
 const sentryEnvironment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development'
@@ -88,6 +90,7 @@ app.use('/service-orders', requireAuth, requirePermission('SERVICE_ORDERS', 'vie
 app.use('/invoices', requireAuth, requirePermission('INVOICES', 'view'), invoicesRoutes)
 app.use('/contracts', requireAuth, contractsRoutes)
 app.use('/handover-checklists', requireAuth, handoverChecklistsRoutes)
+app.use('/tires', requireAuth, tiresRoutes)
 app.use('/push', requireAuth, pushRoutes)
 app.use('/files', requireAuth, filesRoutes)
 // Sin requireAuth global: los webhooks de proveedores (POST) usan su propio
@@ -150,6 +153,20 @@ const startContractAutomationScheduler = () => {
   }, CONTRACT_AUTOMATION_INTERVAL_MS)
 }
 
+const TIRE_AUTOMATION_INTERVAL_MS = 60 * 60 * 1000
+
+const startTireAutomationScheduler = () => {
+  void runTireWearAutomations().catch((error) => {
+    console.error('[Cubiertas] fallo aviso de desgaste inicial:', error)
+  })
+
+  setInterval(() => {
+    void runTireWearAutomations().catch((error) => {
+      console.error('[Cubiertas] fallo aviso de desgaste programado:', error)
+    })
+  }, TIRE_AUTOMATION_INTERVAL_MS)
+}
+
 ensureBestPrismaSchema()
   .then(() => {
     console.log(`[DB] runtime schema seleccionado: ${getActiveDbSchema()}`)
@@ -166,6 +183,7 @@ ensureBestPrismaSchema()
 
     startCrmAutomationScheduler()
     startContractAutomationScheduler()
+    startTireAutomationScheduler()
 
     setInterval(async () => {
       try {

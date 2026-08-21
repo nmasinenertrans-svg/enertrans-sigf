@@ -21,6 +21,7 @@
   repairsImport: '/repairs/import',
   contracts: '/contracts',
   handoverChecklists: '/handover-checklists',
+  tires: '/tires',
   suppliers: '/suppliers',
   supplierDetail: '/suppliers/:supplierId',
   crm: '/crm',

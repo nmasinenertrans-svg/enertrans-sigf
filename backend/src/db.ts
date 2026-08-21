@@ -176,6 +176,7 @@ const COMPAT_TABLE_NAMES = [
   'TelemetryPosition',
   'RentalContract',
   'HandoverChecklist',
+  'Tire',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -959,6 +960,33 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(
     `CREATE INDEX IF NOT EXISTS "HandoverChecklist_type_performedAt_idx" ON "HandoverChecklist"("type", "performedAt");`,
   )
+
+  // Cubiertas (modulo en prueba, DEV-only). "currency" en TEXT, no enum, misma
+  // razon que HandoverChecklist.type.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "Tire" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "unitId" TEXT NOT NULL,
+      "position" TEXT NOT NULL,
+      "brand" TEXT NOT NULL DEFAULT '',
+      "model" TEXT NOT NULL DEFAULT '',
+      "installedAt" TIMESTAMP(3),
+      "installedKm" INTEGER NOT NULL DEFAULT 0,
+      "lastRotationKm" INTEGER,
+      "costBase" DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "currency" TEXT NOT NULL DEFAULT 'ARS',
+      "notes" TEXT NOT NULL DEFAULT '',
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "removedAt" TIMESTAMP(3),
+      "wearAlertSentAt" TIMESTAMP(3),
+      "createdByUserId" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Tire_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_unitId_idx" ON "Tire"("unitId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_isActive_idx" ON "Tire"("isActive");`)
 
   // Inventario: campos que el frontend ya usaba pero nunca se habian agregado al schema real
   // (externalBarcode/unit/unitPrice/currency se perdian al guardar) + descripcion legible del producto.

@@ -168,6 +168,7 @@ model User {
   invoicesCreated           Invoice[]          @relation("InvoiceCreatedBy")
   rentalContractsCreated    RentalContract[]   @relation("RentalContractCreatedBy")
   handoverChecklistsCreated HandoverChecklist[] @relation("HandoverChecklistCreatedBy")
+  tiresCreated              Tire[]              @relation("TireCreatedBy")
 }
 
 model PushSubscription {
@@ -247,6 +248,7 @@ model FleetUnit {
   invoices                 Invoice[]
   rentalContracts          RentalContract[]
   handoverChecklists       HandoverChecklist[]
+  tires                    Tire[]
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -624,6 +626,32 @@ model HandoverChecklist {
   @@index([unitId])
   @@index([clientId])
   @@index([type, performedAt])
+}
+
+model Tire {
+  id                String    @id @default(uuid())
+  unitId            String
+  position          String
+  brand             String    @default("")
+  model             String    @default("")
+  installedAt       DateTime?
+  installedKm       Int       @default(0)
+  lastRotationKm    Int?
+  costBase          Float     @default(0)
+  currency          String    @default("ARS")
+  notes             String    @default("")
+  isActive          Boolean   @default(true)
+  removedAt         DateTime?
+  wearAlertSentAt   DateTime?
+  createdByUserId   String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  unit      FleetUnit @relation(fields: [unitId], references: [id])
+  createdBy User      @relation("TireCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([unitId])
+  @@index([isActive])
 }
 
 model Supplier {
