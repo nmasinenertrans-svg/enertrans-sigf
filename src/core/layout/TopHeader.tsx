@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import enertransLogoUrl from '../../assets/enertrans-logo.png'
 import { setAuthToken } from '../../services/api/apiClient'
-import { getQueueItems, type OfflineQueueItem } from '../../services/offline/queue'
+import { getQueueItems, removeQueueItem, type OfflineQueueItem } from '../../services/offline/queue'
 import { syncQueue, syncQueueItem } from '../../services/offline/sync'
 import { readSyncTelemetry, resetSyncTelemetry, type SyncTelemetrySnapshot } from '../../services/offline/telemetry'
 import { useAppContext } from '../hooks/useAppContext'
@@ -522,6 +522,19 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
                           className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
                         >
                           Reintentar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!window.confirm('¿Descartar este item de la cola? No se va a volver a intentar sincronizar.')) {
+                              return
+                            }
+                            await removeQueueItem(item.id)
+                            await loadQueue()
+                          }}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100"
+                        >
+                          Descartar
                         </button>
                       </div>
                     </div>
