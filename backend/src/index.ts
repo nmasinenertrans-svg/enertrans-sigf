@@ -28,12 +28,14 @@ import serviceOrdersRoutes from './routes/serviceOrders.js'
 import pushRoutes from './routes/push.js'
 import invoicesRoutes from './routes/invoices.js'
 import integrationsRoutes from './routes/integrations.js'
+import contractsRoutes from './routes/contracts.js'
 import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
 import { maintenanceGuard } from './middleware/maintenance.js'
 import { basicViewModeGuard } from './middleware/basicViewMode.js'
 import { getCrmAutomationIntervalMinutes, isCrmAutomationEnabled, runCrmAutomations } from './services/crmAutomations.js'
+import { runContractExpirationAutomations } from './services/contractAutomations.js'
 
 const sentryDsn = process.env.SENTRY_DSN || ''
 const sentryEnvironment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development'
@@ -83,6 +85,7 @@ app.use('/projects', requireAuth, requirePermission('PROJECTS', 'view'), project
 app.use('/postventa', requireAuth, requirePermission('POSTVENTA', 'view'), postventaRoutes)
 app.use('/service-orders', requireAuth, requirePermission('SERVICE_ORDERS', 'view'), serviceOrdersRoutes)
 app.use('/invoices', requireAuth, requirePermission('INVOICES', 'view'), invoicesRoutes)
+app.use('/contracts', requireAuth, contractsRoutes)
 app.use('/push', requireAuth, pushRoutes)
 app.use('/files', requireAuth, filesRoutes)
 // Sin requireAuth global: los webhooks de proveedores (POST) usan su propio
@@ -131,6 +134,20 @@ const startCrmAutomationScheduler = () => {
   }, intervalMs)
 }
 
+const CONTRACT_AUTOMATION_INTERVAL_MS = 60 * 60 * 1000
+
+const startContractAutomationScheduler = () => {
+  void runContractExpirationAutomations().catch((error) => {
+    console.error('[Contratos] fallo aviso de vencimiento inicial:', error)
+  })
+
+  setInterval(() => {
+    void runContractExpirationAutomations().catch((error) => {
+      console.error('[Contratos] fallo aviso de vencimiento programado:', error)
+    })
+  }, CONTRACT_AUTOMATION_INTERVAL_MS)
+}
+
 ensureBestPrismaSchema()
   .then(() => {
     console.log(`[DB] runtime schema seleccionado: ${getActiveDbSchema()}`)
@@ -146,6 +163,7 @@ ensureBestPrismaSchema()
     })
 
     startCrmAutomationScheduler()
+    startContractAutomationScheduler()
 
     setInterval(async () => {
       try {

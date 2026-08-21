@@ -166,6 +166,7 @@ model User {
   postventaEventsCreated    PostventaEvent[]   @relation("PostventaEventCreatedBy")
   pushSubscriptions         PushSubscription[]
   invoicesCreated           Invoice[]          @relation("InvoiceCreatedBy")
+  rentalContractsCreated    RentalContract[]   @relation("RentalContractCreatedBy")
 }
 
 model PushSubscription {
@@ -243,6 +244,7 @@ model FleetUnit {
   serviceOrders            ServiceOrder[]
   telemetryDevices         TelemetryDevice[]
   invoices                 Invoice[]
+  rentalContracts          RentalContract[]
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -553,11 +555,38 @@ model ClientAccount {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  units         FleetUnit[]
-  deliveries    DeliveryOperation[]
-  crmDeals      CrmDeal[]
-  serviceOrders ServiceOrder[]
-  movements     FleetMovement[]
+  units             FleetUnit[]
+  deliveries        DeliveryOperation[]
+  crmDeals          CrmDeal[]
+  serviceOrders     ServiceOrder[]
+  movements         FleetMovement[]
+  rentalContracts   RentalContract[]
+}
+
+model RentalContract {
+  id                     String    @id @default(uuid())
+  code                   String    @default("")
+  unitId                 String
+  clientId               String?
+  clientName             String    @default("")
+  startDate              DateTime
+  endDate                DateTime
+  monthlyValue           Float     @default(0)
+  currency               CurrencyCode @default(ARS)
+  status                 String    @default("ACTIVE")
+  notes                  String    @default("")
+  expirationAlertSentAt  DateTime?
+  createdByUserId        String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  unit      FleetUnit      @relation(fields: [unitId], references: [id])
+  client    ClientAccount? @relation(fields: [clientId], references: [id])
+  createdBy User           @relation("RentalContractCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([unitId])
+  @@index([clientId])
+  @@index([endDate])
 }
 
 model Supplier {

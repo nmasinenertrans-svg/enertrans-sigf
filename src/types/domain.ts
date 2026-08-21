@@ -402,6 +402,27 @@ export interface Invoice {
   updatedAt?: string
 }
 
+export const rentalContractStatuses = ['ACTIVE', 'FINISHED', 'CANCELLED'] as const
+export type RentalContractStatus = (typeof rentalContractStatuses)[number]
+
+export interface RentalContract {
+  id: string
+  code: string
+  unitId: string
+  clientId?: string | null
+  clientName: string
+  startDate: string
+  endDate: string
+  monthlyValue: number
+  currency: 'ARS' | 'USD'
+  status: RentalContractStatus
+  notes: string
+  expirationAlertSentAt?: string | null
+  createdByUserId: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const inventoryUnits = ['UNIDAD', 'LITRO', 'KG', 'METRO'] as const
 export type InventoryUnit = (typeof inventoryUnits)[number]
 

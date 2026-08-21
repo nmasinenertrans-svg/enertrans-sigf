@@ -174,6 +174,7 @@ const COMPAT_TABLE_NAMES = [
   'Invoice',
   'TelemetryDevice',
   'TelemetryPosition',
+  'RentalContract',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -881,6 +882,46 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     END
     $$;
   `)
+
+  // Contratos de alquiler: vencimientos por unidad/cliente (modulo en prueba, DEV-only).
+  // IMPORTANTE: "CurrencyCode" sin calificar se resuelve por el search_path de la
+  // conexion (que no necesariamente es el schema activo, ver current_schema() mas
+  // arriba) y puede terminar apuntando a un tipo con el mismo nombre en OTRO schema
+  // (ej. public) — distinto del que usa el resto de la app. Por eso se qualifica
+  // el tipo a mano con el schema activo real, igual que ya se hace con las tablas.
+  {
+    const contractSchema = quoteIdentifier(getNormalizedActiveSchema())
+    await safeExecuteCompatSql(`
+      CREATE TABLE IF NOT EXISTS "RentalContract" (
+        "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+        "code" TEXT NOT NULL DEFAULT '',
+        "unitId" TEXT NOT NULL,
+        "clientId" TEXT,
+        "clientName" TEXT NOT NULL DEFAULT '',
+        "startDate" TIMESTAMP(3) NOT NULL,
+        "endDate" TIMESTAMP(3) NOT NULL,
+        "monthlyValue" DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "currency" ${contractSchema}."CurrencyCode" NOT NULL DEFAULT 'ARS',
+        "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+        "notes" TEXT NOT NULL DEFAULT '',
+        "expirationAlertSentAt" TIMESTAMP(3),
+        "createdByUserId" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "RentalContract_pkey" PRIMARY KEY ("id")
+      );
+    `)
+    await safeExecuteCompatSql(`ALTER TABLE "RentalContract" ALTER COLUMN "currency" DROP DEFAULT;`)
+    await safeExecuteCompatSql(
+      `ALTER TABLE "RentalContract" ALTER COLUMN "currency" TYPE ${contractSchema}."CurrencyCode" USING ("currency"::text::${contractSchema}."CurrencyCode");`,
+    )
+    await safeExecuteCompatSql(
+      `ALTER TABLE "RentalContract" ALTER COLUMN "currency" SET DEFAULT 'ARS'::${contractSchema}."CurrencyCode";`,
+    )
+  }
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "RentalContract_unitId_idx" ON "RentalContract"("unitId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "RentalContract_clientId_idx" ON "RentalContract"("clientId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "RentalContract_endDate_idx" ON "RentalContract"("endDate");`)
 
   // Inventario: campos que el frontend ya usaba pero nunca se habian agregado al schema real
   // (externalBarcode/unit/unitPrice/currency se perdian al guardar) + descripcion legible del producto.

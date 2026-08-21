@@ -17,6 +17,7 @@ import type {
   InventoryItem,
   Invoice,
   MaintenancePlan,
+  RentalContract,
   RepairRecord,
   ServiceOrder,
   Supplier,
@@ -128,6 +129,7 @@ export const AppLayout = () => {
       setFeatureFlags,
       setServiceOrders,
       setInvoices,
+      setContracts,
     },
   } = useAppContext()
 
@@ -330,6 +332,7 @@ export const AppLayout = () => {
           userNotificationsResponse,
           serviceOrdersResponse,
           invoicesResponse,
+          contractsResponse,
         ] = await Promise.all([
           // Datos de negocio: 3 intentos con timeout creciente para sobrevivir un "cold start"
           // del backend (Render lo duerme tras inactividad), y NUNCA en silencio — si de verdad
@@ -369,6 +372,11 @@ export const AppLayout = () => {
             : Promise.resolve(null),
           canUser(currentUserRef.current ?? null, 'INVOICES', 'view')
             ? safeRequest<Invoice[]>('/invoices', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          // Contratos: modulo en prueba, solo DEV — el backend rechaza con 403 a
+          // cualquier otro rol, asi que ni se pide para no generar error de sync.
+          currentUserRef.current?.role === 'DEV'
+            ? safeRequest<RentalContract[]>('/contracts', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
         ])
 
@@ -515,6 +523,9 @@ export const AppLayout = () => {
               invoicesResponse,
           )
         }
+        if (contractsResponse) {
+          setContracts(contractsResponse)
+        }
       } finally {
         if (!isBackground) {
           setGlobalLoading(false)
@@ -540,6 +551,7 @@ export const AppLayout = () => {
     setCurrentUser,
     setServiceOrders,
     setInvoices,
+    setContracts,
   ])
 
   useEffect(() => {

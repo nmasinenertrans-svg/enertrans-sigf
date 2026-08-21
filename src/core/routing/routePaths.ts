@@ -19,6 +19,7 @@
   externalRequests: '/work-orders/external-requests',
   repairs: '/repairs',
   repairsImport: '/repairs/import',
+  contracts: '/contracts',
   suppliers: '/suppliers',
   supplierDetail: '/suppliers/:supplierId',
   crm: '/crm',

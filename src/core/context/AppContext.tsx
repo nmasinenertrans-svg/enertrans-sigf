@@ -144,6 +144,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setContracts: (contracts) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, contracts }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setFeatureFlags: (flags) => {
         setState((previousState) => {
           const nextState = { ...previousState, featureFlags: flags }

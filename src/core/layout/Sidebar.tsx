@@ -5,7 +5,7 @@ import { usePermissions } from '../auth/usePermissions'
 import { useAppContext } from '../hooks/useAppContext'
 import type { FeatureFlags, PermissionModule } from '../../types/domain'
 
-type NavItem = { path: string; label: string; module: PermissionModule; flagKey?: keyof FeatureFlags }
+type NavItem = { path: string; label: string; module: PermissionModule; flagKey?: keyof FeatureFlags; devOnly?: boolean }
 type NavGroup = { id: string; label: string; items: NavItem[] }
 
 const navigationGroups: NavGroup[] = [
@@ -42,6 +42,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { path: ROUTE_PATHS.clients, label: 'Clientes', module: 'CLIENTS', flagKey: 'showClientsModule' },
       { path: ROUTE_PATHS.crm, label: 'CRM Comercial', module: 'CRM', flagKey: 'showCrmModule' },
+      { path: ROUTE_PATHS.contracts, label: 'Contratos (prueba)', module: 'CRM', devOnly: true },
       { path: ROUTE_PATHS.serviceOrders.list, label: 'Órdenes de Servicio', module: 'SERVICE_ORDERS' },
       { path: ROUTE_PATHS.postventa, label: 'Postventa', module: 'POSTVENTA' },
     ],
@@ -112,7 +113,7 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const { can } = usePermissions()
   const location = useLocation()
   const {
-    state: { featureFlags },
+    state: { featureFlags, currentUser },
   } = useAppContext()
   const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(readOpenGroups)
 
@@ -124,6 +125,9 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           return false
         }
         if (item.flagKey && !featureFlags[item.flagKey]) {
+          return false
+        }
+        if (item.devOnly && currentUser?.role !== 'DEV') {
           return false
         }
         return true

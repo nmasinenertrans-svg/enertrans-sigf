@@ -12,6 +12,7 @@ import type {
   InventoryItem,
   Invoice,
   MaintenancePlan,
+  RentalContract,
   RepairRecord,
   ServiceOrder,
   Supplier,
@@ -42,6 +43,7 @@ interface PersistedAppState {
   featureFlags: FeatureFlags
   serviceOrders: ServiceOrder[]
   invoices: Invoice[]
+  contracts: RentalContract[]
 }
 
 export interface AppState extends PersistedAppState {
@@ -68,6 +70,7 @@ export interface AppActions {
   setUserNotifications: (notifications: UserInboxNotification[]) => void
   setServiceOrders: (orders: ServiceOrder[]) => void
   setInvoices: (invoices: Invoice[]) => void
+  setContracts: (contracts: RentalContract[]) => void
   setFeatureFlags: (flags: FeatureFlags) => void
   setGlobalLoading: (value: boolean) => void
   setAppError: (errorMessage: string | null) => void
@@ -129,6 +132,7 @@ const defaultPersistedState: PersistedAppState = {
   featureFlags: defaultFeatureFlags,
   serviceOrders: [],
   invoices: [],
+  contracts: [],
 }
 
 const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError'> = {
@@ -185,6 +189,7 @@ export const getInitialAppState = (): AppState => {
     featureFlags: { ...defaultFeatureFlags, ...(persistedState.featureFlags ?? {}) },
     serviceOrders: persistedState.serviceOrders ?? [],
     invoices: persistedState.invoices ?? [],
+    contracts: persistedState.contracts ?? [],
   }
   const fallbackUserId = typeof window !== 'undefined' ? window.localStorage.getItem(CURRENT_USER_KEY) : null
   const sessionUserId =
@@ -224,6 +229,7 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   featureFlags: state.featureFlags,
   serviceOrders: state.serviceOrders,
   invoices: state.invoices,
+  contracts: state.contracts,
 })
 
 export const persistAppState = (state: AppState): void => {

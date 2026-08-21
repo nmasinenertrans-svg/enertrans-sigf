@@ -60,6 +60,7 @@ const ServiceOrderDetailPage = lazyPage(
   'ServiceOrderDetailPage',
 )
 const InvoicesPage = lazyPage(() => import('../../modules/invoices/pages/InvoicesPage'), 'InvoicesPage')
+const ContractsPage = lazyPage(() => import('../../modules/contracts/pages/ContractsPage'), 'ContractsPage')
 const ProfilePage = lazyPage(() => import('../../modules/users/pages/ProfilePage'), 'ProfilePage')
 const MaintenanceModePage = lazyPage(
   () => import('../../modules/system/pages/MaintenanceModePage'),
@@ -380,6 +381,14 @@ export const AppRouter = () => (
             <RequirePermission module="INVOICES" action="view">
               <InvoicesPage />
             </RequirePermission>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.contracts}
+          element={
+            <RequireDevOnly>
+              <ContractsPage />
+            </RequireDevOnly>
           }
         />
         <Route path="*" element={<Navigate to={ROUTE_PATHS.dashboard} replace />} />
