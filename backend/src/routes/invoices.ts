@@ -19,6 +19,7 @@ const invoiceCreateSchema = z.object({
   fileBase64: z.string().optional().default(''),
   fileUrl: z.string().optional().default(''),
   repairId: z.string().nullable().optional(),
+  unitId: z.string().nullable().optional(),
   inventoryItemIds: z.array(z.string()).optional().default([]),
   inventoryItemQuantities: z.record(z.string(), z.number().positive()).optional().default({}),
 })
@@ -89,11 +90,14 @@ const applyInvoiceStockDeltas = async (
 
 router.get('/', async (req, res) => {
   try {
-    const { repairId, inventoryItemId } = req.query
+    const { repairId, unitId, inventoryItemId } = req.query
 
     const where: Record<string, unknown> = {}
     if (typeof repairId === 'string' && repairId) {
       where.repairId = repairId
+    }
+    if (typeof unitId === 'string' && unitId) {
+      where.unitId = unitId
     }
 
     const items = await prisma.invoice.findMany({
@@ -144,6 +148,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           fileBase64: parsed.data.fileBase64,
           fileUrl: parsed.data.fileUrl,
           repairId: parsed.data.repairId || null,
+          unitId: parsed.data.unitId || null,
           inventoryItemIds: parsed.data.inventoryItemIds,
           inventoryItemQuantities: quantities,
           createdByUserId: userId,
@@ -156,7 +161,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     return res.status(201).json(mapInvoice(item as unknown as Record<string, unknown>))
   } catch (error: unknown) {
     if (getErrorCode(error) === 'P2003') {
-      return res.status(400).json({ message: 'Reparacion vinculada invalida.' })
+      return res.status(400).json({ message: 'Reparacion o unidad vinculada invalida.' })
     }
     console.error('Invoice POST error:', error)
     return res.status(500).json({ message: 'No se pudo crear la factura.' })
@@ -184,6 +189,9 @@ router.patch('/:id', async (req, res) => {
   }
   if (parsed.data.repairId !== undefined) {
     data.repairId = parsed.data.repairId || null
+  }
+  if (parsed.data.unitId !== undefined) {
+    data.unitId = parsed.data.unitId || null
   }
   if (parsed.data.supplierId !== undefined) {
     data.supplierId = parsed.data.supplierId || null
@@ -221,7 +229,7 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ message: 'La factura no existe.' })
     }
     if (getErrorCode(error) === 'P2003') {
-      return res.status(400).json({ message: 'Reparacion vinculada invalida.' })
+      return res.status(400).json({ message: 'Reparacion o unidad vinculada invalida.' })
     }
     console.error('Invoice PATCH error:', error)
     return res.status(500).json({ message: 'No se pudo actualizar la factura.' })

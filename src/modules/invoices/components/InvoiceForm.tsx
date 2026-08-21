@@ -32,6 +32,7 @@ export const InvoiceForm = ({
   onSubmit,
 }: InvoiceFormProps) => {
   const [repairSearch, setRepairSearch] = useState('')
+  const [unitSearch, setUnitSearch] = useState('')
   const [inventorySearch, setInventorySearch] = useState('')
   const [supplierSearch, setSupplierSearch] = useState('')
 
@@ -71,6 +72,18 @@ export const InvoiceForm = ({
   }, [repairs, repairSearch, unitCodeById])
 
   const selectedRepair = repairs.find((repair) => repair.id === formData.repairId)
+
+  const selectedUnit = fleetUnits.find((unit) => unit.id === formData.unitId)
+
+  const filteredUnits = useMemo(() => {
+    const query = unitSearch.trim().toLowerCase()
+    if (!query) {
+      return fleetUnits.slice(0, 8)
+    }
+    return fleetUnits
+      .filter((unit) => `${unit.internalCode} ${unit.brand} ${unit.model}`.toLowerCase().includes(query))
+      .slice(0, 8)
+  }, [fleetUnits, unitSearch])
 
   const filteredInventoryItems = useMemo(() => {
     const query = inventorySearch.trim().toLowerCase()
@@ -210,6 +223,50 @@ export const InvoiceForm = ({
             onChange={(event) => onFileSelected(event.target.files?.[0] ?? null)}
           />
           {formData.fileName ? <span className="text-xs text-slate-500">Adjunto: {formData.fileName}</span> : null}
+        </FormRow>
+
+        <FormRow label="Vincular a una unidad (opcional)">
+          <p className="mb-1 text-xs text-slate-500">
+            Para que quede registro en la ficha del camión, sin necesidad de armar una reparación.
+          </p>
+          {selectedUnit ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span>
+                {selectedUnit.internalCode} · {selectedUnit.brand} {selectedUnit.model}
+              </span>
+              <button
+                type="button"
+                onClick={() => onFieldChange('unitId', '')}
+                className="font-semibold text-amber-700 hover:underline"
+              >
+                Quitar vínculo
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                className={inputClassName}
+                value={unitSearch}
+                onChange={(event) => setUnitSearch(event.target.value)}
+                placeholder="Buscar por dominio, marca o modelo..."
+              />
+              <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                {filteredUnits.map((unit) => (
+                  <button
+                    key={unit.id}
+                    type="button"
+                    onClick={() => onFieldChange('unitId', unit.id)}
+                    className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                  >
+                    {unit.internalCode} · {unit.brand} {unit.model}
+                  </button>
+                ))}
+                {filteredUnits.length === 0 ? (
+                  <p className="px-1 text-xs text-slate-400">Sin resultados.</p>
+                ) : null}
+              </div>
+            </>
+          )}
         </FormRow>
 
         <FormRow label="Vincular a una reparación (opcional)">

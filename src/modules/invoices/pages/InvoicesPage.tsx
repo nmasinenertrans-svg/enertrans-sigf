@@ -92,7 +92,7 @@ export const InvoicesPage = () => {
       return sorted
     }
     return sorted.filter((invoice) =>
-      [invoice.code, invoice.providerName, invoice.invoiceNumber, invoice.repairLabel]
+      [invoice.code, invoice.providerName, invoice.invoiceNumber, invoice.repairLabel, invoice.unitLabel]
         .join(' ')
         .toLowerCase()
         .includes(query),

@@ -26,6 +26,7 @@ export const createEmptyInvoiceFormData = (): InvoiceFormData => ({
   fileBase64: '',
   fileUrl: '',
   repairId: '',
+  unitId: '',
   inventoryItemIds: [],
   inventoryItemQuantityInputs: {},
 })
@@ -69,6 +70,7 @@ export const toInvoicePayload = (formData: InvoiceFormData): Invoice => ({
   fileBase64: formData.fileBase64,
   fileUrl: formData.fileUrl,
   repairId: formData.repairId || null,
+  unitId: formData.unitId || null,
   inventoryItemIds: formData.inventoryItemIds,
   inventoryItemQuantities: buildInventoryItemQuantities(formData),
   createdByUserId: '',
@@ -76,6 +78,7 @@ export const toInvoicePayload = (formData: InvoiceFormData): Invoice => ({
 
 export interface InvoiceViewItem extends Invoice {
   repairLabel: string
+  unitLabel: string
   inventoryItemLabels: string[]
 }
 
@@ -92,6 +95,7 @@ export const buildInvoiceView = (
     const repairLabel = repair
       ? `${unitCodeById.get(repair.unitId) ?? 'Unidad'} · ${repair.supplierName || 'Reparación'}`
       : ''
+    const unitLabel = invoice.unitId ? unitCodeById.get(invoice.unitId) ?? '' : ''
     const inventoryItemLabels = invoice.inventoryItemIds
       .map((id) => inventoryItemLabelById.get(id))
       .filter((label): label is string => Boolean(label))
@@ -99,6 +103,7 @@ export const buildInvoiceView = (
     return {
       ...invoice,
       repairLabel,
+      unitLabel,
       inventoryItemLabels,
     }
   })

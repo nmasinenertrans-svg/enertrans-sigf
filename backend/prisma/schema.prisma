@@ -242,6 +242,7 @@ model FleetUnit {
   postventaEvents          PostventaEvent[]
   serviceOrders            ServiceOrder[]
   telemetryDevices         TelemetryDevice[]
+  invoices                 Invoice[]
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -374,6 +375,7 @@ model Invoice {
   fileBase64       String    @default("")
   fileUrl          String    @default("")
   repairId         String?
+  unitId           String?
   inventoryItemIds Json      @default("[]")
   inventoryItemQuantities Json @default("{}")
   createdByUserId  String
@@ -381,10 +383,12 @@ model Invoice {
   updatedAt        DateTime  @updatedAt
 
   repair    RepairRecord? @relation(fields: [repairId], references: [id])
+  unit      FleetUnit?    @relation(fields: [unitId], references: [id])
   supplier  Supplier?     @relation(fields: [supplierId], references: [id])
   createdBy User          @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
 
   @@index([repairId])
+  @@index([unitId])
   @@index([supplierId])
 }
 

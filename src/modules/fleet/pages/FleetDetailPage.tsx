@@ -17,6 +17,7 @@ import { getMeasurementUnit, maintenanceTypeLabels } from '../../maintenance/ser
 import type { FleetUnit } from '../../../types/domain'
 import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
 import { FleetGpsPanel } from '../components/FleetGpsPanel'
+import { FleetInvoicesPanel } from '../components/FleetInvoicesPanel'
 import { StatusPill } from '../../../components/ui/StatusPill'
 import { resultLabelMap as auditResultLabelMap } from '../../audits/services/auditsService'
 
@@ -28,6 +29,7 @@ const detailTabs = [
   { id: 'externalRequests', label: 'Notas externas' },
   { id: 'movements', label: 'Remitos' },
   { id: 'gpsTelemetry', label: 'GPS / Recorrido' },
+  { id: 'invoices', label: 'Facturas' },
   { id: 'inventory', label: 'Inventario asociado' },
   { id: 'serviceOrders', label: 'Órdenes de Servicio' },
 ] as const
@@ -131,7 +133,7 @@ export const FleetDetailPage = () => {
   const [isCopyingSpecs, setIsCopyingSpecs] = useState(false)
 
   const {
-    state: { currentUser, fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements, serviceOrders },
+    state: { currentUser, fleetUnits, maintenancePlans, audits, workOrders, repairs, externalRequests, inventoryItems, movements, serviceOrders, invoices },
     actions: { setFleetUnits },
   } = useAppContext()
 
@@ -1711,6 +1713,10 @@ export const FleetDetailPage = () => {
           ) : null}
 
           {activeTab === 'gpsTelemetry' ? <FleetGpsPanel unitId={selectedUnit.id} /> : null}
+
+          {activeTab === 'invoices' ? (
+            <FleetInvoicesPanel unitId={selectedUnit.id} invoices={invoices} repairs={repairs} />
+          ) : null}
 
           {activeTab === 'inventory' ? (
             <div className="space-y-2 text-sm text-slate-700">

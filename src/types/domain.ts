@@ -393,6 +393,7 @@ export interface Invoice {
   fileBase64?: string
   fileUrl?: string
   repairId?: string | null
+  unitId?: string | null
   inventoryItemIds: string[]
   inventoryItemQuantities?: Record<string, number>
   createdByUserId: string

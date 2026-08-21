@@ -560,6 +560,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`CREATE UNIQUE INDEX IF NOT EXISTS "Invoice_code_key" ON "Invoice"("code");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_repairId_idx" ON "Invoice"("repairId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_supplierId_idx" ON "Invoice"("supplierId");`)
+  // Permite adjuntar una factura de repuestos directo a una unidad, sin pasar
+  // por una nota de pedido/OT — antes solo se podia vincular via reparacion.
+  await safeExecuteCompatSql(`ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "unitId" TEXT;`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_unitId_idx" ON "Invoice"("unitId");`)
 
   // Telemetria/GPS: ingesta de proveedores externos (RSV, Microtrack, etc.) via
   // webhook. TelemetryDevice = equipo GPS del proveedor (deviceExternalId+provider,

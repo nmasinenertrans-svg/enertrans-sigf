@@ -31,6 +31,12 @@ export const InvoiceCard = ({ invoice, onDelete, canDelete = true }: InvoiceCard
 
       <p className="mt-2 text-xs text-slate-500">Emitida: {formatDate(invoice.issuedAt)}</p>
 
+      {invoice.unitLabel ? (
+        <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+          Unidad: {invoice.unitLabel}
+        </p>
+      ) : null}
+
       {invoice.repairLabel ? (
         <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">
           Reparación: {invoice.repairLabel}

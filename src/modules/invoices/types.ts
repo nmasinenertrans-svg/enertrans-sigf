@@ -10,6 +10,7 @@ export interface InvoiceFormData {
   fileBase64: string
   fileUrl: string
   repairId: string
+  unitId: string
   inventoryItemIds: string[]
   inventoryItemQuantityInputs: Record<string, string>
 }
