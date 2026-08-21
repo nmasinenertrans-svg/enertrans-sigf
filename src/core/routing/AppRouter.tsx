@@ -85,6 +85,22 @@ const RequireFeatureFlag = ({
   return children
 }
 
+/**
+ * Modulos en construccion/prueba: visibles solo para el rol DEV, hasta que
+ * se terminen de probar y se habiliten para el resto del equipo.
+ */
+const RequireDevOnly = ({ children }: { children: ReactElement }) => {
+  const {
+    state: { currentUser },
+  } = useAppContext()
+
+  if (currentUser?.role !== 'DEV') {
+    return <Navigate to={ROUTE_PATHS.dashboard} replace />
+  }
+
+  return children
+}
+
 export const AppRouter = () => (
   <BrowserRouter>
     <Suspense fallback={<RouteTransitionLoader isActive />}>
@@ -239,11 +255,13 @@ export const AppRouter = () => (
         <Route
           path={ROUTE_PATHS.repairsImport}
           element={
-            <RequireFeatureFlag flag="showRepairsModule">
-              <RequirePermission module="REPAIRS" action="create">
-                <RepairImportPage />
-              </RequirePermission>
-            </RequireFeatureFlag>
+            <RequireDevOnly>
+              <RequireFeatureFlag flag="showRepairsModule">
+                <RequirePermission module="REPAIRS" action="create">
+                  <RepairImportPage />
+                </RequirePermission>
+              </RequireFeatureFlag>
+            </RequireDevOnly>
           }
         />
         <Route

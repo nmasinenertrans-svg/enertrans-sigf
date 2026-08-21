@@ -1184,6 +1184,12 @@ router.post('/import', async (req: AuthenticatedRequest, res) => {
     return res.status(401).json({ message: 'No autenticado.' })
   }
 
+  // Modulo en construccion/prueba: solo DEV mientras se termina de validar.
+  const requester = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } })
+  if (!requester || requester.role !== 'DEV') {
+    return res.status(403).json({ message: 'Solo un usuario DEV puede usar la importacion masiva por ahora.' })
+  }
+
   const supportsOperational = await supportsRepairOperationalColumns()
   if (!supportsOperational) {
     return res.status(503).json({ message: 'La base no soporta aun la importacion masiva. Reintenta en unos minutos.' })

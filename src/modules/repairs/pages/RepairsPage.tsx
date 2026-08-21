@@ -26,7 +26,7 @@ const toCurrency = (value: string | undefined): 'ARS' | 'USD' => (value === 'USD
 export const RepairsPage = () => {
   const { can } = usePermissions()
   const {
-    state: { fleetUnits, workOrders, externalRequests, repairs, suppliers, invoices, inventoryItems },
+    state: { currentUser, fleetUnits, workOrders, externalRequests, repairs, suppliers, invoices, inventoryItems },
     actions: { setRepairs },
   } = useAppContext()
 
@@ -235,7 +235,7 @@ export const RepairsPage = () => {
             Registro profesional de reparaciones con fecha, hora, kilometraje, moneda y costos por unidad.
           </p>
         </div>
-        {canCreate ? (
+        {canCreate && currentUser?.role === 'DEV' ? (
           <Link
             to={ROUTE_PATHS.repairsImport}
             className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
