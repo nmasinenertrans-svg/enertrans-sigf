@@ -13,7 +13,7 @@ import {
   validateMovementFormData,
   type MovementFormData,
 } from '../services/movementsService'
-import { exportMovementPdf } from '../services/movementPdfService'
+import { exportBlankMovementPdf, exportMovementPdf } from '../services/movementPdfService'
 
 type NextRemitoResponse = {
   remitoNumber: string
@@ -224,6 +224,14 @@ export const MovementsPage = () => {
     }
   }
 
+  const handleExportBlankMovementPdf = async () => {
+    try {
+      await exportBlankMovementPdf()
+    } catch {
+      setAppError('No se pudo generar el remito en blanco.')
+    }
+  }
+
   const handleDeleteMovement = async (movementId: string) => {
     if (!canManageMovements) {
       return
@@ -281,12 +289,21 @@ export const MovementsPage = () => {
 
   return (
     <section className="space-y-6">
-      <header>
-        <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
-        <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
-        <p className="text-sm text-slate-600">
-          Carga los remitos de entrada o devolucion. Se intenta auto-lectura del PDF y luego podes corregir manualmente.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
+          <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
+          <p className="text-sm text-slate-600">
+            Carga los remitos de entrada o devolucion. Se intenta auto-lectura del PDF y luego podes corregir manualmente.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleExportBlankMovementPdf}
+          className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+        >
+          Imprimir remito en blanco
+        </button>
       </header>
 
       <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

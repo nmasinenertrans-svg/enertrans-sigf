@@ -209,3 +209,125 @@ export const exportMovementPdf = async ({ movement, units }: MovementPdfPayload)
   const fileCode = safeText(movement.remitoNumber) || movement.id.slice(0, 8)
   pdf.save(`Remito_${fileCode}.pdf`)
 }
+
+/**
+ * Mismo formato visual que exportMovementPdf pero sin datos de ningun
+ * movimiento — para imprimir en papel y completar a mano (respaldo cuando no
+ * hay conexion o se necesita cargar un remito fisico antes de tenerlo en el
+ * sistema).
+ */
+export const exportBlankMovementPdf = async (): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  let logoDataUrl: string | null = null
+
+  try {
+    logoDataUrl = await fetchImageAsDataUrl(enertransLogoUrl)
+  } catch {
+    logoDataUrl = null
+  }
+
+  addWatermark(pdf, logoDataUrl)
+
+  const pageWidth = pdf.internal.pageSize.getWidth()
+  const pageHeight = pdf.internal.pageSize.getHeight()
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(12)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text('ENERTRANS S.R.L.', 44, 14)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7)
+  pdf.text('Direccion: Valentin Gomez N° 577', 44, 19)
+  pdf.text('Haedo (1706) - Bs. As. - Argentina', 44, 23)
+  pdf.text('Tel. (011) 4483-2061', 44, 27)
+  pdf.text('contacto@enertrans.com.ar', 44, 31)
+
+  if (logoDataUrl) {
+    try {
+      pdf.addImage(logoDataUrl, 'PNG', 10, 8, 30, 30)
+    } catch {
+      // ignore
+    }
+  }
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(11)
+  pdf.text('REMITO', pageWidth - 55, 18)
+  pdf.setDrawColor(60, 60, 60)
+  pdf.line(pageWidth - 40, 24, pageWidth - 12, 24)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.text('N°', pageWidth - 55, 24)
+  pdf.line(pageWidth - 40, 31, pageWidth - 12, 31)
+  pdf.text('Fecha:', pageWidth - 55, 31)
+  pdf.text('DOCUMENTO NO VALIDO COMO FACTURA', pageWidth - 72, 12)
+
+  let y = 42
+  pdf.setDrawColor(120, 120, 120)
+  pdf.rect(10, y, pageWidth - 20, 22)
+  pdf.setFontSize(8)
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('CLIENTE:', 12, y + 5)
+  pdf.text('C.U.I.T.:', 85, y + 5)
+  pdf.text('TELEFONO:', 135, y + 5)
+  pdf.text('LUGAR DE TRABAJO:', 12, y + 12)
+  pdf.text('EQUIPO:', 12, y + 19)
+  pdf.setDrawColor(120, 120, 120)
+  pdf.line(30, y + 6, 82, y + 6)
+  pdf.line(101, y + 6, 132, y + 6)
+  pdf.line(152, y + 6, pageWidth - 12, y + 6)
+  pdf.line(42, y + 13, pageWidth - 12, y + 13)
+  pdf.line(23, y + 20, pageWidth - 12, y + 20)
+
+  y += 28
+  const tableX = 10
+  const qtyW = 22
+  const tableW = pageWidth - 20
+  const descW = tableW - qtyW
+  const headerH = 6
+  const bodyH = 94
+  pdf.setFillColor(242, 242, 242)
+  pdf.rect(tableX, y, tableW, headerH, 'F')
+  pdf.rect(tableX, y, qtyW, headerH)
+  pdf.rect(tableX + qtyW, y, descW, headerH)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.text('CANTIDAD', tableX + 2, y + 4)
+  pdf.text('DESCRIPCION', tableX + qtyW + 2, y + 4)
+  drawLinesBox(pdf, tableX, y + headerH, qtyW, bodyH)
+  drawLinesBox(pdf, tableX + qtyW, y + headerH, descW, bodyH)
+
+  y += headerH + bodyH + 6
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.text('Observaciones:', 12, y)
+  const obsY = y + 4
+  drawLinesBox(pdf, 10, obsY - 2, pageWidth - 20, 24)
+
+  const sigY = Math.min(pageHeight - 36, obsY + 36)
+  pdf.setDrawColor(60, 60, 60)
+  pdf.line(15, sigY, pageWidth / 2 - 10, sigY)
+  pdf.line(pageWidth / 2 + 10, sigY, pageWidth - 15, sigY)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.text('FIRMA ENTREGA', 15, sigY - 2)
+  pdf.text('FIRMA RECEPCION', pageWidth / 2 + 10, sigY - 2)
+
+  const leftY = sigY + 6
+  const rightX = pageWidth / 2 + 10
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7)
+
+  pdf.text('Nombre y Apellido:', 15, leftY)
+  pdf.text('DNI:', 15, leftY + 5)
+  pdf.text('Sector:', 15, leftY + 10)
+  pdf.text('Cargo:', 15, leftY + 15)
+
+  pdf.text('Nombre y Apellido:', rightX, leftY)
+  pdf.text('DNI:', rightX, leftY + 5)
+  pdf.text('Sector:', rightX, leftY + 10)
+  pdf.text('Cargo:', rightX, leftY + 15)
+
+  pdf.save('Remito_en_blanco.pdf')
+}
