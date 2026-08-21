@@ -47,7 +47,7 @@ describe('offline sync hardening', () => {
     vi.clearAllMocks()
   })
 
-  it('drops non-retryable items on 422', async () => {
+  it('keeps non-retryable items in queue on 422 instead of silently dropping them', async () => {
     const item = {
       id: 'fleet.create.1',
       type: 'fleet.create',
@@ -61,13 +61,44 @@ describe('offline sync hardening', () => {
     const { syncQueue } = await importSync()
     await syncQueue()
 
+    expect(queueMocks.removeQueueItem).not.toHaveBeenCalled()
+    expect(queueMocks.updateQueueItem).toHaveBeenCalledWith(
+      item.id,
+      expect.objectContaining({
+        attemptCount: 1,
+        blocked: false,
+      }),
+    )
+    expect(telemetryMocks.recordSyncTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'sync.failure',
+        itemType: item.type,
+        statusCode: 422,
+      }),
+    )
+  })
+
+  it('drops audit.create on 409 (server already has it, self-heal)', async () => {
+    const item = {
+      id: 'audit.create.1',
+      type: 'audit.create',
+      payload: { id: 'a-1' },
+      createdAt: new Date().toISOString(),
+      attemptCount: 0,
+    }
+    queueMocks.getQueueItems.mockResolvedValue([item])
+    apiMocks.apiRequest.mockRejectedValue(new apiMocks.ApiRequestError({ status: 409, responseBody: 'Conflict' }))
+
+    const { syncQueue } = await importSync()
+    await syncQueue()
+
     expect(queueMocks.removeQueueItem).toHaveBeenCalledWith(item.id)
     expect(queueMocks.updateQueueItem).not.toHaveBeenCalled()
     expect(telemetryMocks.recordSyncTelemetry).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'sync.dropped',
         itemType: item.type,
-        statusCode: 422,
+        statusCode: 409,
       }),
     )
   })

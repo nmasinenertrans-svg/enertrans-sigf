@@ -175,8 +175,14 @@ export const validateRepairFormData = (
   if (formData.sourceType === 'WORK_ORDER') {
     if (!formData.workOrderId) {
       validationErrors.workOrderId = 'Debes seleccionar una OT.'
-    } else if (!workOrders.some((workOrder) => workOrder.id === formData.workOrderId)) {
-      validationErrors.workOrderId = 'La OT seleccionada no existe.'
+    } else {
+      const matchedWorkOrder = workOrders.find((workOrder) => workOrder.id === formData.workOrderId)
+      if (!matchedWorkOrder) {
+        validationErrors.workOrderId = 'La OT seleccionada no existe.'
+      } else if (!matchedWorkOrder.unitId) {
+        validationErrors.workOrderId =
+          'Esa OT es de un vehiculo externo, sin unidad de flota vinculada. No se puede crear una reparacion de flota desde ella.'
+      }
     }
   } else {
     if (!Array.isArray(formData.linkedExternalRequestIds) || formData.linkedExternalRequestIds.length === 0) {

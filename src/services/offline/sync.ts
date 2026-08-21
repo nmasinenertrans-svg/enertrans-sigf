@@ -324,22 +324,16 @@ const classifySyncError = (item: OfflineQueueItem, error: unknown) => {
     return { shouldDrop: true, message: `409 conflicto: inspeccion ya existente en servidor.` }
   }
 
-  if (item.type === 'audit.create' && NON_RETRYABLE_STATUS_CODES.has(statusCode)) {
-    return {
-      shouldDrop: false,
-      message: `${statusCode} error en inspeccion. Se conserva en cola para revision y reintento manual.`,
-    }
-  }
-
-  if (item.type === 'fleet.update' && statusCode === 400) {
-    return {
-      shouldDrop: false,
-      message: '400 en fleet.update. Se conserva en cola para reintento manual.',
-    }
-  }
-
+  // Un guardado rechazado por el servidor (400/404/409/422) nunca se descarta
+  // en silencio: eso significaba perder el dato sin dejar rastro visible para
+  // el usuario. Se conserva en cola, se marca "Bloqueado" tras agotar los
+  // reintentos (contador visible en el encabezado) y queda disponible para
+  // reintento manual.
   if (NON_RETRYABLE_STATUS_CODES.has(statusCode)) {
-    return { shouldDrop: true, message: `${statusCode} error no recuperable para ${item.type}.` }
+    return {
+      shouldDrop: false,
+      message: `${statusCode} error no recuperable para ${item.type}. Se conserva en cola para revision y reintento manual.`,
+    }
   }
 
   return { shouldDrop: false, message: message || `${statusCode} error recuperable al sincronizar.` }
