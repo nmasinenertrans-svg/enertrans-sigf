@@ -146,6 +146,8 @@ export const TasksPage = () => {
 
   const isManager = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
   const canViewTasks = can('TASKS', 'view')
+  const canDeleteTasks = ['nmasin', 'rbottero'].includes((currentUser?.username ?? '').trim().toLowerCase())
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
   const assignableUsers = useMemo(
     () =>
@@ -315,6 +317,24 @@ export const TasksPage = () => {
       setAppError(String((error as Error)?.message ?? 'No se pudo asignar la tarea.'))
     } finally {
       setAssigningTaskId(null)
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!canDeleteTasks) {
+      return
+    }
+    if (!window.confirm('¿Eliminar esta tarea? Esta acción no se puede deshacer.')) {
+      return
+    }
+    setDeletingTaskId(taskId)
+    try {
+      await apiRequest(`/tasks/${taskId}`, { method: 'DELETE' })
+      setTasks((previous) => previous.filter((task) => task.id !== taskId))
+    } catch (error) {
+      setAppError(String((error as Error)?.message ?? 'No se pudo eliminar la tarea.'))
+    } finally {
+      setDeletingTaskId(null)
     }
   }
 
@@ -818,6 +838,16 @@ export const TasksPage = () => {
                         >
                           Descargar PDF
                         </button>
+                        {canDeleteTasks ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTask(task.id)}
+                            disabled={deletingTaskId === task.id}
+                            className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                          >
+                            {deletingTaskId === task.id ? 'Eliminando...' : 'Eliminar'}
+                          </button>
+                        ) : null}
                       </div>
 
                       {isManager ? (
@@ -953,6 +983,16 @@ export const TasksPage = () => {
                                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                               >
                                 Editar
+                              </button>
+                            ) : null}
+                            {canDeleteTasks ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTask(task.id)}
+                                disabled={deletingTaskId === task.id}
+                                className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                              >
+                                {deletingTaskId === task.id ? 'Eliminando...' : 'Eliminar'}
                               </button>
                             ) : null}
                           </div>

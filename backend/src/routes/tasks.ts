@@ -68,9 +68,11 @@ const commentSchema = z.object({
 
 const managerRoles = new Set<UserRole>(['DEV', 'GERENTE'])
 const bankTakerRoles = new Set<UserRole>(['AUDITOR', 'MECANICO'])
+const taskDeleteAllowedUsernames = new Set(['nmasin', 'rbottero'])
 
 const isManagerRole = (role: UserRole) => managerRoles.has(role)
 const canTakeFromBankRole = (role: UserRole) => bankTakerRoles.has(role)
+const canDeleteTasks = (username: string) => taskDeleteAllowedUsernames.has(username.trim().toLowerCase())
 
 const canAccessTask = (
   actor: { id: string; role: UserRole },
@@ -89,7 +91,7 @@ const getAuthenticatedUser = async (req: AuthenticatedRequest) => {
   }
   return prisma.user.findUnique({
     where: { id: req.userId },
-    select: { id: true, role: true, fullName: true },
+    select: { id: true, role: true, fullName: true, username: true },
   })
 }
 
@@ -738,6 +740,33 @@ router.post('/:id/view', async (req: AuthenticatedRequest, res) => {
   } catch (error) {
     console.error('Tasks VIEW error:', error)
     return res.status(500).json({ message: 'No se pudo marcar la tarea como vista.' })
+  }
+})
+
+router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+  const actor = await getAuthenticatedUser(req)
+  if (!actor) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+  if (!canDeleteTasks(actor.username)) {
+    return res.status(403).json({ message: 'No tenes permisos para eliminar tareas.' })
+  }
+
+  const rawTaskId = req.params.id
+  const taskId = Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId
+  if (!taskId) {
+    return res.status(400).json({ message: 'Id de tarea requerido.' })
+  }
+
+  try {
+    await prisma.task.delete({ where: { id: taskId } })
+    return res.status(204).send()
+  } catch (error) {
+    if (getErrorCode(error) === 'P2025') {
+      return res.status(404).json({ message: 'Tarea no encontrada.' })
+    }
+    console.error('Tasks DELETE error:', error)
+    return res.status(500).json({ message: 'No se pudo eliminar la tarea.' })
   }
 })
 
