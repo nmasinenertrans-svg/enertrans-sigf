@@ -8,6 +8,7 @@ import type { AuthenticatedRequest } from '../middleware/auth.js'
 const router = Router()
 
 const invoiceCreateSchema = z.object({
+  id: z.string().min(1).optional(),
   providerName: z.string().min(1),
   supplierId: z.string().nullable().optional(),
   invoiceNumber: z.string().optional().default(''),
@@ -136,6 +137,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     const item = await prisma.$transaction(async (tx) => {
       const created = await tx.invoice.create({
         data: {
+          id: parsed.data.id || undefined,
           code,
           providerName: parsed.data.providerName.trim(),
           supplierId: parsed.data.supplierId || null,
@@ -160,6 +162,18 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     })
     return res.status(201).json(mapInvoice(item as unknown as Record<string, unknown>))
   } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2002' && parsed.data.id) {
+      // Reintento de sincronizacion offline con el mismo id ya generado por el
+      // cliente: la factura ya se creo antes (la primera respuesta se perdio
+      // en el camino). Se devuelve la existente en vez de duplicarla.
+      const existing = await prisma.invoice.findUnique({
+        where: { id: parsed.data.id },
+        include: { createdBy: { select: { fullName: true } } },
+      })
+      if (existing) {
+        return res.status(200).json(mapInvoice(existing as unknown as Record<string, unknown>))
+      }
+    }
     if (getErrorCode(error) === 'P2003') {
       return res.status(400).json({ message: 'Reparacion o unidad vinculada invalida.' })
     }

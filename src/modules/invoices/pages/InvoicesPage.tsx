@@ -133,6 +133,36 @@ export const InvoicesPage = () => {
       return
     }
 
+    // Aviso de posible duplicado: mismo proveedor + mismo N° de factura ya
+    // cargado. No se bloquea (a veces hay que corregir una carga anterior),
+    // pero se muestra el dato existente para que no se vuelva a cargar sin
+    // querer el mismo comprobante en papel dos veces.
+    if (formData.invoiceNumber.trim()) {
+      const normalizedProvider = formData.providerName.trim().toLowerCase()
+      const normalizedNumber = formData.invoiceNumber.trim().toLowerCase()
+      const duplicate = invoices.find(
+        (item) =>
+          item.providerName.trim().toLowerCase() === normalizedProvider &&
+          (item.invoiceNumber ?? '').trim().toLowerCase() === normalizedNumber,
+      )
+      if (duplicate) {
+        const existingAmount = new Intl.NumberFormat('es-AR', {
+          style: 'currency',
+          currency: duplicate.currency,
+          maximumFractionDigits: 0,
+        }).format(duplicate.amount)
+        const existingDate = duplicate.createdAt ? new Date(duplicate.createdAt).toLocaleDateString('es-AR') : '-'
+        const confirmed = window.confirm(
+          `Ya existe una factura de "${duplicate.providerName}" con el N° ${duplicate.invoiceNumber} ` +
+            `(${duplicate.code}, cargada el ${existingDate}, monto ${existingAmount}).\n\n` +
+            '¿Confirmás que querés cargarla igual?',
+        )
+        if (!confirmed) {
+          return
+        }
+      }
+    }
+
     let fileBase64 = ''
     let fileUrl = ''
     let fileName = ''
