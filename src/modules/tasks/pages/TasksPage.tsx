@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -176,7 +176,7 @@ export const TasksPage = () => {
       .slice(0, 8)
   }, [fleetUnits, unitSearch])
 
-  const { isLoading } = useAsyncLoader(
+  const { isLoading, reload } = useAsyncLoader(
     async (getMounted) => {
       if (!canViewTasks) return
       try {
@@ -189,6 +189,40 @@ export const TasksPage = () => {
     },
     [canViewTasks, setAppError],
   )
+
+  const lastAutoRefreshAtRef = useRef(0)
+
+  useEffect(() => {
+    if (!canViewTasks) {
+      return
+    }
+    // El estado/asignacion de una tarea lo puede cambiar otra persona en cualquier momento
+    // (el asignado, otro manager, etc.); sin esto la lista quedaba mostrando datos viejos
+    // hasta que alguien recargaba la pagina a mano.
+    const intervalId = window.setInterval(() => {
+      lastAutoRefreshAtRef.current = Date.now()
+      reload()
+    }, 30000)
+
+    const handleVisibilityRegain = () => {
+      if (document.visibilityState !== 'visible') {
+        return
+      }
+      if (Date.now() - lastAutoRefreshAtRef.current < 15000) {
+        return
+      }
+      lastAutoRefreshAtRef.current = Date.now()
+      reload()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityRegain)
+    window.addEventListener('focus', handleVisibilityRegain)
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityRegain)
+      window.removeEventListener('focus', handleVisibilityRegain)
+    }
+  }, [canViewTasks, reload])
 
   const resetForm = () => {
     setEditingTaskId(null)

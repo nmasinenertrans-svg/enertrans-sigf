@@ -69,10 +69,12 @@ const commentSchema = z.object({
 const managerRoles = new Set<UserRole>(['DEV', 'GERENTE'])
 const bankTakerRoles = new Set<UserRole>(['AUDITOR', 'MECANICO'])
 const taskDeleteAllowedUsernames = new Set(['nmasin', 'rbottero'])
+const taskFullVisibilityUsernames = new Set(['rbottero', 'nmasin', 'emoreno', 'crivas', 'mpinto'])
 
 const isManagerRole = (role: UserRole) => managerRoles.has(role)
 const canTakeFromBankRole = (role: UserRole) => bankTakerRoles.has(role)
 const canDeleteTasks = (username: string) => taskDeleteAllowedUsernames.has(username.trim().toLowerCase())
+const hasFullTaskVisibility = (username: string) => taskFullVisibilityUsernames.has(username.trim().toLowerCase())
 
 const canAccessTask = (
   actor: { id: string; role: UserRole },
@@ -203,12 +205,22 @@ const buildTaskEventsFromDiff = (params: {
   return events
 }
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: AuthenticatedRequest, res) => {
+  const actor = await getAuthenticatedUser(req)
+  if (!actor) {
+    return res.status(401).json({ message: 'No autorizado.' })
+  }
+
   try {
     const { unitId } = req.query
     const where: Record<string, unknown> = {}
     if (typeof unitId === 'string' && unitId) {
       where.unitId = unitId
+    }
+    // Solo un grupo acotado de usuarios ve el listado completo de tareas de todos.
+    // El resto ve unicamente el banco (disponibles para tomar) y lo que se le asigno a el.
+    if (!hasFullTaskVisibility(actor.username)) {
+      where.OR = [{ isInTaskBank: true }, { assignedToUserId: actor.id }]
     }
     const items = await prisma.task.findMany({
       where,
