@@ -212,6 +212,13 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
   }
 
   try {
+    // Se marca "vista" automaticamente apenas el asignado consulta su lista de
+    // tareas, no hace falta que abra a mano el detalle/historico.
+    await prisma.task.updateMany({
+      where: { assignedToUserId: actor.id, viewedAt: null },
+      data: { viewedAt: new Date(), viewedByUserId: actor.id },
+    })
+
     const { unitId } = req.query
     const where: Record<string, unknown> = {}
     if (typeof unitId === 'string' && unitId) {

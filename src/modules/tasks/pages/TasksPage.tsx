@@ -147,6 +147,9 @@ export const TasksPage = () => {
   const isManager = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
   const canViewTasks = can('TASKS', 'view')
   const canDeleteTasks = ['nmasin', 'rbottero'].includes((currentUser?.username ?? '').trim().toLowerCase())
+  const isTaskAdmin = ['rbottero', 'nmasin', 'emoreno', 'crivas', 'mpinto'].includes(
+    (currentUser?.username ?? '').trim().toLowerCase(),
+  )
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
   const assignableUsers = useMemo(
@@ -990,7 +993,7 @@ export const TasksPage = () => {
                               Inicio: {formatDateOnly(task.startDate || task.createdAt)} | Fin aprox.:{' '}
                               {formatDateOnly(task.estimatedFinishDate)}
                             </p>
-                            {task.assignedToUserId ? (
+                            {task.assignedToUserId && isTaskAdmin ? (
                               <p className="mt-1 text-xs">
                                 {task.viewedAt ? (
                                   <span className="font-semibold text-emerald-700">
