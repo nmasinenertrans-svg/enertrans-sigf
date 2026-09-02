@@ -1038,7 +1038,8 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   }
 
   // Tareas: asignacion a terceros sin usuario del sistema + fechas de plan (inicio/fin aprox)
-  // + chat/notas por tarea (TaskEvent tipo COMMENT) + registro de "visto" por el asignado.
+  // + chat/notas por tarea (TaskEvent tipo COMMENT) + registro de "visto" por el asignado
+  // + tipo de tarea y vinculacion a una unidad de flota.
   const hasTaskTable = await tableExistsInActiveSchema('Task')
   if (hasTaskTable) {
     const taskSchema = quoteIdentifier(getNormalizedActiveSchema())
@@ -1048,12 +1049,19 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       ['estimatedFinishDate', 'TIMESTAMP(3)'],
       ['viewedAt', 'TIMESTAMP(3)'],
       ['viewedByUserId', 'TEXT'],
+      ['type', `TEXT NOT NULL DEFAULT 'OTRA'`],
+      ['unitId', 'TEXT'],
     ] as const) {
       try {
         await prisma.$executeRawUnsafe(`ALTER TABLE ${taskSchema}."Task" ADD COLUMN IF NOT EXISTS "${col}" ${type}`)
       } catch (err) {
         console.warn(`[DB] ADD COLUMN Task.${col}:`, err)
       }
+    }
+    try {
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Task_unitId_idx" ON ${taskSchema}."Task"("unitId")`)
+    } catch (err) {
+      console.warn('[DB] CREATE INDEX Task_unitId_idx:', err)
     }
   }
   const hasTaskEventTable = await tableExistsInActiveSchema('TaskEvent')

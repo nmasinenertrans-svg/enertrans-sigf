@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { TaskEventType, TaskPriority, TaskStatus, UserRole } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '../db.js'
+import { getErrorCode } from '../utils/errors.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { sendPushToUser } from '../services/webPush.js'
 
@@ -9,12 +10,24 @@ const router = Router()
 
 const taskStatusValues = ['UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELED'] as const
 const taskPriorityValues = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const
+const taskTypeValues = [
+  'REVISION_CHECKLIST',
+  'RTO',
+  'ENTREGA',
+  'RETIRO_DEVOLUCION',
+  'REPARACION',
+  'MANTENIMIENTO',
+  'ADMINISTRATIVA',
+  'OTRA',
+] as const
 
 const createTaskSchema = z.object({
   title: z.string().optional().default(''),
   description: z.string().min(1),
   status: z.enum(taskStatusValues).optional().default('UNASSIGNED'),
   priority: z.enum(taskPriorityValues).optional().default('MEDIUM'),
+  type: z.enum(taskTypeValues).optional().default('OTRA'),
+  unitId: z.string().nullable().optional(),
   assignedToUserId: z.string().uuid().nullable().optional(),
   assignedToExternalName: z.string().max(120).optional().default(''),
   isInTaskBank: z.boolean().optional().default(false),
@@ -27,6 +40,8 @@ const updateTaskSchema = z.object({
   description: z.string().min(1).optional(),
   status: z.enum(taskStatusValues).optional(),
   priority: z.enum(taskPriorityValues).optional(),
+  type: z.enum(taskTypeValues).optional(),
+  unitId: z.string().nullable().optional(),
   assignedToUserId: z.string().uuid().nullable().optional(),
   assignedToExternalName: z.string().max(120).optional(),
   isInTaskBank: z.boolean().optional(),
@@ -83,6 +98,8 @@ const mapTask = (task: any) => ({
   description: task.description ?? '',
   status: task.status,
   priority: task.priority,
+  type: task.type ?? 'OTRA',
+  unitId: task.unitId ?? null,
   assignedToUserId: task.assignedToUserId ?? null,
   assignedToUserName: task.assignedTo?.fullName ?? '',
   assignedToExternalName: task.assignedToExternalName ?? '',
@@ -183,9 +200,15 @@ const buildTaskEventsFromDiff = (params: {
   return events
 }
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
+    const { unitId } = req.query
+    const where: Record<string, unknown> = {}
+    if (typeof unitId === 'string' && unitId) {
+      where.unitId = unitId
+    }
     const items = await prisma.task.findMany({
+      where,
       orderBy: [{ isInTaskBank: 'desc' }, { updatedAt: 'desc' }],
       include: includeTaskRelations,
     })
@@ -239,6 +262,8 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           description: parsed.data.description.trim(),
           status,
           priority: parsed.data.priority as TaskPriority,
+          type: parsed.data.type,
+          unitId: parsed.data.unitId || null,
           assignedToUserId,
           assignedToExternalName,
           assignedByUserId,
@@ -298,6 +323,9 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
 
     return res.status(201).json(mapTask(task))
   } catch (error) {
+    if (getErrorCode(error) === 'P2003') {
+      return res.status(400).json({ message: 'La unidad vinculada no es valida.' })
+    }
     console.error('Tasks POST error:', error)
     return res.status(500).json({ message: 'No se pudo crear la tarea.' })
   }
@@ -352,6 +380,8 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     let nextIsInTaskBank = patchData.isInTaskBank !== undefined ? patchData.isInTaskBank : current.isInTaskBank
     let nextStatus = (patchData.status ?? current.status) as TaskStatus
     const nextPriority = (patchData.priority ?? current.priority) as TaskPriority
+    const nextType = patchData.type ?? current.type
+    const nextUnitId = patchData.unitId !== undefined ? (patchData.unitId || null) : current.unitId
     let nextStartDate =
       patchData.startDate !== undefined ? (parseOptionalDate(patchData.startDate) ?? current.startDate) : current.startDate
     let nextEstimatedFinishDate =
@@ -418,6 +448,8 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
           description: nextDescription,
           status: nextStatus,
           priority: nextPriority,
+          type: nextType,
+          unitId: nextUnitId,
           assignedToUserId: nextAssignedToUserId,
           assignedToExternalName: nextAssignedToExternalName,
           assignedByUserId: nextAssignedByUserId,
@@ -444,7 +476,9 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       const changedTextOrPriority =
         current.title !== nextTitle ||
         current.description !== nextDescription ||
-        current.priority !== nextPriority
+        current.priority !== nextPriority ||
+        current.type !== nextType ||
+        current.unitId !== nextUnitId
 
       if (changedTextOrPriority) {
         events.push({
@@ -486,6 +520,9 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
 
     return res.json(mapTask(task))
   } catch (error) {
+    if (getErrorCode(error) === 'P2003') {
+      return res.status(400).json({ message: 'La unidad vinculada no es valida.' })
+    }
     console.error('Tasks PATCH error:', error)
     return res.status(500).json({ message: 'No se pudo actualizar la tarea.' })
   }

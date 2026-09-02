@@ -249,6 +249,7 @@ model FleetUnit {
   rentalContracts          RentalContract[]
   handoverChecklists       HandoverChecklist[]
   tires                    Tire[]
+  tasks                    Task[]              @relation("TaskUnit")
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -488,6 +489,8 @@ model Task {
   description      String
   status           TaskStatus   @default(UNASSIGNED)
   priority         TaskPriority @default(MEDIUM)
+  type             String       @default("OTRA")
+  unitId           String?
   assignedToUserId String?
   assignedToExternalName String @default("")
   assignedByUserId String?
@@ -505,12 +508,14 @@ model Task {
   assignedBy User?      @relation("TaskAssignedBy", fields: [assignedByUserId], references: [id])
   createdBy  User       @relation("TaskCreatedBy", fields: [createdByUserId], references: [id])
   viewedBy   User?      @relation("TaskViewedBy", fields: [viewedByUserId], references: [id])
+  unit       FleetUnit? @relation("TaskUnit", fields: [unitId], references: [id])
   events     TaskEvent[]
 
   @@index([status])
   @@index([priority])
   @@index([assignedToUserId])
   @@index([isInTaskBank])
+  @@index([unitId])
 }
 
 model TaskEvent {

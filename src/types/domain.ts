@@ -80,6 +80,18 @@ export type TaskStatus = (typeof taskStatuses)[number]
 export const taskPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const
 export type TaskPriority = (typeof taskPriorities)[number]
 
+export const taskTypes = [
+  'REVISION_CHECKLIST',
+  'RTO',
+  'ENTREGA',
+  'RETIRO_DEVOLUCION',
+  'REPARACION',
+  'MANTENIMIENTO',
+  'ADMINISTRATIVA',
+  'OTRA',
+] as const
+export type TaskType = (typeof taskTypes)[number]
+
 export const taskEventTypes = [
   'CREATED',
   'UPDATED',
@@ -742,6 +754,8 @@ export interface TaskRecord {
   description: string
   status: TaskStatus
   priority: TaskPriority
+  type: TaskType
+  unitId?: string | null
   assignedToUserId?: string | null
   assignedToUserName?: string
   assignedToExternalName?: string

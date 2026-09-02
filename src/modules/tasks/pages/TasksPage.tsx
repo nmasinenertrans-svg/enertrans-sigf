@@ -5,7 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
-import type { TaskPriority, TaskRecord, TaskStatus } from '../../../types/domain'
+import type { TaskPriority, TaskRecord, TaskStatus, TaskType } from '../../../types/domain'
 import { downloadTaskPdf, downloadTasksSummaryPdf } from '../services/tasksPdfService'
 
 type TaskFormData = {
@@ -13,6 +13,8 @@ type TaskFormData = {
   description: string
   status: TaskStatus
   priority: TaskPriority
+  type: TaskType
+  unitId: string
   assignedToUserId: string
   assignedToExternalName: string
   isInTaskBank: boolean
@@ -43,6 +45,17 @@ const priorityBadgeMap: Record<TaskPriority, string> = {
   URGENT: 'border-rose-200 bg-rose-50 text-rose-700',
 }
 
+const taskTypeLabelMap: Record<TaskType, string> = {
+  REVISION_CHECKLIST: 'Revisión / Checklist',
+  RTO: 'RTO',
+  ENTREGA: 'Entrega',
+  RETIRO_DEVOLUCION: 'Retiro / Devolución',
+  REPARACION: 'Reparación / Acondicionamiento',
+  MANTENIMIENTO: 'Mantenimiento',
+  ADMINISTRATIVA: 'Administrativa',
+  OTRA: 'Otra',
+}
+
 const toDateInputValue = (value?: string | null): string => {
   if (!value) {
     return ''
@@ -61,6 +74,8 @@ const createEmptyForm = (): TaskFormData => ({
   description: '',
   status: 'UNASSIGNED',
   priority: 'MEDIUM',
+  type: 'OTRA',
+  unitId: '',
   assignedToUserId: '',
   assignedToExternalName: '',
   isInTaskBank: true,
@@ -107,7 +122,7 @@ const taskEventTypeLabelMap: Partial<Record<string, string>> = {
 export const TasksPage = () => {
   const { currentUser, can } = usePermissions()
   const {
-    state: { users },
+    state: { users, fleetUnits },
     actions: { setAppError },
   } = useAppContext()
 
@@ -115,9 +130,12 @@ export const TasksPage = () => {
   const [isSaving, setIsSaving] = useState(false)
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [formData, setFormData] = useState<TaskFormData>(createEmptyForm)
+  const [unitSearch, setUnitSearch] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'ALL' | TaskStatus>('ALL')
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | TaskPriority>('ALL')
+  const [typeFilter, setTypeFilter] = useState<'ALL' | TaskType>('ALL')
+  const [unitFilter, setUnitFilter] = useState<string>('ALL')
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL')
   const [bankFilter, setBankFilter] = useState<'ALL' | 'BANK' | 'ASSIGNED'>('ALL')
   const [assignDrafts, setAssignDrafts] = useState<Record<string, { userId: string; externalName: string }>>({})
@@ -133,6 +151,20 @@ export const TasksPage = () => {
     () => users.filter((user) => user.role === 'AUDITOR' || user.role === 'MECANICO' || user.role === 'COORDINADOR'),
     [users],
   )
+
+  const fleetUnitById = useMemo(() => new Map(fleetUnits.map((unit) => [unit.id, unit])), [fleetUnits])
+
+  const selectedFormUnit = formData.unitId ? fleetUnitById.get(formData.unitId) : undefined
+
+  const filteredFormUnits = useMemo(() => {
+    const query = unitSearch.trim().toLowerCase()
+    if (!query) {
+      return fleetUnits.slice(0, 8)
+    }
+    return fleetUnits
+      .filter((unit) => `${unit.internalCode} ${unit.brand} ${unit.model}`.toLowerCase().includes(query))
+      .slice(0, 8)
+  }, [fleetUnits, unitSearch])
 
   const { isLoading } = useAsyncLoader(
     async (getMounted) => {
@@ -151,6 +183,7 @@ export const TasksPage = () => {
   const resetForm = () => {
     setEditingTaskId(null)
     setFormData(createEmptyForm())
+    setUnitSearch('')
   }
 
   const handleFormChange = <K extends keyof TaskFormData>(field: K, value: TaskFormData[K]) => {
@@ -172,6 +205,8 @@ export const TasksPage = () => {
         description: formData.description.trim(),
         status: formData.status,
         priority: formData.priority,
+        type: formData.type,
+        unitId: formData.unitId || null,
         assignedToUserId: formData.assignedToUserId || null,
         assignedToExternalName: formData.assignedToExternalName.trim(),
         isInTaskBank: formData.isInTaskBank,
@@ -203,11 +238,14 @@ export const TasksPage = () => {
       return
     }
     setEditingTaskId(task.id)
+    setUnitSearch('')
     setFormData({
       title: task.title ?? '',
       description: task.description ?? '',
       status: task.status,
       priority: task.priority,
+      type: task.type ?? 'OTRA',
+      unitId: task.unitId ?? '',
       assignedToUserId: task.assignedToUserId ?? '',
       assignedToExternalName: task.assignedToExternalName ?? '',
       isInTaskBank: Boolean(task.isInTaskBank),
@@ -322,6 +360,12 @@ export const TasksPage = () => {
       if (priorityFilter !== 'ALL' && task.priority !== priorityFilter) {
         return false
       }
+      if (typeFilter !== 'ALL' && task.type !== typeFilter) {
+        return false
+      }
+      if (unitFilter !== 'ALL' && (task.unitId ?? '') !== unitFilter) {
+        return false
+      }
       if (assigneeFilter !== 'ALL' && (task.assignedToUserId ?? '') !== assigneeFilter) {
         return false
       }
@@ -334,6 +378,7 @@ export const TasksPage = () => {
       if (!query) {
         return true
       }
+      const unit = task.unitId ? fleetUnitById.get(task.unitId) : undefined
       const haystack = [
         task.title,
         task.description,
@@ -342,12 +387,16 @@ export const TasksPage = () => {
         task.assignedToExternalName,
         statusLabelMap[task.status],
         priorityLabelMap[task.priority],
+        taskTypeLabelMap[task.type],
+        unit?.internalCode,
+        unit?.brand,
+        unit?.model,
       ]
         .join(' ')
         .toLowerCase()
       return haystack.includes(query)
     })
-  }, [tasks, statusFilter, priorityFilter, assigneeFilter, bankFilter, searchTerm])
+  }, [tasks, statusFilter, priorityFilter, typeFilter, unitFilter, assigneeFilter, bankFilter, searchTerm, fleetUnitById])
 
   const bankTasks = useMemo(
     () => filteredTasks.filter((task) => task.isInTaskBank && !task.assignedToUserId),
@@ -400,7 +449,7 @@ export const TasksPage = () => {
                 />
               </label>
 
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
                   Estado
                   <select
@@ -430,7 +479,64 @@ export const TasksPage = () => {
                     ))}
                   </select>
                 </label>
+
+                <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                  Tipo de tarea
+                  <select
+                    value={formData.type}
+                    onChange={(event) => handleFormChange('type', event.target.value as TaskType)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  >
+                    {(Object.keys(taskTypeLabelMap) as TaskType[]).map((type) => (
+                      <option key={type} value={type}>
+                        {taskTypeLabelMap[type]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
+
+              <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                Unidad relacionada (opcional)
+                {selectedFormUnit ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <span>
+                      {selectedFormUnit.internalCode} · {selectedFormUnit.brand} {selectedFormUnit.model}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleFormChange('unitId', '')}
+                      className="font-semibold text-amber-700 hover:underline"
+                    >
+                      Quitar vínculo
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      value={unitSearch}
+                      onChange={(event) => setUnitSearch(event.target.value)}
+                      placeholder="Buscar por dominio, marca o modelo..."
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                    />
+                    <div className="max-h-32 space-y-1 overflow-y-auto">
+                      {filteredFormUnits.map((unit) => (
+                        <button
+                          key={unit.id}
+                          type="button"
+                          onClick={() => handleFormChange('unitId', unit.id)}
+                          className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                        >
+                          {unit.internalCode} · {unit.brand} {unit.model}
+                        </button>
+                      ))}
+                      {filteredFormUnits.length === 0 ? (
+                        <p className="px-1 text-xs text-slate-400">Sin resultados.</p>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </label>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
@@ -586,6 +692,36 @@ export const TasksPage = () => {
               </select>
             </label>
             <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Tipo
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value as 'ALL' | TaskType)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              >
+                <option value="ALL">Todos</option>
+                {(Object.keys(taskTypeLabelMap) as TaskType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {taskTypeLabelMap[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Unidad
+              <select
+                value={unitFilter}
+                onChange={(event) => setUnitFilter(event.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              >
+                <option value="ALL">Todas</option>
+                {fleetUnits.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.internalCode}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
               Persona
               <select
                 value={assigneeFilter}
@@ -643,6 +779,14 @@ export const TasksPage = () => {
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600">
                           {statusLabelMap[task.status]}
                         </span>
+                        <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                          {taskTypeLabelMap[task.type]}
+                        </span>
+                        {task.unitId && fleetUnitById.get(task.unitId) ? (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            {fleetUnitById.get(task.unitId)?.internalCode}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="mt-2 text-sm font-semibold text-slate-900">{task.title || 'Tarea sin titulo'}</p>
                       <p className="mt-1 text-sm text-slate-600">{task.description}</p>
@@ -748,6 +892,14 @@ export const TasksPage = () => {
                               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600">
                                 {statusLabelMap[task.status]}
                               </span>
+                              <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                                {taskTypeLabelMap[task.type]}
+                              </span>
+                              {task.unitId && fleetUnitById.get(task.unitId) ? (
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                  {fleetUnitById.get(task.unitId)?.internalCode}
+                                </span>
+                              ) : null}
                               {overdue ? (
                                 <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
                                   Vencida

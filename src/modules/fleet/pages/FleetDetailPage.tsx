@@ -18,6 +18,7 @@ import type { FleetUnit } from '../../../types/domain'
 import { FleetMovementsPanel } from '../components/FleetMovementsPanel'
 import { FleetGpsPanel } from '../components/FleetGpsPanel'
 import { FleetInvoicesPanel } from '../components/FleetInvoicesPanel'
+import { FleetTasksPanel } from '../components/FleetTasksPanel'
 import { StatusPill } from '../../../components/ui/StatusPill'
 import { resultLabelMap as auditResultLabelMap } from '../../audits/services/auditsService'
 
@@ -26,6 +27,7 @@ const detailTabs = [
   { id: 'audits', label: 'Inspecciones' },
   { id: 'workOrders', label: 'Ordenes de trabajo' },
   { id: 'repairs', label: 'Reparaciones' },
+  { id: 'tasks', label: 'Tareas' },
   { id: 'externalRequests', label: 'Notas externas' },
   { id: 'movements', label: 'Remitos' },
   { id: 'gpsTelemetry', label: 'GPS / Recorrido' },
@@ -1671,6 +1673,8 @@ export const FleetDetailPage = () => {
               )}
             </div>
           ) : null}
+
+          {activeTab === 'tasks' ? <FleetTasksPanel unitId={selectedUnit.id} /> : null}
 
           {activeTab === 'externalRequests' ? (
             <div className="space-y-2 text-sm text-slate-700">
