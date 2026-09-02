@@ -5,6 +5,7 @@ import { prisma } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { sendPushToUser } from '../services/webPush.js'
+import { pushUserNotifications } from '../services/userNotifications.js'
 
 const router = Router()
 
@@ -313,11 +314,20 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     })
 
     if (assignedToUserId) {
+      const taskLabel = parsed.data.title.trim() || parsed.data.description.trim()
       void sendPushToUser(assignedToUserId, {
         title: 'Te asignaron una tarea',
-        body: parsed.data.title.trim() || parsed.data.description.trim(),
+        body: taskLabel,
         url: '/tasks',
         tag: 'task-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([assignedToUserId], {
+        title: 'Te asignaron una tarea',
+        description: taskLabel,
+        severity: 'info',
+        target: '/tasks',
+        eventType: 'TASK_ASSIGNED',
+        actorUserId: actor.id,
       }).catch(() => undefined)
     }
 
@@ -510,11 +520,20 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     })
 
     if (nextAssignedToUserId && nextAssignedToUserId !== current.assignedToUserId) {
+      const taskLabel = nextTitle || nextDescription
       void sendPushToUser(nextAssignedToUserId, {
         title: 'Te asignaron una tarea',
-        body: nextTitle || nextDescription,
+        body: taskLabel,
         url: '/tasks',
         tag: 'task-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([nextAssignedToUserId], {
+        title: 'Te asignaron una tarea',
+        description: taskLabel,
+        severity: 'info',
+        target: '/tasks',
+        eventType: 'TASK_ASSIGNED',
+        actorUserId: actor.id,
       }).catch(() => undefined)
     }
 
@@ -653,6 +672,14 @@ router.post('/:id/comments', async (req: AuthenticatedRequest, res) => {
         body: parsed.data.message.slice(0, 140),
         url: '/tasks',
         tag: 'task-comment',
+      }).catch(() => undefined)
+      void pushUserNotifications([notifyUserId], {
+        title: `Nuevo mensaje de ${actor.fullName}`,
+        description: parsed.data.message.slice(0, 140),
+        severity: 'info',
+        target: '/tasks',
+        eventType: 'TASK_COMMENT',
+        actorUserId: actor.id,
       }).catch(() => undefined)
     }
 
