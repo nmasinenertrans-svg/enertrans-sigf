@@ -148,7 +148,15 @@ export const TasksPage = () => {
   const canViewTasks = can('TASKS', 'view')
 
   const assignableUsers = useMemo(
-    () => users.filter((user) => user.role === 'AUDITOR' || user.role === 'MECANICO' || user.role === 'COORDINADOR'),
+    () =>
+      users.filter(
+        (user) =>
+          user.role === 'AUDITOR' ||
+          user.role === 'MECANICO' ||
+          user.role === 'COORDINADOR' ||
+          user.role === 'GERENTE' ||
+          user.role === 'DEV',
+      ),
     [users],
   )
 
@@ -587,7 +595,7 @@ export const TasksPage = () => {
                   <option value="">Sin asignar</option>
                   {assignableUsers.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.fullName} ({user.role})
+                      {user.fullName}
                     </option>
                   ))}
                 </select>
@@ -824,7 +832,7 @@ export const TasksPage = () => {
                             <option value="">Seleccionar usuario...</option>
                             {assignableUsers.map((user) => (
                               <option key={user.id} value={user.id}>
-                                {user.fullName} ({user.role})
+                                {user.fullName}
                               </option>
                             ))}
                           </select>
