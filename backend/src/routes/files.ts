@@ -15,6 +15,33 @@ const deleteManySchema = z.object({
   paths: z.array(z.string().min(1)).max(500),
 })
 
+/**
+ * Supabase Storage rechaza ciertos caracteres en la key del objeto (ej. "°",
+ * espacios repetidos, etc. -> error "Invalid key"). Nombres de factura reales
+ * como "Factura A N° A00006-00013253.pdf" rompian la subida. Se sanitiza
+ * dejando solo letras/numeros/guion/guion bajo/punto, preservando la
+ * extension.
+ */
+const sanitizeFileName = (value: string): string => {
+  const trimmed = value.trim()
+  const lastDot = trimmed.lastIndexOf('.')
+  const hasExtension = lastDot > 0 && lastDot < trimmed.length - 1
+  const base = hasExtension ? trimmed.slice(0, lastDot) : trimmed
+  const extension = hasExtension ? trimmed.slice(lastDot + 1) : ''
+
+  const sanitize = (part: string) =>
+    part
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9-_]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+
+  const safeBase = sanitize(base) || 'archivo'
+  const safeExtension = sanitize(extension)
+  return safeExtension ? `${safeBase}.${safeExtension}` : safeBase
+}
+
 const parseStoragePath = (value: string): string | null => {
   const trimmed = value.trim()
   if (!trimmed) {
@@ -45,7 +72,7 @@ router.post('/upload', async (req, res) => {
 
   const buffer = Buffer.from(base64, 'base64')
   const safeFolder = folder?.trim() ? folder.trim() : 'uploads'
-  const objectName = `${safeFolder}/${Date.now()}-${fileName}`
+  const objectName = `${safeFolder}/${Date.now()}-${sanitizeFileName(fileName)}`
 
   try {
     const { error } = await supabase.storage
