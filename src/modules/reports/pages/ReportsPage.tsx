@@ -1433,14 +1433,17 @@ export const ReportsPage = () => {
         brand: unit.brand || '-',
         model: unit.model || '-',
         year: String(unit.year || '-'),
+        hydroCrane: unit.hasHydroCrane
+          ? [unit.hydroCraneBrand, unit.hydroCraneModel].filter(Boolean).join(' ') || 'Sí'
+          : '-',
         owner: normalizeOccupancyValue(unit.ownerCompany ?? '', 'Sin empresa'),
         client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
         type: getFleetUnitTypeLabel(unit.unitType),
         location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
       }))
 
-    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación']
-    const detailColumnWidths = [72, 82, 96, 42, 112, 112, 124, 120]
+    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Hidrogrúa', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación']
+    const detailColumnWidths = [68, 72, 82, 34, 120, 92, 92, 100, 100]
     const detailFontSize = 8
     const detailRowHeight = 20
     const tableWidth = detailColumnWidths.reduce((sum, width) => sum + width, 0)
@@ -1543,7 +1546,17 @@ export const ReportsPage = () => {
       }
 
       let x = margin
-      const values = [row.domain, row.brand, row.model, row.year, row.owner, row.client, row.type, row.location]
+      const values = [
+        row.domain,
+        row.brand,
+        row.model,
+        row.year,
+        row.hydroCrane,
+        row.owner,
+        row.client,
+        row.type,
+        row.location,
+      ]
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(detailFontSize)
       doc.setTextColor('#111827')
@@ -1601,13 +1614,28 @@ export const ReportsPage = () => {
         brand: unit.brand || '-',
         model: unit.model || '-',
         year: unit.year || '-',
+        hydroCraneLabel: unit.hasHydroCrane
+          ? [unit.hydroCraneBrand, unit.hydroCraneModel].filter(Boolean).join(' ') || 'Sí'
+          : '-',
+        hydroCraneSerial: unit.hasHydroCrane ? unit.hydroCraneSerialNumber || '-' : '-',
         owner: normalizeOccupancyValue(unit.ownerCompany ?? '', 'Sin empresa'),
         client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
         type: getFleetUnitTypeLabel(unit.unitType),
         location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
       }))
 
-    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación']
+    const detailHeaders = [
+      'Dominio',
+      'Marca',
+      'Modelo',
+      'Año',
+      'Hidrogrúa',
+      'N° Serie Hidrogrúa',
+      'Empresa prop.',
+      'Cliente',
+      'Tipo',
+      'Ubicación',
+    ]
     const detailAoa: Array<Array<string | number>> = [
       ['DETALLE DE DOMINIOS'],
       [`Listado de ${occupancyUnitRows.length} unidades ordenadas por ${groupLabel.toLowerCase()} y ${breakdownLabel.toLowerCase()}.`],
@@ -1629,7 +1657,18 @@ export const ReportsPage = () => {
         detailAoa.push([`${currentGroup} · ${currentBreakdown}`, `${sectionCount} unidad(es)`])
         detailAoa.push(detailHeaders)
       }
-      detailAoa.push([row.domain, row.brand, row.model, row.year, row.owner, row.client, row.type, row.location])
+      detailAoa.push([
+        row.domain,
+        row.brand,
+        row.model,
+        row.year,
+        row.hydroCraneLabel,
+        row.hydroCraneSerial,
+        row.owner,
+        row.client,
+        row.type,
+        row.location,
+      ])
     })
 
     const workbook = XLSX.utils.book_new()
