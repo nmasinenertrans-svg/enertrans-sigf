@@ -1,7 +1,7 @@
 ﻿import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { AuditRecord, FleetUnit } from '../../../types/domain'
-import { statusLabelMap } from './auditsService'
+import { CAMION_ITEMS, HIDROGUA_SECTIONS, statusLabelMap, type ChecklistItem } from './auditsService'
 
 interface AuditPdfPayload {
   audit: AuditRecord
@@ -261,5 +261,164 @@ export const exportAuditPdf = async ({ audit, unit }: AuditPdfPayload): Promise<
   }
 
   pdf.save(`Inspeccion_${audit.id}_${unit?.internalCode ?? 'unidad'}.pdf`)
+}
+
+const drawBlankInfoField = (pdf: jsPDF, label: string, x: number, y: number, lineWidth: number) => {
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text(label, x, y)
+  pdf.setDrawColor(120, 120, 120)
+  pdf.line(x + 22, y + 0.5, x + lineWidth, y + 0.5)
+}
+
+const drawChecklistTableHeader = (pdf: jsPDF, x: number, y: number, itemColWidth: number, boxWidth: number) => {
+  const totalWidth = itemColWidth + boxWidth * 3
+  pdf.setFillColor(242, 201, 76)
+  pdf.rect(x, y, totalWidth, 6, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text('ITEM', x + 2, y + 4.2)
+  pdf.text('B', x + itemColWidth + boxWidth / 2 - 1.5, y + 4.2)
+  pdf.text('OBS.', x + itemColWidth + boxWidth + boxWidth / 2 - 3, y + 4.2)
+  pdf.text('N/A', x + itemColWidth + boxWidth * 2 + boxWidth / 2 - 3, y + 4.2)
+}
+
+const drawChecklistItemRow = (
+  pdf: jsPDF,
+  item: ChecklistItem,
+  x: number,
+  y: number,
+  itemColWidth: number,
+  boxWidth: number,
+  rowHeight: number,
+) => {
+  pdf.setDrawColor(210, 210, 210)
+  pdf.rect(x, y, itemColWidth + boxWidth * 3, rowHeight)
+  pdf.line(x + itemColWidth, y, x + itemColWidth, y + rowHeight)
+  pdf.line(x + itemColWidth + boxWidth, y, x + itemColWidth + boxWidth, y + rowHeight)
+  pdf.line(x + itemColWidth + boxWidth * 2, y, x + itemColWidth + boxWidth * 2, y + rowHeight)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7.5)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text(`[${item.code}] ${item.desc}`, x + 2, y + rowHeight / 2 + 1.3, { maxWidth: itemColWidth - 4 })
+
+  const boxSize = 3
+  const boxY = y + (rowHeight - boxSize) / 2
+  pdf.setDrawColor(120, 120, 120)
+  pdf.rect(x + itemColWidth + boxWidth / 2 - boxSize / 2, boxY, boxSize, boxSize)
+  pdf.rect(x + itemColWidth + boxWidth + boxWidth / 2 - boxSize / 2, boxY, boxSize, boxSize)
+  pdf.rect(x + itemColWidth + boxWidth * 2 + boxWidth / 2 - boxSize / 2, boxY, boxSize, boxSize)
+}
+
+/**
+ * Checklist en blanco (sin datos de ninguna inspeccion puntual) para imprimir
+ * en papel y completar a mano — mismos items que usa el sistema al crear una
+ * inspeccion nueva de tipo Camion o Hidrogrua.
+ */
+export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HIDROGUA'): Promise<void> => {
+  const { jsPDF } = await import('jspdf')
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  let logoDataUrl: string | null = null
+
+  try {
+    logoDataUrl = await fetchImageAsDataUrl(enertransLogoUrl)
+  } catch {
+    logoDataUrl = null
+  }
+
+  const subtitle =
+    checklistType === 'HIDROGUA' ? 'Checklist de Inspección — Hidrogrúa (en blanco)' : 'Checklist de Inspección — Camión (en blanco)'
+
+  addWatermark(pdf, logoDataUrl)
+  drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', subtitle)
+
+  const pageWidth = pdf.internal.pageSize.getWidth()
+  const pageHeight = pdf.internal.pageSize.getHeight()
+  let cursorY = 26
+
+  drawBlankInfoField(pdf, 'Cliente:', 14, cursorY, 90)
+  drawBlankInfoField(pdf, 'Lugar:', 110, cursorY, pageWidth - 14 - 110)
+  cursorY += 6
+  drawBlankInfoField(pdf, 'Vehículo:', 14, cursorY, 90)
+  drawBlankInfoField(pdf, 'Dominio:', 110, cursorY, pageWidth - 14 - 110)
+  cursorY += 6
+  drawBlankInfoField(pdf, 'Hidrogrúa:', 14, cursorY, 90)
+  drawBlankInfoField(pdf, 'N° Serie:', 110, cursorY, pageWidth - 14 - 110)
+  cursorY += 6
+  drawBlankInfoField(pdf, 'Kilometraje:', 14, cursorY, 90)
+  drawBlankInfoField(pdf, 'Horómetro:', 110, cursorY, pageWidth - 14 - 110)
+  cursorY += 6
+  drawBlankInfoField(pdf, 'Hs. Hidrogrúa:', 14, cursorY, 90)
+  drawBlankInfoField(pdf, 'Fecha:', 110, cursorY, pageWidth - 14 - 110)
+  cursorY += 6
+  drawBlankInfoField(pdf, 'N° Inspección:', 14, cursorY, 90)
+  drawBlankInfoField(pdf, 'Realizado por:', 110, cursorY, pageWidth - 14 - 110)
+  cursorY += 9
+
+  const boxWidth = 12
+  const itemColWidth = pageWidth - 14 - 14 - boxWidth * 3
+  const rowHeight = 6
+
+  const sections: { title: string; items: ChecklistItem[] }[] =
+    checklistType === 'HIDROGUA'
+      ? HIDROGUA_SECTIONS.map((section) => ({ title: section.name, items: section.items }))
+      : [{ title: 'INSPECCIÓN TÉCNICA DEL VEHÍCULO', items: CAMION_ITEMS }]
+
+  sections.forEach((section) => {
+    if (cursorY > pageHeight - 30) {
+      pdf.addPage()
+      addWatermark(pdf, logoDataUrl)
+      drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', subtitle)
+      cursorY = 26
+    }
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9)
+    pdf.setTextColor(17, 24, 39)
+    pdf.text(section.title.toUpperCase(), 14, cursorY)
+    cursorY += 3
+
+    drawChecklistTableHeader(pdf, 14, cursorY, itemColWidth, boxWidth)
+    cursorY += 6
+
+    section.items.forEach((item) => {
+      if (cursorY > pageHeight - 16) {
+        pdf.addPage()
+        addWatermark(pdf, logoDataUrl)
+        drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', subtitle)
+        cursorY = 26
+        drawChecklistTableHeader(pdf, 14, cursorY, itemColWidth, boxWidth)
+        cursorY += 6
+      }
+
+      drawChecklistItemRow(pdf, item, 14, cursorY, itemColWidth, boxWidth, rowHeight)
+      cursorY += rowHeight
+    })
+
+    cursorY += 6
+  })
+
+  if (cursorY > pageHeight - 30) {
+    pdf.addPage()
+    addWatermark(pdf, logoDataUrl)
+    drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', subtitle)
+    cursorY = 26
+  }
+
+  const sigY = Math.max(cursorY + 12, pageHeight - 24)
+  pdf.setDrawColor(60, 60, 60)
+  pdf.line(15, sigY, pageWidth / 2 - 10, sigY)
+  pdf.line(pageWidth / 2 + 10, sigY, pageWidth - 15, sigY)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text('Realizado por', 15, sigY - 2)
+  pdf.text('Aceptado por', pageWidth / 2 + 10, sigY - 2)
+
+  const fileSuffix = checklistType === 'HIDROGUA' ? 'Hidrogrua' : 'Camion'
+  pdf.save(`Checklist_Inspeccion_${fileSuffix}_en_blanco.pdf`)
 }
 

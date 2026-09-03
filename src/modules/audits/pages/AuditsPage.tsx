@@ -8,7 +8,7 @@ import type { AuditChecklistStatus } from '../../../types/domain'
 import { AuditChecklistEditor } from '../components/AuditChecklistEditor'
 import { AuditHistoryList } from '../components/AuditHistoryList'
 import { AuditPhotoPicker } from '../components/AuditPhotoPicker'
-import { exportAuditPdf } from '../services/auditPdfService'
+import { exportAuditPdf, exportBlankAuditChecklistPdf } from '../services/auditPdfService'
 import {
   buildAuditHistoryView,
   CAMION_ITEMS,
@@ -1059,6 +1059,18 @@ export const AuditsPage = () => {
                             </button>
                           ))}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (formData.checklistType) {
+                              void exportBlankAuditChecklistPdf(formData.checklistType)
+                            }
+                          }}
+                          disabled={!formData.checklistType}
+                          className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                        >
+                          Imprimir checklist en blanco
+                        </button>
                       </div>
                     )}
                   </>
