@@ -1477,19 +1477,15 @@ export const AuditsPage = () => {
 
 // ─── NewChecklistTable ────────────────────────────────────────────────────────
 
-type CheckStatus = 'B' | 'R' | 'RV' | 'C' | 'NA' | 'O' | 'F' | ''
+type CheckStatus = 'B' | 'O' | 'NA' | ''
 
 const STATUS_OPTIONS: { value: CheckStatus; label: string; color: string }[] = [
   { value: 'B', label: 'B', color: 'bg-emerald-500 text-white' },
-  { value: 'R', label: 'R', color: 'bg-rose-500 text-white' },
-  { value: 'RV', label: 'RV', color: 'bg-amber-400 text-slate-900' },
-  { value: 'C', label: 'C', color: 'bg-orange-500 text-white' },
-  { value: 'NA', label: 'NA', color: 'bg-slate-400 text-white' },
   { value: 'O', label: 'O', color: 'bg-sky-500 text-white' },
-  { value: 'F', label: 'F', color: 'bg-red-700 text-white' },
+  { value: 'NA', label: 'NA', color: 'bg-slate-400 text-white' },
 ]
 const STATUS_LABEL: Record<string, string> = {
-  B: 'Bien', R: 'Reparar', RV: 'Revisar', C: 'Cambiar', NA: 'No Aplica', O: 'Observación', F: 'Falta',
+  B: 'Bien', O: 'Observación', NA: 'No Aplica',
 }
 
 function StatusPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
