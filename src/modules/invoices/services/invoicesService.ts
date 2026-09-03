@@ -31,12 +31,19 @@ export const parseMoney = (value: string): number => {
       lastComma > lastDot
         ? cleaned.replace(/\./g, '').replace(',', '.')
         : cleaned.replace(/,/g, '')
-  } else if (lastComma !== -1) {
-    const decimals = cleaned.length - lastComma - 1
-    normalized = decimals >= 1 && decimals <= 2 ? cleaned.replace(',', '.') : cleaned.replace(/,/g, '')
-  } else if (lastDot !== -1) {
-    const decimals = cleaned.length - lastDot - 1
-    normalized = decimals >= 1 && decimals <= 2 ? cleaned : cleaned.replace(/\./g, '')
+  } else if (lastComma !== -1 || lastDot !== -1) {
+    // Solo aparece un tipo de separador, pero puede aparecer mas de una vez
+    // (ej. "1.500.000" o el typo "1.500.0"): el ultimo es el decimal si deja
+    // 1 o 2 digitos despues, y cualquier aparicion anterior del mismo
+    // separador se limpia como separador de miles.
+    const sep = lastComma !== -1 ? ',' : '.'
+    const lastIndex = lastComma !== -1 ? lastComma : lastDot
+    const decimals = cleaned.length - lastIndex - 1
+    if (decimals >= 1 && decimals <= 2) {
+      normalized = `${cleaned.slice(0, lastIndex).split(sep).join('')}.${cleaned.slice(lastIndex + 1)}`
+    } else {
+      normalized = cleaned.split(sep).join('')
+    }
   } else {
     normalized = cleaned
   }
