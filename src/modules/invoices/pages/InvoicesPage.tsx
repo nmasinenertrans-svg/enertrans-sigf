@@ -13,9 +13,12 @@ import {
   buildInvoiceView,
   createEmptyInvoiceFormData,
   toInvoicePayload,
+  toInvoiceUpdateFields,
   validateInvoiceFormData,
+  type InvoiceViewItem,
 } from '../services/invoicesService'
 import type { InvoiceFormData, InvoiceFormErrors, InvoiceFormField } from '../types'
+import type { Invoice } from '../../../types/domain'
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -36,6 +39,7 @@ export const InvoicesPage = () => {
 
   const canCreate = can('INVOICES', 'create')
   const canDelete = can('INVOICES', 'delete')
+  const canEdit = can('INVOICES', 'edit')
 
   const [formData, setFormData] = useState<InvoiceFormData>(createEmptyInvoiceFormData)
   const [errors, setErrors] = useState<InvoiceFormErrors>({})
@@ -44,6 +48,7 @@ export const InvoicesPage = () => {
   const [invoiceIdPendingDelete, setInvoiceIdPendingDelete] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [prefillNote, setPrefillNote] = useState<string | null>(null)
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null)
 
   useEffect(() => {
     if (appliedExternalRequestPrefillRef.current) {
@@ -120,10 +125,40 @@ export const InvoicesPage = () => {
     setErrors({})
     setPendingFile(null)
     setPrefillNote(null)
+    setEditingInvoiceId(null)
+  }
+
+  const startEdit = (invoice: InvoiceViewItem) => {
+    if (!canEdit) {
+      return
+    }
+    setEditingInvoiceId(invoice.id)
+    setFormData({
+      providerName: invoice.providerName,
+      supplierId: invoice.supplierId ?? '',
+      invoiceNumber: invoice.invoiceNumber ?? '',
+      amountInput: String(invoice.amount ?? ''),
+      currency: invoice.currency,
+      issuedAt: invoice.issuedAt ? invoice.issuedAt.slice(0, 10) : '',
+      notes: invoice.notes ?? '',
+      fileName: invoice.fileName ?? '',
+      fileBase64: invoice.fileBase64 ?? '',
+      fileUrl: invoice.fileUrl ?? '',
+      repairId: invoice.repairId ?? '',
+      unitId: invoice.unitId ?? '',
+      inventoryItemIds: invoice.inventoryItemIds ?? [],
+      inventoryItemQuantityInputs: Object.fromEntries(
+        Object.entries(invoice.inventoryItemQuantities ?? {}).map(([id, quantity]) => [id, String(quantity)]),
+      ),
+    })
+    setErrors({})
+    setPendingFile(null)
+    setPrefillNote(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleSubmit = async () => {
-    if (!canCreate) {
+    if (!canCreate && !editingInvoiceId) {
       return
     }
 
@@ -136,8 +171,9 @@ export const InvoicesPage = () => {
     // Aviso de posible duplicado: mismo proveedor + mismo N° de factura ya
     // cargado. No se bloquea (a veces hay que corregir una carga anterior),
     // pero se muestra el dato existente para que no se vuelva a cargar sin
-    // querer el mismo comprobante en papel dos veces.
-    if (formData.invoiceNumber.trim()) {
+    // querer el mismo comprobante en papel dos veces. No aplica al editar
+    // (se compararia la factura contra si misma).
+    if (!editingInvoiceId && formData.invoiceNumber.trim()) {
       const normalizedProvider = formData.providerName.trim().toLowerCase()
       const normalizedNumber = formData.invoiceNumber.trim().toLowerCase()
       const duplicate = invoices.find(
@@ -163,9 +199,9 @@ export const InvoicesPage = () => {
       }
     }
 
-    let fileBase64 = ''
-    let fileUrl = ''
-    let fileName = ''
+    let fileBase64 = formData.fileBase64
+    let fileUrl = formData.fileUrl
+    let fileName = formData.fileName
 
     if (pendingFile) {
       fileName = pendingFile.name
@@ -187,6 +223,21 @@ export const InvoicesPage = () => {
           fileUrl = ''
         }
       }
+    }
+
+    if (editingInvoiceId) {
+      const updateFields = toInvoiceUpdateFields({ ...formData, fileName, fileBase64, fileUrl })
+      try {
+        const updated = await apiRequest<Invoice>(`/invoices/${editingInvoiceId}`, {
+          method: 'PATCH',
+          body: updateFields,
+        })
+        setInvoices(invoices.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)))
+        resetForm()
+      } catch {
+        setAppError('No se pudo actualizar la factura.')
+      }
+      return
     }
 
     const invoice = toInvoicePayload({ ...formData, fileName, fileBase64, fileUrl })
@@ -230,7 +281,7 @@ export const InvoicesPage = () => {
               {prefillNote}
             </div>
           ) : null}
-          {canCreate ? (
+          {canCreate || canEdit ? (
             <InvoiceForm
               formData={formData}
               errors={errors}
@@ -239,8 +290,10 @@ export const InvoicesPage = () => {
               inventoryItems={inventoryItems}
               suppliers={suppliers}
               isSaving={isSaving}
+              isEditing={Boolean(editingInvoiceId)}
               onFieldChange={handleFieldChange}
               onFileSelected={handleFileSelected}
+              onCancelEdit={resetForm}
               onSubmit={() => {
                 setIsSaving(true)
                 handleSubmit()
@@ -278,7 +331,9 @@ export const InvoicesPage = () => {
                     key={invoice.id}
                     invoice={invoice}
                     onDelete={setInvoiceIdPendingDelete}
+                    onEdit={startEdit}
                     canDelete={canDelete}
+                    canEdit={canEdit}
                   />
                 ))
               )}

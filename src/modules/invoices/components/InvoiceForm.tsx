@@ -11,9 +11,11 @@ interface InvoiceFormProps {
   inventoryItems: InventoryItem[]
   suppliers: Supplier[]
   isSaving: boolean
+  isEditing?: boolean
   onFieldChange: <TField extends InvoiceFormField>(field: TField, value: InvoiceFormData[TField]) => void
   onFileSelected: (file: File | null) => void
   onSubmit: () => void
+  onCancelEdit?: () => void
 }
 
 const inputClassName =
@@ -27,9 +29,11 @@ export const InvoiceForm = ({
   inventoryItems,
   suppliers,
   isSaving,
+  isEditing = false,
   onFieldChange,
   onFileSelected,
   onSubmit,
+  onCancelEdit,
 }: InvoiceFormProps) => {
   const [repairSearch, setRepairSearch] = useState('')
   const [unitSearch, setUnitSearch] = useState('')
@@ -118,7 +122,7 @@ export const InvoiceForm = ({
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <header>
-        <h3 className="text-lg font-bold text-slate-900">Nueva factura</h3>
+        <h3 className="text-lg font-bold text-slate-900">{isEditing ? 'Editar factura' : 'Nueva factura'}</h3>
         <p className="mt-1 text-sm text-slate-600">
           Una factura puede cubrir varios productos de inventario y, opcionalmente, quedar vinculada a una reparación.
         </p>
@@ -375,13 +379,22 @@ export const InvoiceForm = ({
           />
         </FormRow>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {isEditing && onCancelEdit ? (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Cancelar
+            </button>
+          ) : null}
           <button
             type="submit"
             disabled={isSaving}
             className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-70"
           >
-            {isSaving ? 'Guardando...' : 'Guardar factura'}
+            {isSaving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Guardar factura'}
           </button>
         </div>
       </form>

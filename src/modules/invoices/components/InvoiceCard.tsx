@@ -3,7 +3,9 @@ import type { InvoiceViewItem } from '../services/invoicesService'
 interface InvoiceCardProps {
   invoice: InvoiceViewItem
   onDelete: (invoiceId: string) => void
+  onEdit?: (invoice: InvoiceViewItem) => void
   canDelete?: boolean
+  canEdit?: boolean
 }
 
 const formatDate = (value?: string | null) => {
@@ -12,7 +14,7 @@ const formatDate = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-AR')
 }
 
-export const InvoiceCard = ({ invoice, onDelete, canDelete = true }: InvoiceCardProps) => {
+export const InvoiceCard = ({ invoice, onDelete, onEdit, canDelete = true, canEdit = false }: InvoiceCardProps) => {
   const formatCurrency = (value: number, currency: 'ARS' | 'USD' = 'ARS') =>
     new Intl.NumberFormat('es-AR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value)
 
@@ -68,6 +70,15 @@ export const InvoiceCard = ({ invoice, onDelete, canDelete = true }: InvoiceCard
           >
             Ver archivo
           </a>
+        ) : null}
+        {canEdit && onEdit ? (
+          <button
+            type="button"
+            onClick={() => onEdit(invoice)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Editar
+          </button>
         ) : null}
         {canDelete ? (
           <button
