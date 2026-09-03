@@ -220,7 +220,12 @@ export const InvoicesPage = () => {
           fileUrl = response.url
           fileBase64 = ''
         } catch {
+          // El archivo no se pudo subir al servidor de almacenamiento; se
+          // guarda igual embebido en la factura (fileBase64) para no perder
+          // el adjunto, pero avisamos porque "Ver archivo" puede tardar mas
+          // en abrir si el archivo es grande.
           fileUrl = ''
+          setAppError('El archivo no se pudo subir al servidor, pero se guardó igual junto con la factura.')
         }
       }
     }

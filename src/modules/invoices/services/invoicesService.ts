@@ -16,7 +16,7 @@ const createId = (): string => {
  * toma como decimal, sino como separador de miles (nadie escribe centavos
  * con 3+ digitos).
  */
-const parseMoney = (value: string): number => {
+export const parseMoney = (value: string): number => {
   const cleaned = value.trim().replace(/[^\d.,-]/g, '')
   if (!cleaned) {
     return 0

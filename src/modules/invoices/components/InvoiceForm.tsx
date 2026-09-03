@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FormRow } from '../../../components/shared/FormRow'
 import type { FleetUnit, InventoryItem, RepairRecord, Supplier } from '../../../types/domain'
+import { parseMoney } from '../services/invoicesService'
 import type { InvoiceFormData, InvoiceFormErrors, InvoiceFormField } from '../types'
 
 interface InvoiceFormProps {
@@ -196,8 +197,20 @@ export const InvoiceForm = ({
               className={inputClassName}
               value={formData.amountInput}
               onChange={(event) => onFieldChange('amountInput', event.target.value)}
-              placeholder="0.00"
+              placeholder="650000 o 650.000,50"
             />
+            {formData.amountInput.trim() ? (
+              <p className="mt-1 text-xs font-semibold text-slate-600">
+                Se va a guardar como:{' '}
+                <span className="text-amber-700">
+                  {new Intl.NumberFormat('es-AR', {
+                    style: 'currency',
+                    currency: formData.currency,
+                    minimumFractionDigits: 2,
+                  }).format(parseMoney(formData.amountInput))}
+                </span>
+              </p>
+            ) : null}
           </FormRow>
           <FormRow label="Moneda">
             <select

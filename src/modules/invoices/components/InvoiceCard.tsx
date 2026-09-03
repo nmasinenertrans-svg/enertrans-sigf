@@ -61,16 +61,18 @@ export const InvoiceCard = ({ invoice, onDelete, onEdit, canDelete = true, canEd
       {invoice.notes ? <p className="mt-2 text-xs text-slate-600">{invoice.notes}</p> : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {invoice.fileUrl ? (
+        {invoice.fileUrl || invoice.fileBase64 ? (
           <a
-            href={invoice.fileUrl}
+            href={invoice.fileUrl || invoice.fileBase64}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
           >
             Ver archivo
           </a>
-        ) : null}
+        ) : (
+          <span className="text-xs text-slate-400">Sin archivo adjunto</span>
+        )}
         {canEdit && onEdit ? (
           <button
             type="button"
