@@ -272,8 +272,15 @@ const drawBlankInfoField = (pdf: jsPDF, label: string, x: number, y: number, lin
   pdf.line(x + 22, y + 0.5, x + lineWidth, y + 0.5)
 }
 
-const drawChecklistTableHeader = (pdf: jsPDF, x: number, y: number, itemColWidth: number, boxWidth: number) => {
-  const totalWidth = itemColWidth + boxWidth * 3
+const drawChecklistTableHeader = (
+  pdf: jsPDF,
+  x: number,
+  y: number,
+  itemColWidth: number,
+  boxWidth: number,
+  obsWidth: number,
+) => {
+  const totalWidth = itemColWidth + boxWidth * 2 + obsWidth
   pdf.setFillColor(242, 201, 76)
   pdf.rect(x, y, totalWidth, 6, 'F')
   pdf.setFont('helvetica', 'bold')
@@ -281,8 +288,8 @@ const drawChecklistTableHeader = (pdf: jsPDF, x: number, y: number, itemColWidth
   pdf.setTextColor(17, 24, 39)
   pdf.text('ITEM', x + 2, y + 4.2)
   pdf.text('B', x + itemColWidth + boxWidth / 2 - 1.5, y + 4.2)
-  pdf.text('OBS.', x + itemColWidth + boxWidth + boxWidth / 2 - 3, y + 4.2)
-  pdf.text('N/A', x + itemColWidth + boxWidth * 2 + boxWidth / 2 - 3, y + 4.2)
+  pdf.text('N/A', x + itemColWidth + boxWidth + boxWidth / 2 - 3, y + 4.2)
+  pdf.text('OBSERVACIONES', x + itemColWidth + boxWidth * 2 + 2, y + 4.2)
 }
 
 const drawChecklistItemRow = (
@@ -292,10 +299,11 @@ const drawChecklistItemRow = (
   y: number,
   itemColWidth: number,
   boxWidth: number,
+  obsWidth: number,
   rowHeight: number,
 ) => {
   pdf.setDrawColor(210, 210, 210)
-  pdf.rect(x, y, itemColWidth + boxWidth * 3, rowHeight)
+  pdf.rect(x, y, itemColWidth + boxWidth * 2 + obsWidth, rowHeight)
   pdf.line(x + itemColWidth, y, x + itemColWidth, y + rowHeight)
   pdf.line(x + itemColWidth + boxWidth, y, x + itemColWidth + boxWidth, y + rowHeight)
   pdf.line(x + itemColWidth + boxWidth * 2, y, x + itemColWidth + boxWidth * 2, y + rowHeight)
@@ -310,7 +318,6 @@ const drawChecklistItemRow = (
   pdf.setDrawColor(120, 120, 120)
   pdf.rect(x + itemColWidth + boxWidth / 2 - boxSize / 2, boxY, boxSize, boxSize)
   pdf.rect(x + itemColWidth + boxWidth + boxWidth / 2 - boxSize / 2, boxY, boxSize, boxSize)
-  pdf.rect(x + itemColWidth + boxWidth * 2 + boxWidth / 2 - boxSize / 2, boxY, boxSize, boxSize)
 }
 
 /**
@@ -358,9 +365,10 @@ export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HI
   drawBlankInfoField(pdf, 'Realizado por:', 110, cursorY, pageWidth - 14 - 110)
   cursorY += 9
 
-  const boxWidth = 12
-  const itemColWidth = pageWidth - 14 - 14 - boxWidth * 3
-  const rowHeight = 6
+  const boxWidth = 10
+  const itemColWidth = 68
+  const obsWidth = pageWidth - 14 - 14 - itemColWidth - boxWidth * 2
+  const rowHeight = 9
 
   const sections: { title: string; items: ChecklistItem[] }[] =
     checklistType === 'HIDROGUA'
@@ -381,20 +389,20 @@ export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HI
     pdf.text(section.title.toUpperCase(), 14, cursorY)
     cursorY += 3
 
-    drawChecklistTableHeader(pdf, 14, cursorY, itemColWidth, boxWidth)
+    drawChecklistTableHeader(pdf, 14, cursorY, itemColWidth, boxWidth, obsWidth)
     cursorY += 6
 
     section.items.forEach((item) => {
-      if (cursorY > pageHeight - 16) {
+      if (cursorY > pageHeight - (16 + rowHeight)) {
         pdf.addPage()
         addWatermark(pdf, logoDataUrl)
         drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', subtitle)
         cursorY = 26
-        drawChecklistTableHeader(pdf, 14, cursorY, itemColWidth, boxWidth)
+        drawChecklistTableHeader(pdf, 14, cursorY, itemColWidth, boxWidth, obsWidth)
         cursorY += 6
       }
 
-      drawChecklistItemRow(pdf, item, 14, cursorY, itemColWidth, boxWidth, rowHeight)
+      drawChecklistItemRow(pdf, item, 14, cursorY, itemColWidth, boxWidth, obsWidth, rowHeight)
       cursorY += rowHeight
     })
 
