@@ -56,6 +56,7 @@ const navigationGroups: NavGroup[] = [
       { path: ROUTE_PATHS.deliveries, label: 'Entregas/Devoluciones', module: 'DELIVERIES', flagKey: 'showDeliveriesModule' },
       { path: ROUTE_PATHS.movements, label: 'Remitos', module: 'MOVEMENTS', flagKey: 'showMovementsModule' },
       { path: ROUTE_PATHS.handoverChecklists, label: 'Checklist entrega/devolución (prueba)', module: 'DELIVERIES', devOnly: true },
+      { path: ROUTE_PATHS.trips, label: 'Viajes / Traslados (prueba)', module: 'DELIVERIES', devOnly: true },
     ],
   },
   {

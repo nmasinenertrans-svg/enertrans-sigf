@@ -177,6 +177,7 @@ const COMPAT_TABLE_NAMES = [
   'RentalContract',
   'HandoverChecklist',
   'Tire',
+  'Trip',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -987,6 +988,36 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   `)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_unitId_idx" ON "Tire"("unitId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_isActive_idx" ON "Tire"("isActive");`)
+
+  // Viajes/traslados de choferes (modulo en prueba, DEV-only). Sin enums nativos,
+  // misma razon que HandoverChecklist.type.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "Trip" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "code" TEXT NOT NULL DEFAULT '',
+      "driverUserId" TEXT,
+      "driverExternalName" TEXT NOT NULL DEFAULT '',
+      "unitId" TEXT,
+      "startDate" TIMESTAMP(3) NOT NULL,
+      "endDate" TIMESTAMP(3) NOT NULL,
+      "originLabel" TEXT NOT NULL DEFAULT '',
+      "originLat" DOUBLE PRECISION NOT NULL,
+      "originLng" DOUBLE PRECISION NOT NULL,
+      "destinationLabel" TEXT NOT NULL DEFAULT '',
+      "destinationLat" DOUBLE PRECISION NOT NULL,
+      "destinationLng" DOUBLE PRECISION NOT NULL,
+      "distanceKm" DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "distanceSource" TEXT NOT NULL DEFAULT 'ROUTE',
+      "notes" TEXT NOT NULL DEFAULT '',
+      "createdByUserId" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Trip_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Trip_driverUserId_idx" ON "Trip"("driverUserId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Trip_unitId_idx" ON "Trip"("unitId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Trip_startDate_idx" ON "Trip"("startDate");`)
 
   // Inventario: campos que el frontend ya usaba pero nunca se habian agregado al schema real
   // (externalBarcode/unit/unitPrice/currency se perdian al guardar) + descripcion legible del producto.

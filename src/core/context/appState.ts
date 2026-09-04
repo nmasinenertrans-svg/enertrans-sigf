@@ -18,6 +18,7 @@ import type {
   ServiceOrder,
   Supplier,
   Tire,
+  TripRecord,
   UserInboxNotification,
   WorkOrder,
   MaintenanceStatus,
@@ -48,6 +49,7 @@ interface PersistedAppState {
   contracts: RentalContract[]
   handoverChecklists: HandoverChecklist[]
   tires: Tire[]
+  trips: TripRecord[]
 }
 
 export interface AppState extends PersistedAppState {
@@ -77,6 +79,7 @@ export interface AppActions {
   setContracts: (contracts: RentalContract[]) => void
   setHandoverChecklists: (checklists: HandoverChecklist[]) => void
   setTires: (tires: Tire[]) => void
+  setTrips: (trips: TripRecord[]) => void
   setFeatureFlags: (flags: FeatureFlags) => void
   setGlobalLoading: (value: boolean) => void
   setAppError: (errorMessage: string | null) => void
@@ -141,6 +144,7 @@ const defaultPersistedState: PersistedAppState = {
   contracts: [],
   handoverChecklists: [],
   tires: [],
+  trips: [],
 }
 
 const defaultRuntimeState: Pick<AppState, 'isGlobalLoading' | 'appError'> = {
@@ -200,6 +204,7 @@ export const getInitialAppState = (): AppState => {
     contracts: persistedState.contracts ?? [],
     handoverChecklists: persistedState.handoverChecklists ?? [],
     tires: persistedState.tires ?? [],
+    trips: persistedState.trips ?? [],
   }
   const fallbackUserId = typeof window !== 'undefined' ? window.localStorage.getItem(CURRENT_USER_KEY) : null
   const sessionUserId =
@@ -242,6 +247,7 @@ export const toPersistedState = (state: AppState): PersistedAppState => ({
   contracts: state.contracts,
   handoverChecklists: state.handoverChecklists,
   tires: state.tires,
+  trips: state.trips,
 })
 
 export const persistAppState = (state: AppState): void => {

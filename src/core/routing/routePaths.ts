@@ -22,6 +22,7 @@
   contracts: '/contracts',
   handoverChecklists: '/handover-checklists',
   tires: '/tires',
+  trips: '/trips',
   suppliers: '/suppliers',
   supplierDetail: '/suppliers/:supplierId',
   crm: '/crm',

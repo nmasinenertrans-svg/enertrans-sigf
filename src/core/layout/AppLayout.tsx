@@ -23,6 +23,7 @@ import type {
   ServiceOrder,
   Supplier,
   Tire,
+  TripRecord,
   UserInboxNotification,
   WorkOrder,
 } from '../../types/domain'
@@ -134,6 +135,7 @@ export const AppLayout = () => {
       setContracts,
       setHandoverChecklists,
       setTires,
+      setTrips,
     },
   } = useAppContext()
 
@@ -339,6 +341,7 @@ export const AppLayout = () => {
           contractsResponse,
           handoverChecklistsResponse,
           tiresResponse,
+          tripsResponse,
         ] = await Promise.all([
           // Datos de negocio: 3 intentos con timeout creciente para sobrevivir un "cold start"
           // del backend (Render lo duerme tras inactividad), y NUNCA en silencio — si de verdad
@@ -389,6 +392,9 @@ export const AppLayout = () => {
             : Promise.resolve(null),
           currentUserRef.current?.role === 'DEV'
             ? safeRequest<Tire[]>('/tires', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          currentUserRef.current?.role === 'DEV'
+            ? safeRequest<TripRecord[]>('/trips', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
         ])
 
@@ -544,6 +550,9 @@ export const AppLayout = () => {
         if (tiresResponse) {
           setTires(tiresResponse)
         }
+        if (tripsResponse) {
+          setTrips(tripsResponse)
+        }
       } finally {
         if (!isBackground) {
           setGlobalLoading(false)
@@ -572,6 +581,7 @@ export const AppLayout = () => {
     setContracts,
     setHandoverChecklists,
     setTires,
+    setTrips,
   ])
 
   useEffect(() => {

@@ -454,6 +454,32 @@ export interface Tire {
   updatedAt?: string
 }
 
+export type TripDistanceSource = 'ROUTE' | 'STRAIGHT_LINE'
+
+export interface TripRecord {
+  id: string
+  code: string
+  driverUserId?: string | null
+  driverName?: string
+  driverExternalName: string
+  unitId?: string | null
+  unitLabel?: string
+  startDate: string
+  endDate: string
+  originLabel: string
+  originLat: number
+  originLng: number
+  destinationLabel: string
+  destinationLat: number
+  destinationLng: number
+  distanceKm: number
+  distanceSource: TripDistanceSource
+  notes: string
+  createdByUserName?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export const handoverChecklistTypes = ['DELIVERY', 'RETURN'] as const
 export type HandoverChecklistType = (typeof handoverChecklistTypes)[number]
 

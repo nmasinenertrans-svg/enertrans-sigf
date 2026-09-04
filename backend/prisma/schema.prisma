@@ -169,6 +169,8 @@ model User {
   rentalContractsCreated    RentalContract[]   @relation("RentalContractCreatedBy")
   handoverChecklistsCreated HandoverChecklist[] @relation("HandoverChecklistCreatedBy")
   tiresCreated              Tire[]              @relation("TireCreatedBy")
+  tripsAsDriver             Trip[]              @relation("TripDriver")
+  tripsCreated              Trip[]              @relation("TripCreatedBy")
 }
 
 model PushSubscription {
@@ -250,6 +252,7 @@ model FleetUnit {
   handoverChecklists       HandoverChecklist[]
   tires                    Tire[]
   tasks                    Task[]              @relation("TaskUnit")
+  trips                    Trip[]              @relation("TripUnit")
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -657,6 +660,36 @@ model Tire {
 
   @@index([unitId])
   @@index([isActive])
+}
+
+model Trip {
+  id                 String   @id @default(uuid())
+  code               String   @default("")
+  driverUserId       String?
+  driverExternalName String   @default("")
+  unitId             String?
+  startDate          DateTime
+  endDate            DateTime
+  originLabel        String   @default("")
+  originLat          Float
+  originLng          Float
+  destinationLabel   String   @default("")
+  destinationLat     Float
+  destinationLng     Float
+  distanceKm         Float    @default(0)
+  distanceSource     String   @default("ROUTE")
+  notes              String   @default("")
+  createdByUserId    String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  driver    User?      @relation("TripDriver", fields: [driverUserId], references: [id])
+  unit      FleetUnit? @relation("TripUnit", fields: [unitId], references: [id])
+  createdBy User       @relation("TripCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([driverUserId])
+  @@index([unitId])
+  @@index([startDate])
 }
 
 model Supplier {
