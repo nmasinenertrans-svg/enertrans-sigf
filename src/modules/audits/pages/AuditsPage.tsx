@@ -95,6 +95,7 @@ export const AuditsPage = () => {
   const [auditIdPendingView, setAuditIdPendingView] = useState<string | null>(null)
   const [draftChecked, setDraftChecked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isScanningSheet, setIsScanningSheet] = useState(false)
 
   const auditHistory = useMemo(() => buildAuditHistoryView(audits, fleetUnits), [audits, fleetUnits])
   const viewAudit = useMemo(() => audits.find((audit) => audit.id === auditIdPendingView) ?? null, [audits, auditIdPendingView])
@@ -316,6 +317,66 @@ export const AuditsPage = () => {
           : section,
       ),
     }))
+  }
+
+  const mapScanStatusToCheckStatus = (status: 'OK' | 'BAD' | 'NA'): string =>
+    status === 'OK' ? 'B' : status === 'NA' ? 'NA' : 'O'
+
+  const handleScanInspectionSheet = async (file: File) => {
+    setIsScanningSheet(true)
+    try {
+      const dataUrl = await readImageAsCompressedDataUrl(file, {
+        maxWidth: 1800,
+        maxHeight: 1800,
+        quality: 0.9,
+        outputType: 'image/jpeg',
+      })
+      const result = await apiRequest<{
+        header: { dominio: string; km: number | null; hidrogrua: string }
+        checklistType: 'CAMION' | 'HIDROGUA'
+        matchedItems: { itemCode: string; status: 'OK' | 'BAD' | 'NA'; observation: string }[]
+        unmatchedNotes: { label: string; status: 'OK' | 'BAD' | 'NA' }[]
+        overallConfidence: 'HIGH' | 'LOW'
+      }>('/inspection-scan', { method: 'POST', body: { dataUrl }, timeoutMs: 45000 })
+
+      const matchedUnit = result.header.dominio
+        ? fleetUnits.find(
+            (unit) => unit.internalCode.replace(/\s/g, '').toUpperCase() === result.header.dominio.replace(/\s/g, '').toUpperCase(),
+          )
+        : undefined
+
+      setFormData((previous) => ({
+        ...previous,
+        checklistType: result.checklistType,
+        vehicleMode: matchedUnit ? 'fleet' : previous.vehicleMode,
+        unitId: matchedUnit ? matchedUnit.id : previous.unitId,
+        unitKilometers: result.header.km ?? previous.unitKilometers,
+        newChecklistItems: {
+          ...previous.newChecklistItems,
+          ...Object.fromEntries(
+            result.matchedItems.map((item) => [
+              item.itemCode,
+              { estado: mapScanStatusToCheckStatus(item.status), obs: item.observation },
+            ]),
+          ),
+        },
+        scanUnmatchedNotes: result.unmatchedNotes.map((note) => ({ label: note.label, status: note.status })),
+      }))
+
+      const confidenceNote =
+        result.overallConfidence === 'LOW'
+          ? ' La IA no tuvo mucha confianza mapeando esta planilla — revisá con cuidado antes de guardar.'
+          : ''
+      setAppError(
+        `Se completaron ${result.matchedItems.length} items automáticamente${matchedUnit ? ` para la unidad ${matchedUnit.internalCode}` : ''}` +
+          `${result.unmatchedNotes.length > 0 ? ` y quedaron ${result.unmatchedNotes.length} notas sin poder mapear (se agregan igual, en una sección aparte)` : ''}.` +
+          ` Revisá el checklist antes de guardar.${confidenceNote}`,
+      )
+    } catch (error) {
+      setAppError(String((error as Error)?.message ?? 'No se pudo leer la planilla.'))
+    } finally {
+      setIsScanningSheet(false)
+    }
   }
 
   const handleAddPhotoFiles = async (fileList: FileList) => {
@@ -1071,6 +1132,27 @@ export const AuditsPage = () => {
                         >
                           Imprimir checklist en blanco
                         </button>
+
+                        <label className="mt-2 inline-flex cursor-pointer items-center rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 hover:bg-sky-100">
+                          {isScanningSheet ? 'Leyendo planilla con IA...' : 'Cargar desde planilla de papel (IA)'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={isScanningSheet}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0]
+                              if (file) {
+                                void handleScanInspectionSheet(file)
+                              }
+                              event.target.value = ''
+                            }}
+                          />
+                        </label>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          Sube una foto de la hoja de inspección manuscrita y la IA precompleta el checklist. Revisá
+                          siempre antes de guardar.
+                        </p>
                       </div>
                     )}
                   </>
@@ -1199,6 +1281,47 @@ export const AuditsPage = () => {
                       ) : null}
                     </label>
                   </>
+                ) : null}
+
+                {formData.scanUnmatchedNotes.length > 0 ? (
+                  <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-sky-800">
+                      Notas de la planilla sin item correspondiente ({formData.scanUnmatchedNotes.length})
+                    </p>
+                    <p className="mt-1 text-[11px] text-sky-700">
+                      Se van a guardar igual, en una sección aparte llamada "Inspección de campo (papel, sin
+                      mapear)". Revisalas y sacá las que no correspondan.
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {formData.scanUnmatchedNotes.map((note, index) => (
+                        <div
+                          key={`${note.label}-${index}`}
+                          className="flex items-center justify-between gap-2 rounded-md border border-sky-200 bg-white px-2 py-1.5 text-xs text-slate-700"
+                        >
+                          <span>
+                            <span
+                              className={`mr-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${note.status === 'BAD' ? 'bg-rose-100 text-rose-700' : note.status === 'NA' ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'}`}
+                            >
+                              {note.status}
+                            </span>
+                            {note.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormData((previous) => ({
+                                ...previous,
+                                scanUnmatchedNotes: previous.scanUnmatchedNotes.filter((_, i) => i !== index),
+                              }))
+                            }
+                            className="font-semibold text-rose-600 hover:underline"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ) : null}
 
                 <label className="mt-4 flex flex-col gap-2">

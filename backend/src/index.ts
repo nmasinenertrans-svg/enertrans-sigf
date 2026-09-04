@@ -32,6 +32,7 @@ import contractsRoutes from './routes/contracts.js'
 import handoverChecklistsRoutes from './routes/handoverChecklists.js'
 import tiresRoutes from './routes/tires.js'
 import tripsRoutes from './routes/trips.js'
+import inspectionScanRoutes from './routes/inspectionScan.js'
 import { hashPassword } from './utils/password.js'
 import { requireAuth } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
@@ -93,6 +94,7 @@ app.use('/contracts', requireAuth, contractsRoutes)
 app.use('/handover-checklists', requireAuth, handoverChecklistsRoutes)
 app.use('/tires', requireAuth, tiresRoutes)
 app.use('/trips', requireAuth, tripsRoutes)
+app.use('/inspection-scan', requireAuth, inspectionScanRoutes)
 app.use('/push', requireAuth, pushRoutes)
 app.use('/files', requireAuth, filesRoutes)
 // Sin requireAuth global: los webhooks de proveedores (POST) usan su propio

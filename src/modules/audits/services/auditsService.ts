@@ -258,6 +258,7 @@ export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
   unitKilometers: 0,
   engineHours: 0,
   hydroHours: 0,
+  scanUnmatchedNotes: [],
 })
 
 export const createChecklistFromDeviations = (deviations: Array<WorkOrderDeviation | string>): AuditChecklistSectionDraft[] => {
@@ -492,6 +493,24 @@ export const toAuditRecord = (
   // Convertir nuevo checklist al formato legacy si aplica
   if (formData.checklistType && formData.auditMode === 'INDEPENDENT' && !manualAuditMode) {
     checklistSections = buildChecklistSectionsFromNew(formData.checklistType, formData.newChecklistItems)
+    // Notas de una planilla de papel leida por IA que no matchearon con
+    // confianza ningun item del catalogo — se agregan igual, en su propia
+    // seccion, para no perder lo que anotó el operario.
+    if (formData.scanUnmatchedNotes.length > 0) {
+      checklistSections = [
+        ...checklistSections,
+        {
+          id: createId(),
+          title: 'Inspección de campo (papel, sin mapear)',
+          items: formData.scanUnmatchedNotes.map((note) => ({
+            id: createId(),
+            label: note.label,
+            status: note.status,
+            observation: '',
+          })),
+        },
+      ]
+    }
   }
   const overrideSequence = !manualAuditMode && auditKind === 'REAUDIT' ? parseSequenceNumber(pendingOrder?.code) : null
   const code = buildAuditCode(auditKind, unitCode, overrideSequence)

@@ -42,6 +42,11 @@ export interface AuditFormData {
   unitKilometers: number
   engineHours: number
   hydroHours: number
+  // Notas de una planilla de papel escaneada por IA que no se pudieron
+  // mapear con confianza a ningun item del catalogo existente — se agregan
+  // como una seccion extra al guardar, en vez de perderse o forzar un item
+  // que no corresponde.
+  scanUnmatchedNotes: { label: string; status: AuditChecklistStatus }[]
 }
 
 export type AuditFormErrors = {
