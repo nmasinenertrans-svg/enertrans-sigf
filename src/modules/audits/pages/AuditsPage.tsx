@@ -469,21 +469,28 @@ export const AuditsPage = () => {
       // (0/O, 8/B) y pegarle a otra patente real que sí exista en la flota.
       // Se muestra el aviso y el usuario confirma a mano.
 
-      setFormData((previous) => ({
-        ...previous,
-        checklistType: result.checklistType,
-        unitKilometers: result.header.km ?? previous.unitKilometers,
-        newChecklistItems: {
-          ...previous.newChecklistItems,
-          ...Object.fromEntries(
-            result.matchedItems.map((item) => [
-              item.itemCode,
-              { estado: mapScanStatusToCheckStatus(item.status), obs: item.observation },
-            ]),
-          ),
-        },
-        scanUnmatchedNotes: result.unmatchedNotes.map((note) => ({ label: note.label, status: note.status })),
-      }))
+      setFormData((previous) => {
+        // Cada escaneo es la lectura de UNA planilla de UN vehiculo. Si se
+        // arrastraran los items/KM del formulario anterior (merge en vez de
+        // reemplazo), una segunda planilla escaneada sin resetear el
+        // formulario terminaba mezclando datos de dos vehiculos distintos.
+        const blankChecklistItems = createEmptyAuditFormData(previous.unitId ?? '').newChecklistItems
+        return {
+          ...previous,
+          checklistType: result.checklistType,
+          unitKilometers: result.header.km ?? 0,
+          newChecklistItems: {
+            ...blankChecklistItems,
+            ...Object.fromEntries(
+              result.matchedItems.map((item) => [
+                item.itemCode,
+                { estado: mapScanStatusToCheckStatus(item.status), obs: item.observation },
+              ]),
+            ),
+          },
+          scanUnmatchedNotes: result.unmatchedNotes.map((note) => ({ label: note.label, status: note.status })),
+        }
+      })
 
       const confidenceNote =
         result.overallConfidence === 'LOW'
