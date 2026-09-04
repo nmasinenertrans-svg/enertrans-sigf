@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { NextFunction, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
-import { scanInspectionImage } from '../services/inspectionScan.js'
+import { scanInspectionImages } from '../services/inspectionScan.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
@@ -20,7 +20,7 @@ router.use(async (req: AuthenticatedRequest, res: Response, next: NextFunction) 
   return next()
 })
 
-const scanSchema = z.object({ dataUrl: z.string().min(10) })
+const scanSchema = z.object({ dataUrls: z.array(z.string().min(10)).min(1).max(3) })
 
 router.post('/', async (req, res) => {
   const parsed = scanSchema.safeParse(req.body)
@@ -29,7 +29,7 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const result = await scanInspectionImage(parsed.data.dataUrl)
+    const result = await scanInspectionImages(parsed.data.dataUrls)
     return res.json(result)
   } catch (error) {
     console.error('Inspection scan error:', error)

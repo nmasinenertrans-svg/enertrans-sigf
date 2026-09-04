@@ -322,22 +322,35 @@ export const AuditsPage = () => {
   const mapScanStatusToCheckStatus = (status: 'OK' | 'BAD' | 'NA'): string =>
     status === 'OK' ? 'B' : status === 'NA' ? 'NA' : 'O'
 
-  const handleScanInspectionSheet = async (file: File) => {
+  const MAX_SCAN_PAGES = 3
+
+  const handleScanInspectionSheet = async (files: File[]) => {
+    if (files.length === 0) {
+      return
+    }
+    if (files.length > MAX_SCAN_PAGES) {
+      setAppError(`Máximo ${MAX_SCAN_PAGES} fotos por inspección.`)
+      return
+    }
     setIsScanningSheet(true)
     try {
-      const dataUrl = await readImageAsCompressedDataUrl(file, {
-        maxWidth: 1800,
-        maxHeight: 1800,
-        quality: 0.9,
-        outputType: 'image/jpeg',
-      })
+      const dataUrls = await Promise.all(
+        files.map((file) =>
+          readImageAsCompressedDataUrl(file, {
+            maxWidth: 1800,
+            maxHeight: 1800,
+            quality: 0.9,
+            outputType: 'image/jpeg',
+          }),
+        ),
+      )
       const result = await apiRequest<{
         header: { dominio: string; km: number | null; hidrogrua: string }
         checklistType: 'CAMION' | 'HIDROGUA'
         matchedItems: { itemCode: string; status: 'OK' | 'BAD' | 'NA'; observation: string }[]
         unmatchedNotes: { label: string; status: 'OK' | 'BAD' | 'NA' }[]
         overallConfidence: 'HIGH' | 'LOW'
-      }>('/inspection-scan', { method: 'POST', body: { dataUrl }, timeoutMs: 45000 })
+      }>('/inspection-scan', { method: 'POST', body: { dataUrls }, timeoutMs: 60000 })
 
       const matchedUnit = result.header.dominio
         ? fleetUnits.find(
@@ -1138,20 +1151,21 @@ export const AuditsPage = () => {
                           <input
                             type="file"
                             accept="image/*"
+                            multiple
                             className="hidden"
                             disabled={isScanningSheet}
                             onChange={(event) => {
-                              const file = event.target.files?.[0]
-                              if (file) {
-                                void handleScanInspectionSheet(file)
+                              const files = Array.from(event.target.files ?? [])
+                              if (files.length > 0) {
+                                void handleScanInspectionSheet(files)
                               }
                               event.target.value = ''
                             }}
                           />
                         </label>
                         <p className="mt-1 text-[11px] text-slate-500">
-                          Sube una foto de la hoja de inspección manuscrita y la IA precompleta el checklist. Revisá
-                          siempre antes de guardar.
+                          Sube 1 a 3 fotos (si la inspección ocupa más de una hoja, subilas todas juntas) y la IA
+                          precompleta el checklist combinando el contenido. Revisá siempre antes de guardar.
                         </p>
                       </div>
                     )}

@@ -34,11 +34,15 @@ export interface ScanResult {
   overallConfidence: 'HIGH' | 'LOW'
 }
 
-const buildPrompt = (): string => {
+const buildPrompt = (pageCount: number): string => {
   const camion = CAMION_ITEMS.map((item) => `${item.code}: ${item.desc}`).join('\n')
   const hidro = HIDROGUA_ITEMS.map((item) => `${item.code}: ${item.desc}`).join('\n')
+  const multiPageNote =
+    pageCount > 1
+      ? `Te paso ${pageCount} fotos: son varias hojas de la MISMA inspeccion de campo (a veces los mecanicos completan mas de una hoja para una sola unidad). Combina el contenido de todas en un unico resultado — no repitas el mismo item dos veces si aparece en mas de una hoja (quedate con el dato mas completo), y completa el header con los datos que encuentres en cualquiera de las hojas.\n\n`
+      : ''
 
-  return `Sos un asistente que lee planillas de "INSPECCION DE EQUIPO EN CAMPO" escritas a mano por operarios de Enertrans (empresa de transporte y logistica con hidrogruas), y devolves UNICAMENTE un JSON valido (sin bloque de markdown, sin texto adicional antes o despues) con esta forma exacta:
+  return `${multiPageNote}Sos un asistente que lee planillas de "INSPECCION DE EQUIPO EN CAMPO" escritas a mano por operarios de Enertrans (empresa de transporte y logistica con hidrogruas), y devolves UNICAMENTE un JSON valido (sin bloque de markdown, sin texto adicional antes o despues) con esta forma exacta:
 
 {
   "header": { "dominio": string, "fecha": string o null (formato YYYY-MM-DD), "km": number o null, "hs": number o null, "hidrogrua": string, "cliente": string, "lugarDeTrabajo": string },
@@ -67,18 +71,22 @@ ${hidro}
 Devolve SOLO el JSON.`
 }
 
-export const scanInspectionImage = async (dataUrl: string): Promise<ScanResult> => {
+export const scanInspectionImages = async (dataUrls: string[]): Promise<ScanResult> => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY no configurada en el servidor.')
   }
-
-  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
-  if (!match) {
-    throw new Error('Imagen invalida.')
+  if (dataUrls.length === 0) {
+    throw new Error('No se recibio ninguna imagen.')
   }
-  const mediaType = match[1]
-  const base64Data = match[2]
+
+  const images = dataUrls.map((dataUrl) => {
+    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+    if (!match) {
+      throw new Error('Imagen invalida.')
+    }
+    return { mediaType: match[1], base64Data: match[2] }
+  })
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -94,8 +102,11 @@ export const scanInspectionImage = async (dataUrl: string): Promise<ScanResult> 
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
-            { type: 'text', text: buildPrompt() },
+            ...images.map(({ mediaType, base64Data }) => ({
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64Data },
+            })),
+            { type: 'text', text: buildPrompt(images.length) },
           ],
         },
       ],
