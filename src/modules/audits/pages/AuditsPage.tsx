@@ -14,6 +14,8 @@ import {
   CAMION_ITEMS,
   createChecklistFromDeviations,
   createEmptyAuditFormData,
+  evaluateAuditResult,
+  findClosestUnitByPlate,
   HIDROGUA_SECTIONS,
   createWorkOrderFromAudit,
   readImageAsCompressedDataUrl,
@@ -22,7 +24,8 @@ import {
   toAuditRecord,
   validateAuditFormData,
 } from '../services/auditsService'
-import type { AuditFormData, AuditFormErrors } from '../types'
+import type { PlateMatchResult } from '../services/auditsService'
+import type { AuditFormData, AuditFormErrors, AuditChecklistSectionDraft } from '../types'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems } from '../../../services/offline/queue'
 import { BackLink } from '../../../components/shared/BackLink'
@@ -96,6 +99,18 @@ export const AuditsPage = () => {
   const [draftChecked, setDraftChecked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isScanningSheet, setIsScanningSheet] = useState(false)
+  const [detectedPlate, setDetectedPlate] = useState<{ dominio: string; match: PlateMatchResult | null } | null>(null)
+  const [editingAuditId, setEditingAuditId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<{
+    unitId: string | null
+    externalVehicle: string
+    observations: string
+    checklistSections: AuditChecklistSectionDraft[]
+    unitKilometers: number
+    engineHours: number
+    hydroHours: number
+  } | null>(null)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   const auditHistory = useMemo(() => buildAuditHistoryView(audits, fleetUnits), [audits, fleetUnits])
   const viewAudit = useMemo(() => audits.find((audit) => audit.id === auditIdPendingView) ?? null, [audits, auditIdPendingView])
@@ -118,6 +133,100 @@ export const AuditsPage = () => {
       })),
     }))
   }, [viewAudit])
+
+  const editingAudit = useMemo(() => audits.find((audit) => audit.id === editingAuditId) ?? null, [audits, editingAuditId])
+
+  const startEditAudit = (auditId: string) => {
+    const audit = audits.find((auditRecord) => auditRecord.id === auditId)
+    if (!audit) {
+      setAppError('No se encontro la inspeccion para editar.')
+      return
+    }
+    setEditDraft({
+      unitId: audit.unitId ?? null,
+      externalVehicle: '',
+      observations: audit.observations ?? '',
+      checklistSections: audit.checklistSections.map((section) => ({
+        id: section.id,
+        title: section.title,
+        items: section.items.map((item) => ({
+          id: item.id,
+          label: item.label,
+          status: item.status,
+          observation: item.observation,
+        })),
+      })),
+      unitKilometers: audit.unitKilometers ?? 0,
+      engineHours: audit.engineHours ?? 0,
+      hydroHours: audit.hydroHours ?? 0,
+    })
+    setEditingAuditId(auditId)
+  }
+
+  const closeEditAudit = () => {
+    setEditingAuditId(null)
+    setEditDraft(null)
+  }
+
+  const handleEditItemStatusChange = (sectionId: string, itemId: string, status: AuditChecklistStatus) => {
+    setEditDraft((previousDraft) =>
+      previousDraft
+        ? {
+            ...previousDraft,
+            checklistSections: previousDraft.checklistSections.map((section) =>
+              section.id === sectionId
+                ? { ...section, items: section.items.map((item) => (item.id === itemId ? { ...item, status } : item)) }
+                : section,
+            ),
+          }
+        : previousDraft,
+    )
+  }
+
+  const handleEditItemObservationChange = (sectionId: string, itemId: string, observation: string) => {
+    setEditDraft((previousDraft) =>
+      previousDraft
+        ? {
+            ...previousDraft,
+            checklistSections: previousDraft.checklistSections.map((section) =>
+              section.id === sectionId
+                ? { ...section, items: section.items.map((item) => (item.id === itemId ? { ...item, observation } : item)) }
+                : section,
+            ),
+          }
+        : previousDraft,
+    )
+  }
+
+  const handleSaveAuditEdit = async () => {
+    if (!editingAuditId || !editDraft) {
+      return
+    }
+    setIsSavingEdit(true)
+    try {
+      const result = evaluateAuditResult(editDraft.checklistSections)
+      const updated = await apiRequest<any>(`/audits/${editingAuditId}`, {
+        method: 'PATCH',
+        body: {
+          unitId: editDraft.unitId,
+          externalVehicle: editDraft.externalVehicle || null,
+          observations: editDraft.observations,
+          checklist: { sections: editDraft.checklistSections },
+          unitKilometers: editDraft.unitKilometers,
+          engineHours: editDraft.engineHours,
+          hydroHours: editDraft.hydroHours,
+          result,
+        },
+      })
+      const mappedAudit = mapServerAuditToClient(updated)
+      setAudits((previousAudits) => previousAudits.map((audit) => (audit.id === editingAuditId ? mappedAudit : audit)))
+      closeEditAudit()
+    } catch (error) {
+      setAppError(String((error as Error)?.message ?? 'No se pudo guardar la edicion de la inspeccion.'))
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
 
   const filteredAuditHistory = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -144,6 +253,7 @@ export const AuditsPage = () => {
   const resetAuditForm = () => {
     setErrors({})
     setFormData(createEmptyAuditFormData(preferredUnitId))
+    setDetectedPlate(null)
   }
 
   const saveDraft = (data: AuditFormData) => {
@@ -352,17 +462,16 @@ export const AuditsPage = () => {
         overallConfidence: 'HIGH' | 'LOW'
       }>('/inspection-scan', { method: 'POST', body: { dataUrls }, timeoutMs: 60000 })
 
-      const matchedUnit = result.header.dominio
-        ? fleetUnits.find(
-            (unit) => unit.internalCode.replace(/\s/g, '').toUpperCase() === result.header.dominio.replace(/\s/g, '').toUpperCase(),
-          )
-        : undefined
+      const plateMatch = findClosestUnitByPlate(result.header.dominio, fleetUnits)
+      setDetectedPlate(result.header.dominio ? { dominio: result.header.dominio, match: plateMatch } : null)
+      // Ojo: nunca auto-seleccionamos la unidad acá, ni siquiera en un match
+      // exacto de texto — la IA puede confundir un caracter de la patente
+      // (0/O, 8/B) y pegarle a otra patente real que sí exista en la flota.
+      // Se muestra el aviso y el usuario confirma a mano.
 
       setFormData((previous) => ({
         ...previous,
         checklistType: result.checklistType,
-        vehicleMode: matchedUnit ? 'fleet' : previous.vehicleMode,
-        unitId: matchedUnit ? matchedUnit.id : previous.unitId,
         unitKilometers: result.header.km ?? previous.unitKilometers,
         newChecklistItems: {
           ...previous.newChecklistItems,
@@ -381,9 +490,9 @@ export const AuditsPage = () => {
           ? ' La IA no tuvo mucha confianza mapeando esta planilla — revisá con cuidado antes de guardar.'
           : ''
       setAppError(
-        `Se completaron ${result.matchedItems.length} items automáticamente${matchedUnit ? ` para la unidad ${matchedUnit.internalCode}` : ''}` +
+        `Se completaron ${result.matchedItems.length} items automáticamente` +
           `${result.unmatchedNotes.length > 0 ? ` y quedaron ${result.unmatchedNotes.length} notas sin poder mapear (se agregan igual, en una sección aparte)` : ''}.` +
-          ` Revisá el checklist antes de guardar.${confidenceNote}`,
+          ` Revisá el checklist${result.header.dominio ? ' y la unidad detectada' : ''} antes de guardar.${confidenceNote}`,
       )
     } catch (error) {
       setAppError(String((error as Error)?.message ?? 'No se pudo leer la planilla.'))
@@ -1061,6 +1170,36 @@ export const AuditsPage = () => {
                       ))}
                     </div>
                   )}
+                  {detectedPlate ? (
+                    <div
+                      className={`rounded-lg border px-3 py-2 text-xs ${detectedPlate.match?.exact ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-sky-300 bg-sky-50 text-sky-800'}`}
+                    >
+                      <p className="font-semibold">
+                        La IA leyó la patente "{detectedPlate.dominio}"
+                        {detectedPlate.match
+                          ? ` y encontró ${detectedPlate.match.exact ? 'una coincidencia exacta' : 'una posible coincidencia (no exacta)'}: ${detectedPlate.match.unit.internalCode} (${detectedPlate.match.unit.brand} ${detectedPlate.match.unit.model}).`
+                          : ', pero no encontró ninguna unidad parecida en la flota.'}
+                      </p>
+                      <p className="mt-1">La unidad NO se selecciona sola — confirmá o corregí manualmente.</p>
+                      {detectedPlate.match ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const unitToUse = detectedPlate.match!.unit
+                            setFormData((previousFormData) => ({
+                              ...previousFormData,
+                              vehicleMode: 'fleet',
+                              unitId: unitToUse.id,
+                            }))
+                            setDetectedPlate(null)
+                          }}
+                          className="mt-2 rounded-lg border border-amber-400 bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-200"
+                        >
+                          Usar {detectedPlate.match.unit.internalCode}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {formData.vehicleMode === 'fleet' ? (
                     <select
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
@@ -1501,7 +1640,9 @@ export const AuditsPage = () => {
                 onViewAudit={setAuditIdPendingView}
                 onExportPdf={handleExportPdf}
                 onRequestDelete={setAuditIdPendingDelete}
+                onEditAudit={startEditAudit}
                 canDelete={canDelete}
+                canEdit={canCreate}
               />
             </div>
             </section>
@@ -1604,6 +1745,130 @@ export const AuditsPage = () => {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingAuditId && editDraft ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Editar inspeccion</p>
+                <h3 className="text-lg font-bold text-slate-900">{editingAudit?.code ?? editingAuditId}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditAudit}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Unidad de flota
+                <select
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  value={editDraft.unitId ?? ''}
+                  onChange={(event) =>
+                    setEditDraft((previousDraft) =>
+                      previousDraft ? { ...previousDraft, unitId: event.target.value || null } : previousDraft,
+                    )
+                  }
+                >
+                  <option value="">Sin unidad de flota</option>
+                  {fleetUnits.map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.internalCode} - {unit.ownerCompany}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                KM motor
+                <input
+                  type="number"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  value={editDraft.unitKilometers}
+                  onChange={(event) =>
+                    setEditDraft((previousDraft) =>
+                      previousDraft ? { ...previousDraft, unitKilometers: Number(event.target.value) || 0 } : previousDraft,
+                    )
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Horas motor
+                <input
+                  type="number"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  value={editDraft.engineHours}
+                  onChange={(event) =>
+                    setEditDraft((previousDraft) =>
+                      previousDraft ? { ...previousDraft, engineHours: Number(event.target.value) || 0 } : previousDraft,
+                    )
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm font-semibold text-slate-700">
+                Horas hidrogrua
+                <input
+                  type="number"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                  value={editDraft.hydroHours}
+                  onChange={(event) =>
+                    setEditDraft((previousDraft) =>
+                      previousDraft ? { ...previousDraft, hydroHours: Number(event.target.value) || 0 } : previousDraft,
+                    )
+                  }
+                />
+              </label>
+            </div>
+
+            <label className="mt-3 flex flex-col gap-1 text-sm font-semibold text-slate-700">
+              Observaciones generales
+              <textarea
+                className="min-h-[80px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                value={editDraft.observations}
+                onChange={(event) =>
+                  setEditDraft((previousDraft) =>
+                    previousDraft ? { ...previousDraft, observations: event.target.value } : previousDraft,
+                  )
+                }
+              />
+            </label>
+
+            <div className="mt-4">
+              <AuditChecklistEditor
+                sections={editDraft.checklistSections}
+                onItemStatusChange={handleEditItemStatusChange}
+                onItemObservationChange={handleEditItemObservationChange}
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeEditAudit}
+                disabled={isSavingEdit}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAuditEdit}
+                disabled={isSavingEdit}
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+              >
+                {isSavingEdit ? 'Guardando...' : 'Guardar cambios'}
+              </button>
             </div>
           </div>
         </div>

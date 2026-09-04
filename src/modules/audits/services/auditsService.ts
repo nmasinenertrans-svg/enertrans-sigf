@@ -18,6 +18,57 @@ import { formatSequenceCode, getNextSequenceCode, parseSequenceNumber } from '..
 
 const MAX_OBSERVATION_LENGTH = 2000
 
+const normalizePlate = (value: string): string => value.replace(/\s/g, '').toUpperCase()
+
+const levenshteinDistance = (a: string, b: string): number => {
+  const rows = a.length + 1
+  const cols = b.length + 1
+  const matrix: number[][] = Array.from({ length: rows }, (_, i) => [i, ...new Array(cols - 1).fill(0)])
+  for (let j = 0; j < cols; j += 1) {
+    matrix[0][j] = j
+  }
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
+    }
+  }
+  return matrix[rows - 1][cols - 1]
+}
+
+export interface PlateMatchResult {
+  unit: FleetUnit
+  exact: boolean
+}
+
+/**
+ * La IA que lee la planilla a veces confunde un caracter de la patente
+ * (ej. 0/O, 8/B) — un match exacto por texto puede pegarle a una patente
+ * REAL pero equivocada sin que nadie lo note. Por eso esto nunca auto-
+ * selecciona en silencio si no es exacto: devuelve el resultado para que la
+ * pantalla siempre muestre un aviso confirmable, incluso en el caso exacto.
+ */
+export const findClosestUnitByPlate = (dominio: string, unitList: FleetUnit[]): PlateMatchResult | null => {
+  const target = normalizePlate(dominio)
+  if (!target) {
+    return null
+  }
+
+  const exact = unitList.find((unit) => normalizePlate(unit.internalCode) === target)
+  if (exact) {
+    return { unit: exact, exact: true }
+  }
+
+  let best: { unit: FleetUnit; distance: number } | null = null
+  for (const unit of unitList) {
+    const distance = levenshteinDistance(target, normalizePlate(unit.internalCode))
+    if (distance <= 2 && (!best || distance < best.distance)) {
+      best = { unit, distance }
+    }
+  }
+  return best ? { unit: best.unit, exact: false } : null
+}
+
 // ─── Checklist data ───────────────────────────────────────────────────────────
 
 export interface ChecklistItem { code: string; desc: string }

@@ -440,6 +440,53 @@ router.post('/', async (req, res) => {
   }
 })
 
+const auditUpdateSchema = z.object({
+  unitId: z.string().nullable().optional(),
+  externalVehicle: z.string().nullable().optional(),
+  observations: z.string().optional(),
+  checklist: z.record(z.string(), z.any()).optional(),
+  unitKilometers: z.coerce.number().int().nonnegative().optional(),
+  engineHours: z.coerce.number().int().nonnegative().optional(),
+  hydroHours: z.coerce.number().int().nonnegative().optional(),
+  result: z.enum(['APPROVED', 'REJECTED']).optional(),
+})
+
+// Correccion de una inspeccion ya cargada (ej. la IA/el operario asigno mal
+// la patente, o hay que corregir un item del checklist). A diferencia del
+// POST, esto NO repite los efectos secundarios de la creacion (generar OT,
+// notificaciones push, cambiar el estado operativo de la unidad, recalcular
+// planes de mantenimiento) -- solo corrige los datos de la inspeccion en si.
+router.patch('/:id', async (req, res) => {
+  const parsed = auditUpdateSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Datos invalidos.' })
+  }
+
+  const data: Record<string, unknown> = {}
+  if (parsed.data.unitId !== undefined) data.unitId = parsed.data.unitId || null
+  if (parsed.data.externalVehicle !== undefined) data.externalVehicle = parsed.data.externalVehicle || null
+  if (parsed.data.observations !== undefined) data.observations = parsed.data.observations
+  if (parsed.data.checklist !== undefined) data.checklist = parsed.data.checklist
+  if (parsed.data.unitKilometers !== undefined) data.unitKilometers = parsed.data.unitKilometers
+  if (parsed.data.engineHours !== undefined) data.engineHours = parsed.data.engineHours
+  if (parsed.data.hydroHours !== undefined) data.hydroHours = parsed.data.hydroHours
+  if (parsed.data.result !== undefined) data.result = parsed.data.result
+
+  try {
+    const item = await prisma.auditRecord.update({ where: { id: req.params.id }, data })
+    return res.json(item)
+  } catch (error) {
+    if (getErrorCode(error) === 'P2025') {
+      return res.status(404).json({ message: 'La inspeccion no existe.' })
+    }
+    if (getErrorCode(error) === 'P2003') {
+      return res.status(400).json({ message: 'Unidad invalida.' })
+    }
+    console.error('Audit PATCH error:', error)
+    return res.status(500).json({ message: 'No se pudo actualizar la inspeccion.' })
+  }
+})
+
 router.delete('/:id', async (req, res) => {
   const record = await prisma.auditRecord.findUnique({
     where: { id: req.params.id },
