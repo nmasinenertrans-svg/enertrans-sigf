@@ -6,8 +6,15 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { TripRecord } from '../../../types/domain'
 import { LocationPicker } from '../components/LocationPicker'
-import { createEmptyTripFormData, toTripCreatePayload, validateTripFormData } from '../services/tripsService'
-import type { TripFormData, TripFormErrors, TripFormField } from '../types'
+import {
+  createEmptyLegFormData,
+  createEmptyTripFormData,
+  defaultLegLabel,
+  hasValidationErrors,
+  toTripPayload,
+  validateTripFormData,
+} from '../services/tripsService'
+import type { TripFormData, TripLegFormData, TripLegFormErrors } from '../types'
 
 const inputClassName =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-amber-400'
@@ -24,12 +31,14 @@ export const TripsPage = () => {
   } = useAppContext()
 
   const [formData, setFormData] = useState<TripFormData>(createEmptyTripFormData)
-  const [errors, setErrors] = useState<TripFormErrors>({})
+  const [legErrors, setLegErrors] = useState<TripLegFormErrors[]>([])
+  const [driverError, setDriverError] = useState<string | undefined>(undefined)
   const [isSaving, setIsSaving] = useState(false)
   const [driverSearch, setDriverSearch] = useState('')
-  const [unitSearch, setUnitSearch] = useState('')
+  const [unitSearchByLeg, setUnitSearchByLeg] = useState<Record<number, string>>({})
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [editingTripId, setEditingTripId] = useState<string | null>(null)
+  const [expandedTripId, setExpandedTripId] = useState<string | null>(null)
 
   const sortedTrips = useMemo(
     () => [...trips].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
@@ -45,27 +54,41 @@ export const TripsPage = () => {
     return users.filter((user) => user.fullName.toLowerCase().includes(query)).slice(0, 8)
   }, [users, driverSearch])
 
-  const selectedUnit = fleetUnits.find((unit) => unit.id === formData.unitId)
-  const filteredUnits = useMemo(() => {
-    const query = unitSearch.trim().toLowerCase()
-    if (!query) {
-      return fleetUnits.slice(0, 8)
-    }
-    return fleetUnits
-      .filter((unit) => `${unit.internalCode} ${unit.brand} ${unit.model}`.toLowerCase().includes(query))
-      .slice(0, 8)
-  }, [fleetUnits, unitSearch])
+  const updateLeg = (index: number, patch: Partial<TripLegFormData>) => {
+    setFormData((previous) => ({
+      ...previous,
+      legs: previous.legs.map((leg, legIndex) => (legIndex === index ? { ...leg, ...patch } : leg)),
+    }))
+    setLegErrors((previous) => {
+      if (!previous[index]) {
+        return previous
+      }
+      const next = [...previous]
+      next[index] = {}
+      return next
+    })
+  }
 
-  const handleFieldChange = <TField extends TripFormField>(field: TField, value: TripFormData[TField]) => {
-    setFormData((previous) => ({ ...previous, [field]: value }))
-    setErrors((previous) => ({ ...previous, [field]: undefined }))
+  const addLeg = () => {
+    setFormData((previous) => ({ ...previous, legs: [...previous.legs, createEmptyLegFormData()] }))
+  }
+
+  const removeLeg = (index: number) => {
+    setFormData((previous) => ({ ...previous, legs: previous.legs.filter((_, legIndex) => legIndex !== index) }))
+    setLegErrors((previous) => previous.filter((_, legIndex) => legIndex !== index))
+    setUnitSearchByLeg((previous) => {
+      const next = { ...previous }
+      delete next[index]
+      return next
+    })
   }
 
   const resetForm = () => {
     setFormData(createEmptyTripFormData())
-    setErrors({})
+    setLegErrors([])
+    setDriverError(undefined)
     setDriverSearch('')
-    setUnitSearch('')
+    setUnitSearchByLeg({})
     setEditingTripId(null)
   }
 
@@ -74,27 +97,34 @@ export const TripsPage = () => {
     setFormData({
       driverUserId: trip.driverUserId ?? '',
       driverExternalName: trip.driverExternalName,
-      unitId: trip.unitId ?? '',
-      startDate: trip.startDate.slice(0, 10),
-      endDate: trip.endDate.slice(0, 10),
-      originLabel: trip.originLabel,
-      originLat: trip.originLat,
-      originLng: trip.originLng,
-      destinationLabel: trip.destinationLabel,
-      destinationLat: trip.destinationLat,
-      destinationLng: trip.destinationLng,
       notes: trip.notes,
+      legs: [...trip.legs]
+        .sort((a, b) => a.order - b.order)
+        .map((leg) => ({
+          label: leg.label,
+          unitId: leg.unitId ?? '',
+          startDate: leg.startDate.slice(0, 10),
+          endDate: leg.endDate.slice(0, 10),
+          originLabel: leg.originLabel,
+          originLat: leg.originLat,
+          originLng: leg.originLng,
+          destinationLabel: leg.destinationLabel,
+          destinationLat: leg.destinationLat,
+          destinationLng: leg.destinationLng,
+        })),
     })
-    setErrors({})
+    setLegErrors([])
+    setDriverError(undefined)
     setDriverSearch('')
-    setUnitSearch('')
+    setUnitSearchByLeg({})
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleSubmit = async () => {
-    const validationErrors = validateTripFormData(formData)
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors)
+    const validation = validateTripFormData(formData)
+    if (hasValidationErrors(validation)) {
+      setDriverError(validation.driverExternalName)
+      setLegErrors(validation.legs)
       return
     }
 
@@ -103,13 +133,13 @@ export const TripsPage = () => {
       if (editingTripId) {
         const updated = await apiRequest<TripRecord>(`/trips/${editingTripId}`, {
           method: 'PATCH',
-          body: toTripCreatePayload(formData),
+          body: toTripPayload(formData),
         })
         setTrips(trips.map((trip) => (trip.id === updated.id ? updated : trip)))
       } else {
         const created = await apiRequest<TripRecord>('/trips', {
           method: 'POST',
-          body: toTripCreatePayload(formData),
+          body: toTripPayload(formData),
         })
         setTrips([created, ...trips])
       }
@@ -141,8 +171,9 @@ export const TripsPage = () => {
         <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
         <h2 className="text-2xl font-bold text-slate-900">Viajes / Traslados</h2>
         <p className="text-sm text-slate-600">
-          Registrá los viajes de los choferes: desde qué fecha, hasta qué fecha y a dónde. Marcá el origen y el
-          destino en el mapa y el sistema calcula los km por ruta automáticamente.
+          Registrá los viajes de los choferes en tramos (ida, vuelta, o más paradas) — cada tramo puede tener su
+          propia unidad, ya que a veces se vuelve con un camión distinto al que se fue. El sistema calcula los km
+          por ruta de cada tramo y el total del viaje.
         </p>
       </header>
 
@@ -164,7 +195,7 @@ export const TripsPage = () => {
                   <span>{selectedDriver.fullName}</span>
                   <button
                     type="button"
-                    onClick={() => handleFieldChange('driverUserId', '')}
+                    onClick={() => setFormData((previous) => ({ ...previous, driverUserId: '' }))}
                     className="font-semibold text-amber-700 hover:underline"
                   >
                     Quitar
@@ -186,7 +217,7 @@ export const TripsPage = () => {
                           key={user.id}
                           type="button"
                           onClick={() => {
-                            handleFieldChange('driverUserId', user.id)
+                            setFormData((previous) => ({ ...previous, driverUserId: user.id }))
                             setDriverSearch('')
                           }}
                           className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
@@ -199,109 +230,153 @@ export const TripsPage = () => {
                   <input
                     className={`${inputClassName} mt-2`}
                     value={formData.driverExternalName}
-                    onChange={(event) => handleFieldChange('driverExternalName', event.target.value)}
+                    onChange={(event) =>
+                      setFormData((previous) => ({ ...previous, driverExternalName: event.target.value }))
+                    }
                     placeholder="...o escribí el nombre del chofer"
                   />
                 </>
               )}
-              {errors.driverExternalName ? <p className="mt-1 text-xs text-rose-600">{errors.driverExternalName}</p> : null}
+              {driverError ? <p className="mt-1 text-xs text-rose-600">{driverError}</p> : null}
             </div>
 
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Unidad (opcional)</label>
-              {selectedUnit ? (
-                <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  <span>
-                    {selectedUnit.internalCode} · {selectedUnit.brand} {selectedUnit.model}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleFieldChange('unitId', '')}
-                    className="font-semibold text-amber-700 hover:underline"
-                  >
-                    Quitar
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <input
-                    className={`${inputClassName} mt-1`}
-                    value={unitSearch}
-                    onChange={(event) => setUnitSearch(event.target.value)}
-                    placeholder="Buscar por dominio, marca o modelo..."
-                  />
-                  {unitSearch.trim() ? (
-                    <div className="mt-2 max-h-28 space-y-1 overflow-y-auto">
-                      {filteredUnits.map((unit) => (
+            <div className="space-y-3">
+              {formData.legs.map((leg, index) => {
+                const errors = legErrors[index] ?? {}
+                const selectedUnit = fleetUnits.find((unit) => unit.id === leg.unitId)
+                const unitSearch = unitSearchByLeg[index] ?? ''
+                const filteredUnits = unitSearch.trim()
+                  ? fleetUnits
+                      .filter((unit) =>
+                        `${unit.internalCode} ${unit.brand} ${unit.model}`.toLowerCase().includes(unitSearch.trim().toLowerCase()),
+                      )
+                      .slice(0, 8)
+                  : fleetUnits.slice(0, 8)
+
+                return (
+                  <div key={index} className="rounded-xl border border-slate-300 bg-slate-50 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <input
+                        value={leg.label}
+                        onChange={(event) => updateLeg(index, { label: event.target.value })}
+                        placeholder={defaultLegLabel(index)}
+                        className="w-40 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:border-amber-400"
+                      />
+                      {formData.legs.length > 1 ? (
                         <button
-                          key={unit.id}
                           type="button"
-                          onClick={() => {
-                            handleFieldChange('unitId', unit.id)
-                            setUnitSearch('')
-                          }}
-                          className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                          onClick={() => removeLeg(index)}
+                          className="text-xs font-semibold text-rose-600 hover:underline"
                         >
-                          {unit.internalCode} · {unit.brand} {unit.model}
+                          Quitar tramo
                         </button>
-                      ))}
+                      ) : null}
                     </div>
-                  ) : null}
-                </>
-              )}
+
+                    <div className="mt-2">
+                      <label className="text-xs font-semibold text-slate-600">Unidad (opcional)</label>
+                      {selectedUnit ? (
+                        <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+                          <span>
+                            {selectedUnit.internalCode} · {selectedUnit.brand} {selectedUnit.model}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateLeg(index, { unitId: '' })}
+                            className="font-semibold text-amber-700 hover:underline"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            className={`${inputClassName} mt-1`}
+                            value={unitSearch}
+                            onChange={(event) =>
+                              setUnitSearchByLeg((previous) => ({ ...previous, [index]: event.target.value }))
+                            }
+                            placeholder="Buscar por dominio, marca o modelo..."
+                          />
+                          {unitSearch.trim() ? (
+                            <div className="mt-1 max-h-24 space-y-1 overflow-y-auto">
+                              {filteredUnits.map((unit) => (
+                                <button
+                                  key={unit.id}
+                                  type="button"
+                                  onClick={() => {
+                                    updateLeg(index, { unitId: unit.id })
+                                    setUnitSearchByLeg((previous) => ({ ...previous, [index]: '' }))
+                                  }}
+                                  className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-left text-xs text-slate-700 hover:bg-slate-100"
+                                >
+                                  {unit.internalCode} · {unit.brand} {unit.model}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-600">Desde</label>
+                        <input
+                          type="date"
+                          className={`${inputClassName} mt-1`}
+                          value={leg.startDate}
+                          onChange={(event) => updateLeg(index, { startDate: event.target.value })}
+                        />
+                        {errors.startDate ? <p className="mt-1 text-xs text-rose-600">{errors.startDate}</p> : null}
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-600">Hasta</label>
+                        <input
+                          type="date"
+                          className={`${inputClassName} mt-1`}
+                          value={leg.endDate}
+                          onChange={(event) => updateLeg(index, { endDate: event.target.value })}
+                        />
+                        {errors.endDate ? <p className="mt-1 text-xs text-rose-600">{errors.endDate}</p> : null}
+                      </div>
+                    </div>
+
+                    <div className="mt-2">
+                      <LocationPicker
+                        label="Origen"
+                        lat={leg.originLat}
+                        lng={leg.originLng}
+                        addressLabel={leg.originLabel}
+                        errorMessage={errors.originLabel}
+                        onChange={({ label, lat, lng }) => updateLeg(index, { originLabel: label, originLat: lat, originLng: lng })}
+                      />
+                    </div>
+
+                    <div className="mt-2">
+                      <LocationPicker
+                        label="Destino"
+                        lat={leg.destinationLat}
+                        lng={leg.destinationLng}
+                        addressLabel={leg.destinationLabel}
+                        errorMessage={errors.destinationLabel}
+                        onChange={({ label, lat, lng }) =>
+                          updateLeg(index, { destinationLabel: label, destinationLat: lat, destinationLng: lng })
+                        }
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+
+              <button
+                type="button"
+                onClick={addLeg}
+                className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                + Agregar tramo
+              </button>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-semibold text-slate-700">Desde</label>
-                <input
-                  type="date"
-                  className={`${inputClassName} mt-1`}
-                  value={formData.startDate}
-                  onChange={(event) => handleFieldChange('startDate', event.target.value)}
-                />
-                {errors.startDate ? <p className="mt-1 text-xs text-rose-600">{errors.startDate}</p> : null}
-              </div>
-              <div>
-                <label className="text-sm font-semibold text-slate-700">Hasta</label>
-                <input
-                  type="date"
-                  className={`${inputClassName} mt-1`}
-                  value={formData.endDate}
-                  onChange={(event) => handleFieldChange('endDate', event.target.value)}
-                />
-                {errors.endDate ? <p className="mt-1 text-xs text-rose-600">{errors.endDate}</p> : null}
-              </div>
-            </div>
-
-            <LocationPicker
-              label="Origen"
-              lat={formData.originLat}
-              lng={formData.originLng}
-              addressLabel={formData.originLabel}
-              errorMessage={errors.originLabel}
-              onChange={({ label, lat, lng }) => {
-                setFormData((previous) => ({ ...previous, originLabel: label, originLat: lat, originLng: lng }))
-                setErrors((previous) => ({ ...previous, originLabel: undefined }))
-              }}
-            />
-
-            <LocationPicker
-              label="Destino"
-              lat={formData.destinationLat}
-              lng={formData.destinationLng}
-              addressLabel={formData.destinationLabel}
-              errorMessage={errors.destinationLabel}
-              onChange={({ label, lat, lng }) => {
-                setFormData((previous) => ({
-                  ...previous,
-                  destinationLabel: label,
-                  destinationLat: lat,
-                  destinationLng: lng,
-                }))
-                setErrors((previous) => ({ ...previous, destinationLabel: undefined }))
-              }}
-            />
 
             <div>
               <label className="text-sm font-semibold text-slate-700">Notas (opcional)</label>
@@ -309,7 +384,7 @@ export const TripsPage = () => {
                 className={`${inputClassName} mt-1`}
                 rows={2}
                 value={formData.notes}
-                onChange={(event) => handleFieldChange('notes', event.target.value)}
+                onChange={(event) => setFormData((previous) => ({ ...previous, notes: event.target.value }))}
               />
             </div>
 
@@ -344,63 +419,90 @@ export const TripsPage = () => {
               Todavía no hay viajes registrados.
             </div>
           ) : (
-            sortedTrips.map((trip) => (
-              <article key={trip.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{trip.code}</p>
-                    <h3 className="mt-0.5 text-base font-bold text-slate-900">
-                      {trip.driverName || trip.driverExternalName || 'Sin chofer'}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      {formatDateOnly(trip.startDate)} — {formatDateOnly(trip.endDate)}
-                      {trip.unitLabel ? ` · ${trip.unitLabel}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
+            sortedTrips.map((trip) => {
+              const isExpanded = expandedTripId === trip.id
+              return (
+                <article key={trip.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{trip.code}</p>
+                      <h3 className="mt-0.5 text-base font-bold text-slate-900">
+                        {trip.driverName || trip.driverExternalName || 'Sin chofer'}
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        {formatDateOnly(trip.startDate)} — {formatDateOnly(trip.endDate)} · {trip.legs.length} tramo
+                        {trip.legs.length === 1 ? '' : 's'}
+                      </p>
+                    </div>
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                      {trip.distanceKm.toLocaleString('es-AR')} km
+                      Total: {trip.totalDistanceKm.toLocaleString('es-AR')} km
                     </span>
-                    {trip.distanceSource === 'STRAIGHT_LINE' ? (
-                      <span className="text-[10px] font-semibold text-amber-700">Aproximado (línea recta)</span>
-                    ) : null}
                   </div>
-                </div>
 
-                <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
-                  <p>
-                    <span className="font-semibold text-slate-700">Origen: </span>
-                    {trip.originLabel || `${trip.originLat.toFixed(5)}, ${trip.originLng.toFixed(5)}`}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-slate-700">Destino: </span>
-                    {trip.destinationLabel || `${trip.destinationLat.toFixed(5)}, ${trip.destinationLng.toFixed(5)}`}
-                  </p>
-                </div>
+                  {trip.notes ? <p className="mt-2 text-xs text-slate-600">{trip.notes}</p> : null}
 
-                {trip.notes ? <p className="mt-2 text-xs text-slate-600">{trip.notes}</p> : null}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedTripId(isExpanded ? null : trip.id)}
+                    className="mt-3 text-xs font-semibold text-amber-700 hover:underline"
+                  >
+                    {isExpanded ? 'Ocultar tramos' : 'Ver tramos'}
+                  </button>
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-slate-400">Cargado por {trip.createdByUserName || '-'}</p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(trip)}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingDeleteId(trip.id)}
-                      className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-                    >
-                      Eliminar
-                    </button>
+                  {isExpanded ? (
+                    <div className="mt-2 space-y-2">
+                      {[...trip.legs]
+                        .sort((a, b) => a.order - b.order)
+                        .map((leg) => (
+                          <div key={leg.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-bold text-slate-800">{leg.label}</span>
+                              <span className="font-semibold text-emerald-700">
+                                {leg.distanceKm.toLocaleString('es-AR')} km
+                                {leg.distanceSource === 'STRAIGHT_LINE' ? (
+                                  <span className="ml-1 font-normal text-amber-700">(aproximado)</span>
+                                ) : null}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-slate-600">
+                              {formatDateOnly(leg.startDate)} — {formatDateOnly(leg.endDate)}
+                              {leg.unitLabel ? ` · ${leg.unitLabel}` : ''}
+                            </p>
+                            <p className="mt-1 text-slate-600">
+                              <span className="font-semibold">Origen: </span>
+                              {leg.originLabel || `${leg.originLat.toFixed(5)}, ${leg.originLng.toFixed(5)}`}
+                            </p>
+                            <p className="mt-1 text-slate-600">
+                              <span className="font-semibold">Destino: </span>
+                              {leg.destinationLabel || `${leg.destinationLat.toFixed(5)}, ${leg.destinationLng.toFixed(5)}`}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-slate-400">Cargado por {trip.createdByUserName || '-'}</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(trip)}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteId(trip.id)}
+                        className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))
+                </article>
+              )
+            })
           )}
         </div>
       </div>
@@ -408,7 +510,7 @@ export const TripsPage = () => {
       <ConfirmModal
         isOpen={Boolean(pendingDeleteId)}
         title="Eliminar viaje"
-        message="¿Eliminar este registro de viaje? Esta acción no se puede deshacer."
+        message="¿Eliminar este registro de viaje (con todos sus tramos)? Esta acción no se puede deshacer."
         onConfirm={() => void handleConfirmDelete()}
         onCancel={() => setPendingDeleteId(null)}
       />

@@ -27,10 +27,9 @@ const geoPointSchema = z.object({
   lng: z.number().min(-180).max(180),
 })
 
-const tripCreateSchema = z
+const legSchema = z
   .object({
-    driverUserId: z.string().nullable().optional(),
-    driverExternalName: z.string().optional().default(''),
+    label: z.string().optional().default(''),
     unitId: z.string().nullable().optional(),
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
@@ -38,69 +37,120 @@ const tripCreateSchema = z
     origin: geoPointSchema,
     destinationLabel: z.string().optional().default(''),
     destination: geoPointSchema,
+  })
+  .refine((data) => new Date(data.endDate).getTime() >= new Date(data.startDate).getTime(), {
+    message: 'La fecha de fin de un tramo no puede ser anterior a la de inicio.',
+    path: ['endDate'],
+  })
+
+const tripCreateSchema = z
+  .object({
+    driverUserId: z.string().nullable().optional(),
+    driverExternalName: z.string().optional().default(''),
     notes: z.string().optional().default(''),
+    legs: z.array(legSchema).min(1, 'Agregá al menos un tramo (ida).'),
   })
   .refine((data) => Boolean(data.driverUserId) || Boolean(data.driverExternalName.trim()), {
     message: 'Elegi un chofer del sistema o escribi el nombre.',
     path: ['driverExternalName'],
   })
-  .refine((data) => new Date(data.endDate).getTime() >= new Date(data.startDate).getTime(), {
-    message: 'La fecha de fin no puede ser anterior a la de inicio.',
-    path: ['endDate'],
-  })
 
 const tripUpdateSchema = z.object({
   driverUserId: z.string().nullable().optional(),
   driverExternalName: z.string().optional(),
-  unitId: z.string().nullable().optional(),
-  startDate: z.string().datetime().optional(),
-  endDate: z.string().datetime().optional(),
-  originLabel: z.string().optional(),
-  origin: geoPointSchema.optional(),
-  destinationLabel: z.string().optional(),
-  destination: geoPointSchema.optional(),
   notes: z.string().optional(),
+  legs: z.array(legSchema).min(1, 'Agregá al menos un tramo (ida).').optional(),
 })
+
+const defaultLegLabel = (index: number): string => {
+  if (index === 0) return 'Ida'
+  if (index === 1) return 'Vuelta'
+  return `Tramo ${index + 1}`
+}
 
 const includeRelations = {
   driver: { select: { id: true, fullName: true } },
-  unit: { select: { id: true, internalCode: true, brand: true, model: true } },
   createdBy: { select: { fullName: true } },
+  legs: {
+    orderBy: { order: 'asc' as const },
+    include: { unit: { select: { id: true, internalCode: true, brand: true, model: true } } },
+  },
 } as const
 
-const mapTrip = (trip: any) => ({
-  id: trip.id,
-  code: trip.code,
-  driverUserId: trip.driverUserId,
-  driverName: trip.driver?.fullName ?? '',
-  driverExternalName: trip.driverExternalName,
-  unitId: trip.unitId,
-  unitLabel: trip.unit?.internalCode ?? '',
-  startDate: trip.startDate.toISOString(),
-  endDate: trip.endDate.toISOString(),
-  originLabel: trip.originLabel,
-  originLat: trip.originLat,
-  originLng: trip.originLng,
-  destinationLabel: trip.destinationLabel,
-  destinationLat: trip.destinationLat,
-  destinationLng: trip.destinationLng,
-  distanceKm: trip.distanceKm,
-  distanceSource: trip.distanceSource,
-  notes: trip.notes,
-  createdByUserName: trip.createdBy?.fullName ?? '',
-  createdAt: trip.createdAt.toISOString(),
-  updatedAt: trip.updatedAt.toISOString(),
+const mapTrip = (trip: any) => {
+  const legs = (trip.legs ?? []).map((leg: any) => ({
+    id: leg.id,
+    order: leg.order,
+    label: leg.label,
+    unitId: leg.unitId,
+    unitLabel: leg.unit?.internalCode ?? '',
+    startDate: leg.startDate.toISOString(),
+    endDate: leg.endDate.toISOString(),
+    originLabel: leg.originLabel,
+    originLat: leg.originLat,
+    originLng: leg.originLng,
+    destinationLabel: leg.destinationLabel,
+    destinationLat: leg.destinationLat,
+    destinationLng: leg.destinationLng,
+    distanceKm: leg.distanceKm,
+    distanceSource: leg.distanceSource,
+  }))
+
+  return {
+    id: trip.id,
+    code: trip.code,
+    driverUserId: trip.driverUserId,
+    driverName: trip.driver?.fullName ?? '',
+    driverExternalName: trip.driverExternalName,
+    startDate: trip.startDate.toISOString(),
+    endDate: trip.endDate.toISOString(),
+    notes: trip.notes,
+    totalDistanceKm: Math.round(legs.reduce((sum: number, leg: any) => sum + leg.distanceKm, 0) * 100) / 100,
+    legs,
+    createdByUserName: trip.createdBy?.fullName ?? '',
+    createdAt: trip.createdAt.toISOString(),
+    updatedAt: trip.updatedAt.toISOString(),
+  }
+}
+
+type LegInput = z.infer<typeof legSchema>
+
+const buildLegRows = async (legs: LegInput[]) => {
+  const computed = await Promise.all(
+    legs.map(async (leg) => {
+      const { distanceKm, source } = await calculateRouteDistanceKm(leg.origin, leg.destination)
+      return { leg, distanceKm, source }
+    }),
+  )
+
+  return computed.map(({ leg, distanceKm, source }, index) => ({
+    order: index + 1,
+    label: leg.label.trim() || defaultLegLabel(index),
+    unitId: leg.unitId || null,
+    startDate: new Date(leg.startDate),
+    endDate: new Date(leg.endDate),
+    originLabel: leg.originLabel.trim(),
+    originLat: leg.origin.lat,
+    originLng: leg.origin.lng,
+    destinationLabel: leg.destinationLabel.trim(),
+    destinationLat: leg.destination.lat,
+    destinationLng: leg.destination.lng,
+    distanceKm,
+    distanceSource: source,
+  }))
+}
+
+const tripDateRange = (legRows: { startDate: Date; endDate: Date }[]) => ({
+  startDate: new Date(Math.min(...legRows.map((leg) => leg.startDate.getTime()))),
+  endDate: new Date(Math.max(...legRows.map((leg) => leg.endDate.getTime()))),
 })
 
 router.get('/', async (req, res) => {
   try {
-    const { driverUserId, unitId } = req.query
+    const { driverUserId } = req.query
     const where: Record<string, unknown> = {}
     if (typeof driverUserId === 'string' && driverUserId) {
       where.driverUserId = driverUserId
-    }
-    if (typeof unitId === 'string' && unitId) {
-      where.unitId = unitId
     }
     const items = await prisma.trip.findMany({
       where,
@@ -125,7 +175,8 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    const { distanceKm, source } = await calculateRouteDistanceKm(parsed.data.origin, parsed.data.destination)
+    const legRows = await buildLegRows(parsed.data.legs)
+    const { startDate, endDate } = tripDateRange(legRows)
     const code = formatCode('VIA', await getNextSequence('trip'))
 
     const item = await prisma.trip.create({
@@ -133,19 +184,11 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
         code,
         driverUserId: parsed.data.driverUserId || null,
         driverExternalName: parsed.data.driverUserId ? '' : parsed.data.driverExternalName.trim(),
-        unitId: parsed.data.unitId || null,
-        startDate: new Date(parsed.data.startDate),
-        endDate: new Date(parsed.data.endDate),
-        originLabel: parsed.data.originLabel.trim(),
-        originLat: parsed.data.origin.lat,
-        originLng: parsed.data.origin.lng,
-        destinationLabel: parsed.data.destinationLabel.trim(),
-        destinationLat: parsed.data.destination.lat,
-        destinationLng: parsed.data.destination.lng,
-        distanceKm,
-        distanceSource: source,
         notes: parsed.data.notes.trim(),
+        startDate,
+        endDate,
         createdByUserId: req.userId,
+        legs: { create: legRows },
       },
       include: includeRelations,
     })
@@ -162,7 +205,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
 router.patch('/:id', async (req, res) => {
   const parsed = tripUpdateSchema.safeParse(req.body)
   if (!parsed.success) {
-    return res.status(400).json({ message: 'Datos invalidos.' })
+    return res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Datos invalidos.' })
   }
 
   try {
@@ -181,38 +224,28 @@ router.patch('/:id', async (req, res) => {
     if (parsed.data.driverExternalName !== undefined && !data.driverUserId) {
       data.driverExternalName = parsed.data.driverExternalName.trim()
     }
-    if (parsed.data.unitId !== undefined) data.unitId = parsed.data.unitId || null
-    if (parsed.data.startDate !== undefined) data.startDate = new Date(parsed.data.startDate)
-    if (parsed.data.endDate !== undefined) data.endDate = new Date(parsed.data.endDate)
-    if (parsed.data.originLabel !== undefined) data.originLabel = parsed.data.originLabel.trim()
-    if (parsed.data.destinationLabel !== undefined) data.destinationLabel = parsed.data.destinationLabel.trim()
-    if (parsed.data.notes !== undefined) data.notes = parsed.data.notes.trim()
-
-    const nextOrigin = parsed.data.origin ?? { lat: current.originLat, lng: current.originLng }
-    const nextDestination = parsed.data.destination ?? { lat: current.destinationLat, lng: current.destinationLng }
-    const originChanged = Boolean(parsed.data.origin)
-    const destinationChanged = Boolean(parsed.data.destination)
-
-    if (originChanged) {
-      data.originLat = nextOrigin.lat
-      data.originLng = nextOrigin.lng
-    }
-    if (destinationChanged) {
-      data.destinationLat = nextDestination.lat
-      data.destinationLng = nextDestination.lng
+    if (parsed.data.notes !== undefined) {
+      data.notes = parsed.data.notes.trim()
     }
 
-    if (originChanged || destinationChanged) {
-      const { distanceKm, source } = await calculateRouteDistanceKm(nextOrigin, nextDestination)
-      data.distanceKm = distanceKm
-      data.distanceSource = source
-    }
+    const item = await prisma.$transaction(async (tx) => {
+      if (parsed.data.legs) {
+        const legRows = await buildLegRows(parsed.data.legs!)
+        const { startDate, endDate } = tripDateRange(legRows)
+        data.startDate = startDate
+        data.endDate = endDate
+        await tx.tripLeg.deleteMany({ where: { tripId: current.id } })
+        await tx.trip.update({
+          where: { id: current.id },
+          data: { ...data, legs: { create: legRows } },
+        })
+      } else {
+        await tx.trip.update({ where: { id: current.id }, data })
+      }
 
-    const item = await prisma.trip.update({
-      where: { id: req.params.id },
-      data,
-      include: includeRelations,
+      return tx.trip.findUniqueOrThrow({ where: { id: current.id }, include: includeRelations })
     })
+
     return res.json(mapTrip(item))
   } catch (error) {
     if (getErrorCode(error) === 'P2025') {
@@ -228,7 +261,10 @@ router.patch('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    await prisma.trip.delete({ where: { id: req.params.id } })
+    await prisma.$transaction(async (tx) => {
+      await tx.tripLeg.deleteMany({ where: { tripId: req.params.id } })
+      await tx.trip.delete({ where: { id: req.params.id } })
+    })
     return res.status(204).send()
   } catch (error) {
     if (getErrorCode(error) === 'P2025') {

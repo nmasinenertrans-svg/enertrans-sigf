@@ -178,6 +178,7 @@ const COMPAT_TABLE_NAMES = [
   'HandoverChecklist',
   'Tire',
   'Trip',
+  'TripLeg',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -1018,6 +1019,50 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Trip_driverUserId_idx" ON "Trip"("driverUserId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Trip_unitId_idx" ON "Trip"("unitId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Trip_startDate_idx" ON "Trip"("startDate");`)
+
+  // Un viaje pasa a tener varios tramos (ida, vuelta, o mas paradas), cada uno
+  // con su propia unidad (el chofer puede volver con un camion distinto al
+  // que llevo) — se relajan las columnas viejas de ubicacion/unidad de Trip
+  // (ya no se completan para viajes nuevos) y se agrega TripLeg.
+  await safeExecuteCompatSql(`ALTER TABLE "Trip" ALTER COLUMN "originLat" DROP NOT NULL;`)
+  await safeExecuteCompatSql(`ALTER TABLE "Trip" ALTER COLUMN "originLng" DROP NOT NULL;`)
+  await safeExecuteCompatSql(`ALTER TABLE "Trip" ALTER COLUMN "destinationLat" DROP NOT NULL;`)
+  await safeExecuteCompatSql(`ALTER TABLE "Trip" ALTER COLUMN "destinationLng" DROP NOT NULL;`)
+
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "TripLeg" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "tripId" TEXT NOT NULL,
+      "order" INTEGER NOT NULL DEFAULT 1,
+      "label" TEXT NOT NULL DEFAULT '',
+      "unitId" TEXT,
+      "startDate" TIMESTAMP(3) NOT NULL,
+      "endDate" TIMESTAMP(3) NOT NULL,
+      "originLabel" TEXT NOT NULL DEFAULT '',
+      "originLat" DOUBLE PRECISION NOT NULL,
+      "originLng" DOUBLE PRECISION NOT NULL,
+      "destinationLabel" TEXT NOT NULL DEFAULT '',
+      "destinationLat" DOUBLE PRECISION NOT NULL,
+      "destinationLng" DOUBLE PRECISION NOT NULL,
+      "distanceKm" DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "distanceSource" TEXT NOT NULL DEFAULT 'ROUTE',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "TripLeg_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "TripLeg_tripId_idx" ON "TripLeg"("tripId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "TripLeg_unitId_idx" ON "TripLeg"("unitId");`)
+
+  // Migracion unica de los viajes viejos (un solo tramo inline) a TripLeg,
+  // como tramo "Ida". Idempotente: solo inserta si el viaje todavia no tiene
+  // ningun tramo cargado.
+  await safeExecuteCompatSql(`
+    INSERT INTO "TripLeg" ("tripId", "order", "label", "unitId", "startDate", "endDate", "originLabel", "originLat", "originLng", "destinationLabel", "destinationLat", "destinationLng", "distanceKm", "distanceSource")
+    SELECT t."id", 1, 'Ida', t."unitId", t."startDate", t."endDate", t."originLabel", t."originLat", t."originLng", t."destinationLabel", t."destinationLat", t."destinationLng", t."distanceKm", t."distanceSource"
+    FROM "Trip" t
+    WHERE t."originLat" IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM "TripLeg" tl WHERE tl."tripId" = t."id");
+  `)
 
   // Inventario: campos que el frontend ya usaba pero nunca se habian agregado al schema real
   // (externalBarcode/unit/unitPrice/currency se perdian al guardar) + descripcion legible del producto.

@@ -1,8 +1,7 @@
-import type { TripFormData, TripFormErrors } from '../types'
+import type { TripFormData, TripLegFormData, TripLegFormErrors } from '../types'
 
-export const createEmptyTripFormData = (): TripFormData => ({
-  driverUserId: '',
-  driverExternalName: '',
+export const createEmptyLegFormData = (): TripLegFormData => ({
+  label: '',
   unitId: '',
   startDate: '',
   endDate: '',
@@ -12,45 +11,72 @@ export const createEmptyTripFormData = (): TripFormData => ({
   destinationLabel: '',
   destinationLat: null,
   destinationLng: null,
-  notes: '',
 })
 
-export const validateTripFormData = (formData: TripFormData): TripFormErrors => {
-  const errors: TripFormErrors = {}
+export const createEmptyTripFormData = (): TripFormData => ({
+  driverUserId: '',
+  driverExternalName: '',
+  notes: '',
+  legs: [createEmptyLegFormData()],
+})
 
-  if (!formData.driverUserId && !formData.driverExternalName.trim()) {
-    errors.driverExternalName = 'Elegí un chofer del sistema o escribí el nombre.'
-  }
+export const defaultLegLabel = (index: number): string => {
+  if (index === 0) return 'Ida'
+  if (index === 1) return 'Vuelta'
+  return `Tramo ${index + 1}`
+}
 
-  if (!formData.startDate) {
+export const validateLegFormData = (leg: TripLegFormData): TripLegFormErrors => {
+  const errors: TripLegFormErrors = {}
+  if (!leg.startDate) {
     errors.startDate = 'La fecha de inicio es obligatoria.'
   }
-  if (!formData.endDate) {
+  if (!leg.endDate) {
     errors.endDate = 'La fecha de fin es obligatoria.'
   }
-  if (formData.startDate && formData.endDate && new Date(formData.endDate) < new Date(formData.startDate)) {
-    errors.endDate = 'La fecha de fin no puede ser anterior a la de inicio.'
+  if (leg.startDate && leg.endDate && new Date(leg.endDate) < new Date(leg.startDate)) {
+    errors.endDate = 'No puede ser anterior al inicio.'
   }
-
-  if (formData.originLat === null || formData.originLng === null) {
+  if (leg.originLat === null || leg.originLng === null) {
     errors.originLabel = 'Marcá el origen en el mapa.'
   }
-  if (formData.destinationLat === null || formData.destinationLng === null) {
+  if (leg.destinationLat === null || leg.destinationLng === null) {
     errors.destinationLabel = 'Marcá el destino en el mapa.'
   }
-
   return errors
 }
 
-export const toTripCreatePayload = (formData: TripFormData) => ({
+export interface TripFormValidation {
+  driverExternalName?: string
+  legs: TripLegFormErrors[]
+}
+
+export const validateTripFormData = (formData: TripFormData): TripFormValidation => {
+  const legs = formData.legs.map((leg) => validateLegFormData(leg))
+  const validation: TripFormValidation = { legs }
+  if (!formData.driverUserId && !formData.driverExternalName.trim()) {
+    validation.driverExternalName = 'Elegí un chofer del sistema o escribí el nombre.'
+  }
+  return validation
+}
+
+export const hasValidationErrors = (validation: TripFormValidation): boolean =>
+  Boolean(validation.driverExternalName) || validation.legs.some((leg) => Object.keys(leg).length > 0)
+
+const toLegPayload = (leg: TripLegFormData) => ({
+  label: leg.label.trim(),
+  unitId: leg.unitId || null,
+  startDate: new Date(leg.startDate).toISOString(),
+  endDate: new Date(leg.endDate).toISOString(),
+  originLabel: leg.originLabel.trim(),
+  origin: { lat: leg.originLat as number, lng: leg.originLng as number },
+  destinationLabel: leg.destinationLabel.trim(),
+  destination: { lat: leg.destinationLat as number, lng: leg.destinationLng as number },
+})
+
+export const toTripPayload = (formData: TripFormData) => ({
   driverUserId: formData.driverUserId || null,
   driverExternalName: formData.driverUserId ? '' : formData.driverExternalName.trim(),
-  unitId: formData.unitId || null,
-  startDate: new Date(formData.startDate).toISOString(),
-  endDate: new Date(formData.endDate).toISOString(),
-  originLabel: formData.originLabel.trim(),
-  origin: { lat: formData.originLat as number, lng: formData.originLng as number },
-  destinationLabel: formData.destinationLabel.trim(),
-  destination: { lat: formData.destinationLat as number, lng: formData.destinationLng as number },
   notes: formData.notes.trim(),
+  legs: formData.legs.map(toLegPayload),
 })

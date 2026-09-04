@@ -456,12 +456,10 @@ export interface Tire {
 
 export type TripDistanceSource = 'ROUTE' | 'STRAIGHT_LINE'
 
-export interface TripRecord {
+export interface TripLegRecord {
   id: string
-  code: string
-  driverUserId?: string | null
-  driverName?: string
-  driverExternalName: string
+  order: number
+  label: string
   unitId?: string | null
   unitLabel?: string
   startDate: string
@@ -474,7 +472,19 @@ export interface TripRecord {
   destinationLng: number
   distanceKm: number
   distanceSource: TripDistanceSource
+}
+
+export interface TripRecord {
+  id: string
+  code: string
+  driverUserId?: string | null
+  driverName?: string
+  driverExternalName: string
+  startDate: string
+  endDate: string
   notes: string
+  totalDistanceKm: number
+  legs: TripLegRecord[]
   createdByUserName?: string
   createdAt?: string
   updatedAt?: string

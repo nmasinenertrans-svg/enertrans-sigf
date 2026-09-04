@@ -252,7 +252,7 @@ model FleetUnit {
   handoverChecklists       HandoverChecklist[]
   tires                    Tire[]
   tasks                    Task[]              @relation("TaskUnit")
-  trips                    Trip[]              @relation("TripUnit")
+  tripLegs                 TripLeg[]           @relation("TripLegUnit")
 
   @@index([clientId])
   @@index([logisticsStatus])
@@ -667,29 +667,56 @@ model Trip {
   code               String   @default("")
   driverUserId       String?
   driverExternalName String   @default("")
+  // Legado: un viaje ahora tiene tramos (TripLeg) en vez de un solo
+  // origen/destino/unidad. Estas 6 columnas se mantienen solo por los datos
+  // viejos ya migrados a TripLeg (ver db.ts) — no se usan mas para nada nuevo.
   unitId             String?
-  startDate          DateTime
-  endDate            DateTime
   originLabel        String   @default("")
-  originLat          Float
-  originLng          Float
+  originLat          Float?
+  originLng          Float?
   destinationLabel   String   @default("")
-  destinationLat     Float
-  destinationLng     Float
+  destinationLat     Float?
+  destinationLng     Float?
   distanceKm         Float    @default(0)
   distanceSource     String   @default("ROUTE")
+  startDate          DateTime
+  endDate            DateTime
   notes              String   @default("")
   createdByUserId    String
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   driver    User?      @relation("TripDriver", fields: [driverUserId], references: [id])
-  unit      FleetUnit? @relation("TripUnit", fields: [unitId], references: [id])
   createdBy User       @relation("TripCreatedBy", fields: [createdByUserId], references: [id])
+  legs      TripLeg[]
 
   @@index([driverUserId])
-  @@index([unitId])
   @@index([startDate])
+}
+
+model TripLeg {
+  id               String   @id @default(uuid())
+  tripId           String
+  order            Int      @default(1)
+  label            String   @default("")
+  unitId           String?
+  startDate        DateTime
+  endDate          DateTime
+  originLabel      String   @default("")
+  originLat        Float
+  originLng        Float
+  destinationLabel String   @default("")
+  destinationLat   Float
+  destinationLng   Float
+  distanceKm       Float    @default(0)
+  distanceSource   String   @default("ROUTE")
+  createdAt        DateTime @default(now())
+
+  trip Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  unit FleetUnit? @relation("TripLegUnit", fields: [unitId], references: [id])
+
+  @@index([tripId])
+  @@index([unitId])
 }
 
 model Supplier {
