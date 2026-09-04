@@ -449,6 +449,7 @@ const auditUpdateSchema = z.object({
   engineHours: z.coerce.number().int().nonnegative().optional(),
   hydroHours: z.coerce.number().int().nonnegative().optional(),
   result: z.enum(['APPROVED', 'REJECTED']).optional(),
+  photoUrls: z.array(z.string()).optional(),
 })
 
 // Correccion de una inspeccion ya cargada (ej. la IA/el operario asigno mal
@@ -471,6 +472,7 @@ router.patch('/:id', async (req, res) => {
   if (parsed.data.engineHours !== undefined) data.engineHours = parsed.data.engineHours
   if (parsed.data.hydroHours !== undefined) data.hydroHours = parsed.data.hydroHours
   if (parsed.data.result !== undefined) data.result = parsed.data.result
+  if (parsed.data.photoUrls !== undefined) data.photoUrls = parsed.data.photoUrls
 
   try {
     const item = await prisma.auditRecord.update({ where: { id: req.params.id }, data })

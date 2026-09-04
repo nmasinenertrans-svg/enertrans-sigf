@@ -109,6 +109,7 @@ export const AuditsPage = () => {
     unitKilometers: number
     engineHours: number
     hydroHours: number
+    photoBase64List: string[]
   } | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
 
@@ -159,8 +160,57 @@ export const AuditsPage = () => {
       unitKilometers: audit.unitKilometers ?? 0,
       engineHours: audit.engineHours ?? 0,
       hydroHours: audit.hydroHours ?? 0,
+      photoBase64List: [...audit.photoBase64List],
     })
     setEditingAuditId(auditId)
+  }
+
+  const handleEditAddPhotoFiles = async (fileList: FileList) => {
+    if (!editDraft) {
+      return
+    }
+    const remainingSlots = MAX_AUDIT_PHOTOS - editDraft.photoBase64List.length
+    if (remainingSlots <= 0) {
+      setAppError(`Limite alcanzado: maximo ${MAX_AUDIT_PHOTOS} fotos por inspeccion.`)
+      return
+    }
+
+    const filesToProcess = Array.from(fileList).slice(0, remainingSlots)
+    if (filesToProcess.length < fileList.length) {
+      setAppError(`Solo se agregaron ${filesToProcess.length} fotos. Limite: ${MAX_AUDIT_PHOTOS}.`)
+    }
+
+    try {
+      setGlobalLoading(true)
+      const photoDataList = await Promise.all(
+        filesToProcess.map((file) =>
+          readImageAsCompressedDataUrl(file, {
+            maxWidth: 1280,
+            maxHeight: 1280,
+            quality: 0.65,
+            outputType: 'image/jpeg',
+          }),
+        ),
+      )
+
+      setEditDraft((previousDraft) =>
+        previousDraft
+          ? { ...previousDraft, photoBase64List: [...previousDraft.photoBase64List, ...photoDataList] }
+          : previousDraft,
+      )
+    } catch {
+      setAppError('No se pudo procesar una o mas imagenes.')
+    } finally {
+      setGlobalLoading(false)
+    }
+  }
+
+  const handleEditRemovePhoto = (photoIndex: number) => {
+    setEditDraft((previousDraft) =>
+      previousDraft
+        ? { ...previousDraft, photoBase64List: previousDraft.photoBase64List.filter((_, index) => index !== photoIndex) }
+        : previousDraft,
+    )
   }
 
   const closeEditAudit = () => {
@@ -205,6 +255,25 @@ export const AuditsPage = () => {
     setIsSavingEdit(true)
     try {
       const result = evaluateAuditResult(editDraft.checklistSections)
+      // Las fotos ya subidas antes vienen como URL (http...); las agregadas
+      // recien en esta edicion vienen como data URL en base64 y hay que
+      // subirlas a storage antes de guardar la referencia.
+      const finalPhotoUrls = await Promise.all(
+        editDraft.photoBase64List.map((photo, index) =>
+          photo.startsWith('data:')
+            ? apiRequest<{ url: string }>('/files/upload', {
+                method: 'POST',
+                body: {
+                  fileName: `audit-${editingAuditId}-edit-${index + 1}.jpg`,
+                  contentType: 'image/jpeg',
+                  dataUrl: photo,
+                  folder: 'audits',
+                },
+                timeoutMs: AUDIT_SUBMIT_TIMEOUT_MS,
+              }).then((upload) => upload.url)
+            : Promise.resolve(photo),
+        ),
+      )
       const updated = await apiRequest<any>(`/audits/${editingAuditId}`, {
         method: 'PATCH',
         body: {
@@ -216,6 +285,7 @@ export const AuditsPage = () => {
           engineHours: editDraft.engineHours,
           hydroHours: editDraft.hydroHours,
           result,
+          photoUrls: finalPhotoUrls,
         },
       })
       const mappedAudit = mapServerAuditToClient(updated)
@@ -1856,6 +1926,14 @@ export const AuditsPage = () => {
                 sections={editDraft.checklistSections}
                 onItemStatusChange={handleEditItemStatusChange}
                 onItemObservationChange={handleEditItemObservationChange}
+              />
+            </div>
+
+            <div className="mt-4">
+              <AuditPhotoPicker
+                photoBase64List={editDraft.photoBase64List}
+                onAddPhotoFiles={handleEditAddPhotoFiles}
+                onRemovePhoto={handleEditRemovePhoto}
               />
             </div>
 

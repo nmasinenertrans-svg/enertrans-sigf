@@ -97,7 +97,7 @@ export const scanInspectionImages = async (dataUrls: string[]): Promise<ScanResu
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [
         {
           role: 'user',
@@ -118,7 +118,10 @@ export const scanInspectionImages = async (dataUrls: string[]): Promise<ScanResu
     throw new Error(`Error de la IA de vision (${response.status}): ${detail.slice(0, 300)}`)
   }
 
-  const data = (await response.json()) as { content?: Array<{ type: string; text?: string }> }
+  const data = (await response.json()) as {
+    content?: Array<{ type: string; text?: string }>
+    stop_reason?: string
+  }
   const text = data.content?.find((block) => block.type === 'text')?.text ?? ''
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, '')
@@ -128,6 +131,26 @@ export const scanInspectionImages = async (dataUrls: string[]): Promise<ScanResu
   try {
     return JSON.parse(cleaned) as ScanResult
   } catch {
+    // La IA a veces agrega algun texto antes/despues del JSON pese a la
+    // instruccion de devolver solo JSON -- probamos recortar hasta las
+    // llaves externas antes de rendirnos.
+    const firstBrace = cleaned.indexOf('{')
+    const lastBrace = cleaned.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1)) as ScanResult
+      } catch {
+        // sigue sin poder parsear, cae al error de abajo
+      }
+    }
+
+    console.error('Inspection scan: respuesta no parseable. stop_reason=', data.stop_reason, 'texto:', cleaned.slice(0, 2000))
+
+    if (data.stop_reason === 'max_tokens') {
+      throw new Error(
+        'La planilla es muy compleja y la respuesta de la IA se corto. Proba escaneando las hojas por separado (una foto por vez) en vez de juntas.',
+      )
+    }
     throw new Error('No se pudo interpretar la respuesta de la IA.')
   }
 }
