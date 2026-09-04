@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { usePermissions } from '../../../core/auth/usePermissions'
@@ -68,7 +68,9 @@ export const AuditsPage = () => {
       }
     }
 
-    return fleetUnits[0]?.id ?? ''
+    // Sin unidad explicita en el link ni re-inspeccion pendiente, no
+    // precargamos ninguna al azar -- que el usuario elija o confirme.
+    return ''
   }, [fleetUnits, searchParams, pendingReauditParam, pendingReauditOrder])
 
   const pendingWorkOrder = useMemo(() => {
@@ -373,10 +375,24 @@ export const AuditsPage = () => {
     }
   }
 
+  // Precarga la unidad "preferida" (la que vino por link desde la ficha de
+  // flota, o de una re-inspeccion pendiente) SOLO una vez por apertura del
+  // formulario -- antes este efecto reaplicaba preferredUnitId cada vez que
+  // "fleetUnits" cambiaba de referencia (por ej. un refresco en segundo
+  // plano), lo que pisaba silenciosamente cualquier unidad que el usuario
+  // ya hubiera confirmado a mano o via el banner de patente detectada por IA.
+  const appliedPreferredUnitIdRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (!preferredUnitId) {
+    if (!isFormOpen) {
+      appliedPreferredUnitIdRef.current = null
       return
     }
+
+    if (!preferredUnitId || appliedPreferredUnitIdRef.current === preferredUnitId) {
+      return
+    }
+    appliedPreferredUnitIdRef.current = preferredUnitId
 
     const selectedUnit = fleetUnits.find((unit) => unit.id === preferredUnitId)
 
@@ -400,7 +416,7 @@ export const AuditsPage = () => {
 
       return preferredUnitId || allUnitsFilter
     })
-  }, [preferredUnitId, fleetUnits, manualAuditMode])
+  }, [isFormOpen, preferredUnitId, fleetUnits, manualAuditMode])
 
   useEffect(() => {
     if (!manualAuditMode) {

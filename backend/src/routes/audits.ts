@@ -474,6 +474,25 @@ router.patch('/:id', async (req, res) => {
   if (parsed.data.result !== undefined) data.result = parsed.data.result
   if (parsed.data.photoUrls !== undefined) data.photoUrls = parsed.data.photoUrls
 
+  // Si se corrige la unidad (ej. la IA le habia pegado a la patente
+  // equivocada), el codigo de la inspeccion queda con esa patente vieja
+  // pegada para siempre a menos que lo regeneremos aca, conservando el
+  // mismo numero de secuencia.
+  if (parsed.data.unitId !== undefined) {
+    const existing = await prisma.auditRecord.findUnique({ where: { id: req.params.id }, select: { unitId: true, code: true } })
+    if (existing && (parsed.data.unitId || null) !== existing.unitId) {
+      const codeParts = existing.code.split('-')
+      const sequenceNumber = Number(codeParts[codeParts.length - 1])
+      if (Number.isFinite(sequenceNumber)) {
+        const prefix = codeParts[0]
+        const newUnit = parsed.data.unitId
+          ? await prisma.fleetUnit.findUnique({ where: { id: parsed.data.unitId }, select: { internalCode: true } })
+          : null
+        data.code = formatCode(prefix, sequenceNumber, newUnit?.internalCode)
+      }
+    }
+  }
+
   try {
     const item = await prisma.auditRecord.update({ where: { id: req.params.id }, data })
     return res.json(item)
