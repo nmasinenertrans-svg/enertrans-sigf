@@ -29,6 +29,7 @@ export const TripsPage = () => {
   const [driverSearch, setDriverSearch] = useState('')
   const [unitSearch, setUnitSearch] = useState('')
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [editingTripId, setEditingTripId] = useState<string | null>(null)
 
   const sortedTrips = useMemo(
     () => [...trips].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
@@ -65,6 +66,29 @@ export const TripsPage = () => {
     setErrors({})
     setDriverSearch('')
     setUnitSearch('')
+    setEditingTripId(null)
+  }
+
+  const startEdit = (trip: TripRecord) => {
+    setEditingTripId(trip.id)
+    setFormData({
+      driverUserId: trip.driverUserId ?? '',
+      driverExternalName: trip.driverExternalName,
+      unitId: trip.unitId ?? '',
+      startDate: trip.startDate.slice(0, 10),
+      endDate: trip.endDate.slice(0, 10),
+      originLabel: trip.originLabel,
+      originLat: trip.originLat,
+      originLng: trip.originLng,
+      destinationLabel: trip.destinationLabel,
+      destinationLat: trip.destinationLat,
+      destinationLng: trip.destinationLng,
+      notes: trip.notes,
+    })
+    setErrors({})
+    setDriverSearch('')
+    setUnitSearch('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleSubmit = async () => {
@@ -76,11 +100,19 @@ export const TripsPage = () => {
 
     setIsSaving(true)
     try {
-      const created = await apiRequest<TripRecord>('/trips', {
-        method: 'POST',
-        body: toTripCreatePayload(formData),
-      })
-      setTrips([created, ...trips])
+      if (editingTripId) {
+        const updated = await apiRequest<TripRecord>(`/trips/${editingTripId}`, {
+          method: 'PATCH',
+          body: toTripCreatePayload(formData),
+        })
+        setTrips(trips.map((trip) => (trip.id === updated.id ? updated : trip)))
+      } else {
+        const created = await apiRequest<TripRecord>('/trips', {
+          method: 'POST',
+          body: toTripCreatePayload(formData),
+        })
+        setTrips([created, ...trips])
+      }
       resetForm()
     } catch (error) {
       setAppError(String((error as Error)?.message ?? 'No se pudo guardar el viaje.'))
@@ -116,7 +148,7 @@ export const TripsPage = () => {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-1">
-          <h3 className="text-lg font-bold text-slate-900">Nuevo viaje</h3>
+          <h3 className="text-lg font-bold text-slate-900">{editingTripId ? 'Editar viaje' : 'Nuevo viaje'}</h3>
 
           <form
             className="mt-4 space-y-4"
@@ -281,13 +313,26 @@ export const TripsPage = () => {
               />
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              {editingTripId ? (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+              ) : null}
               <button
                 type="submit"
                 disabled={isSaving}
                 className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-70"
               >
-                {isSaving ? 'Calculando km y guardando...' : 'Registrar viaje'}
+                {isSaving
+                  ? 'Calculando km y guardando...'
+                  : editingTripId
+                    ? 'Guardar cambios'
+                    : 'Registrar viaje'}
               </button>
             </div>
           </form>
@@ -337,13 +382,22 @@ export const TripsPage = () => {
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] text-slate-400">Cargado por {trip.createdByUserName || '-'}</p>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDeleteId(trip.id)}
-                    className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-                  >
-                    Eliminar
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(trip)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingDeleteId(trip.id)}
+                      className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               </article>
             ))
