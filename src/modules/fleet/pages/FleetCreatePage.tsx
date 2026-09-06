@@ -1,7 +1,7 @@
 ﻿import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { buildFleetDetailPath, ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { buildFleetDetailPath } from '../../../core/routing/routePaths'
 import { FleetUnitForm } from '../components/FleetUnitForm'
 import {
   addTractorHistoryToSemiTrailer,
@@ -117,7 +117,7 @@ export const FleetCreatePage = () => {
 
   return (
     <section className="space-y-4">
-      <BackLink to={ROUTE_PATHS.fleet.list} label="Volver a flota" />
+      <BackLink historyBack label="Volver a flota" />
       <FleetUnitForm
         title="Crear Unidad"
         description="Alta de nueva unidad con datos operativos y tecnicos obligatorios."
@@ -126,7 +126,7 @@ export const FleetCreatePage = () => {
         errors={errors}
         onFieldChange={handleFieldChange}
         onSubmit={handleSubmit}
-        onCancel={() => navigate(ROUTE_PATHS.fleet.list)}
+        onCancel={() => navigate(-1)}
         internalCodeLabel="Dominio"
         internalCodePlaceholder="Ej: ABC123"
         semiTrailerOptions={semiTrailerOptions}

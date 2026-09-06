@@ -1,7 +1,7 @@
 ﻿import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAppContext } from '../../../core/hooks/useAppContext'
-import { buildFleetDetailPath, ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { FleetUnitForm } from '../components/FleetUnitForm'
 import type { FleetUnit } from '../../../types/domain'
 import {
@@ -197,12 +197,16 @@ export const FleetEditPage = () => {
     setFleetUnits(nextUnitList)
     await persistFleetUpdate(selectedUnit, nextUnit, `la unidad ${nextUnit.internalCode}`)
 
-    navigate(buildFleetDetailPath(selectedUnit.id))
+    // Volvemos a la pantalla de la que se vino (detalle o listado con
+    // filtros), en vez de apilar una entrada nueva de historial hacia
+    // detalle -- eso era lo que hacia que "atras" pasara primero por esta
+    // misma pagina de edicion y despues tirara al listado sin filtros.
+    navigate(-1)
   }
 
   return (
     <section className="space-y-4">
-      <BackLink to={ROUTE_PATHS.fleet.list} label="Volver a flota" />
+      <BackLink historyBack label="Volver a flota" />
       <FleetUnitForm
         title="Editar Unidad"
         description={`Actualizacion de la unidad ${selectedUnit.internalCode}.`}
@@ -211,7 +215,7 @@ export const FleetEditPage = () => {
         errors={errors}
         onFieldChange={handleFieldChange}
         onSubmit={handleSubmit}
-        onCancel={() => navigate(buildFleetDetailPath(selectedUnit.id))}
+        onCancel={() => navigate(-1)}
         semiTrailerOptions={semiTrailerOptions}
       />
     </section>
