@@ -8,6 +8,8 @@ import { apiRequest } from '../../../services/api/apiClient'
 import type { TaskPriority, TaskRecord, TaskStatus, TaskType } from '../../../types/domain'
 import { downloadTaskPdf, downloadTasksSummaryPdf } from '../services/tasksPdfService'
 
+const TASKS_PAGE_SIZE = 5
+
 type TaskFormData = {
   title: string
   description: string
@@ -143,6 +145,7 @@ export const TasksPage = () => {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
   const [sendingCommentTaskId, setSendingCommentTaskId] = useState<string | null>(null)
   const [markingViewedTaskIds, setMarkingViewedTaskIds] = useState<Set<string>>(new Set())
+  const [expandedTaskSections, setExpandedTaskSections] = useState<Record<string, boolean>>({})
 
   const isManager = currentUser?.role === 'DEV' || currentUser?.role === 'GERENTE'
   const canViewTasks = can('TASKS', 'view')
@@ -687,31 +690,46 @@ export const TasksPage = () => {
     )
   }
 
-  const renderTaskSection = (title: string, subtitle: string, sectionTasks: TaskRecord[]) => (
-    <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-          <p className="text-xs text-slate-500">{subtitle}</p>
+  const renderTaskSection = (key: string, title: string, subtitle: string, sectionTasks: TaskRecord[]) => {
+    const isExpanded = expandedTaskSections[key] ?? false
+    const visibleTasks = isExpanded ? sectionTasks : sectionTasks.slice(0, TASKS_PAGE_SIZE)
+    return (
+      <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+            <p className="text-xs text-slate-500">{subtitle}</p>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+            {sectionTasks.length}
+          </span>
         </div>
-        <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
-          {sectionTasks.length}
-        </span>
-      </div>
 
-      <div className="mt-3 space-y-3">
-        {isLoading ? (
-          <p className="text-sm text-slate-500">Cargando tareas...</p>
-        ) : sectionTasks.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">
-            No hay tareas para el filtro seleccionado.
-          </p>
-        ) : (
-          sectionTasks.map(renderTaskCard)
-        )}
-      </div>
-    </article>
-  )
+        <div className="mt-3 space-y-3">
+          {isLoading ? (
+            <p className="text-sm text-slate-500">Cargando tareas...</p>
+          ) : sectionTasks.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">
+              No hay tareas para el filtro seleccionado.
+            </p>
+          ) : (
+            <>
+              {visibleTasks.map(renderTaskCard)}
+              {sectionTasks.length > TASKS_PAGE_SIZE ? (
+                <button
+                  type="button"
+                  onClick={() => setExpandedTaskSections((previous) => ({ ...previous, [key]: !isExpanded }))}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  {isExpanded ? 'Ver menos' : `Ver todas (${sectionTasks.length})`}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      </article>
+    )
+  }
 
   if (!canViewTasks) {
     return (
@@ -1168,9 +1186,9 @@ export const TasksPage = () => {
               </div>
             </article>
 
-            {renderTaskSection('Asignadas', 'Aceptadas, todavia sin arrancar.', pendingAssignedTasks)}
-            {renderTaskSection('En curso', 'En progreso o bloqueadas.', inProgressTasks)}
-            {renderTaskSection('Finalizadas', 'Terminadas o canceladas.', finishedTasks)}
+            {renderTaskSection('pending', 'Asignadas', 'Aceptadas, todavia sin arrancar.', pendingAssignedTasks)}
+            {renderTaskSection('inProgress', 'En curso', 'En progreso o bloqueadas.', inProgressTasks)}
+            {renderTaskSection('finished', 'Finalizadas', 'Terminadas o canceladas.', finishedTasks)}
           </div>
         </section>
       </div>

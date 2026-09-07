@@ -103,6 +103,7 @@ export const AuditsPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isScanningSheet, setIsScanningSheet] = useState(false)
   const [detectedPlate, setDetectedPlate] = useState<{ dominio: string; match: PlateMatchResult | null } | null>(null)
+  const [unitSearchTerm, setUnitSearchTerm] = useState('')
   const [editingAuditId, setEditingAuditId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<{
     unitId: string | null
@@ -117,6 +118,16 @@ export const AuditsPage = () => {
   const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   const auditHistory = useMemo(() => buildAuditHistoryView(audits, fleetUnits), [audits, fleetUnits])
+
+  const filteredFormFleetUnits = useMemo(() => {
+    const query = unitSearchTerm.trim().toLowerCase()
+    if (!query) {
+      return fleetUnits
+    }
+    return fleetUnits.filter((unit) =>
+      `${unit.internalCode} ${unit.brand} ${unit.model} ${unit.ownerCompany}`.toLowerCase().includes(query),
+    )
+  }, [fleetUnits, unitSearchTerm])
   const viewAudit = useMemo(() => audits.find((audit) => audit.id === auditIdPendingView) ?? null, [audits, auditIdPendingView])
   const viewAuditSummary = useMemo(
     () => auditHistory.find((item) => item.id === auditIdPendingView) ?? null,
@@ -327,6 +338,7 @@ export const AuditsPage = () => {
     setErrors({})
     setFormData(createEmptyAuditFormData(preferredUnitId))
     setDetectedPlate(null)
+    setUnitSearchTerm('')
   }
 
   const saveDraft = (data: AuditFormData) => {
@@ -1335,27 +1347,40 @@ export const AuditsPage = () => {
                     </div>
                   ) : null}
                   {formData.vehicleMode === 'fleet' ? (
-                    <select
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                      value={formData.unitId ?? ''}
-                      disabled={isReauditMode}
-                      onChange={(event) => {
-                        setFormData((previousFormData) => ({
-                          ...previousFormData,
-                          unitId: event.target.value,
-                          auditMode: 'INDEPENDENT',
-                          externalRequestId: '',
-                        }))
-                        setErrors((previousErrors) => ({ ...previousErrors, unitId: undefined }))
-                      }}
-                    >
-                      <option value="">Seleccionar unidad</option>
-                      {fleetUnits.map((unit) => (
-                        <option key={unit.id} value={unit.id}>
-                          {unit.internalCode} - {unit.ownerCompany}
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      {!isReauditMode ? (
+                        <input
+                          value={unitSearchTerm}
+                          onChange={(event) => setUnitSearchTerm(event.target.value)}
+                          placeholder="Buscar por patente, marca o modelo..."
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                        />
+                      ) : null}
+                      <select
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                        value={formData.unitId ?? ''}
+                        disabled={isReauditMode}
+                        onChange={(event) => {
+                          setFormData((previousFormData) => ({
+                            ...previousFormData,
+                            unitId: event.target.value,
+                            auditMode: 'INDEPENDENT',
+                            externalRequestId: '',
+                          }))
+                          setErrors((previousErrors) => ({ ...previousErrors, unitId: undefined }))
+                        }}
+                      >
+                        <option value="">Seleccionar unidad</option>
+                        {filteredFormFleetUnits.map((unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.internalCode} - {unit.ownerCompany}
+                          </option>
+                        ))}
+                      </select>
+                      {unitSearchTerm && filteredFormFleetUnits.length === 0 ? (
+                        <p className="text-xs text-slate-500">Ninguna unidad coincide con la busqueda.</p>
+                      ) : null}
+                    </>
                   ) : (
                     <input
                       className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
