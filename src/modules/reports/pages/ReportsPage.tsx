@@ -568,7 +568,7 @@ export const ReportsPage = () => {
       const latest = unitAudits.reduce((mostRecent, audit) =>
         new Date(audit.performedAt).getTime() > new Date(mostRecent.performedAt).getTime() ? audit : mostRecent,
       )
-      const date = new Date(latest.performedAt).toLocaleDateString('es-AR')
+      const date = new Date(latest.performedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: '2-digit' })
       map.set(unitId, `${auditResultLabelMap[latest.result]} (${date})`)
     })
     return map
@@ -1467,7 +1467,7 @@ export const ReportsPage = () => {
       }))
 
     const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Hidrogrúa', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación', 'Estado']
-    const detailColumnWidths = [68, 72, 82, 34, 120, 92, 92, 100, 100, 110]
+    const detailColumnWidths = [62, 65, 75, 34, 95, 80, 80, 85, 85, 115]
     const detailFontSize = 8
     const detailRowHeight = 20
     const tableWidth = detailColumnWidths.reduce((sum, width) => sum + width, 0)
