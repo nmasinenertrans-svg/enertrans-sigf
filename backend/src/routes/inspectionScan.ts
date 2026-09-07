@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { NextFunction, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
-import { scanInspectionImages } from '../services/inspectionScan.js'
+import { getInspectionScanJob, startInspectionScanJob } from '../services/inspectionScanJobs.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
@@ -22,28 +22,32 @@ router.use(async (req: AuthenticatedRequest, res: Response, next: NextFunction) 
 
 const scanSchema = z.object({ dataUrls: z.array(z.string().min(10)).min(1).max(3) })
 
-router.post('/', async (req, res) => {
+// Arranca el escaneo en segundo plano y devuelve enseguida un id de trabajo
+// -- ver inspectionScanJobs.ts para el motivo (evitar depender de una sola
+// conexion HTTP larga, fragil ante timeouts de cualquier capa intermedia).
+router.post('/', (req: AuthenticatedRequest, res) => {
   const parsed = scanSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
-  // Si el cliente se cansa de esperar (timeout) o cierra la pestaña, no
-  // tiene sentido seguir pagandole a la IA por una respuesta que ya nadie
-  // va a leer -- cancelamos el pedido upstream apenas se corta la conexion.
-  const controller = new AbortController()
-  req.on('close', () => controller.abort())
+  const jobId = startInspectionScanJob(parsed.data.dataUrls, req.userId!)
+  return res.status(202).json({ jobId })
+})
 
-  try {
-    const result = await scanInspectionImages(parsed.data.dataUrls, { signal: controller.signal })
-    return res.json(result)
-  } catch (error) {
-    if (controller.signal.aborted) {
-      return
-    }
-    console.error('Inspection scan error:', error)
-    return res.status(500).json({ message: error instanceof Error ? error.message : 'No se pudo leer la imagen.' })
+router.get('/:jobId', (req: AuthenticatedRequest, res) => {
+  const job = getInspectionScanJob(String(req.params.jobId), req.userId!)
+  if (!job) {
+    return res.status(404).json({ message: 'No se encontro el pedido de escaneo (puede haber expirado).' })
   }
+
+  if (job.status === 'ERROR') {
+    return res.json({ status: 'ERROR', message: job.message })
+  }
+  if (job.status === 'DONE') {
+    return res.json({ status: 'DONE', result: job.result })
+  }
+  return res.json({ status: 'PENDING' })
 })
 
 export default router

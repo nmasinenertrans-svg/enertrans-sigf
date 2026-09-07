@@ -553,6 +553,29 @@ export const ReportsPage = () => {
     }
   }, [effectiveOccupancyBreakdownBy, occupancyBreakdownBy])
 
+  const unitStatusByUnitId = useMemo(() => {
+    const map = new Map<string, string>()
+    const auditsByUnit = new Map<string, typeof audits>()
+    audits.forEach((audit) => {
+      if (!audit.unitId) {
+        return
+      }
+      const list = auditsByUnit.get(audit.unitId) ?? []
+      list.push(audit)
+      auditsByUnit.set(audit.unitId, list)
+    })
+    auditsByUnit.forEach((unitAudits, unitId) => {
+      const latest = unitAudits.reduce((mostRecent, audit) =>
+        new Date(audit.performedAt).getTime() > new Date(mostRecent.performedAt).getTime() ? audit : mostRecent,
+      )
+      const date = new Date(latest.performedAt).toLocaleDateString('es-AR')
+      map.set(unitId, `${auditResultLabelMap[latest.result]} (${date})`)
+    })
+    return map
+  }, [audits])
+
+  const getUnitStatusLabel = (unitId: string): string => unitStatusByUnitId.get(unitId) ?? 'Sin inspecciones'
+
   const filteredOccupancyUnits = useMemo(
     () =>
       reportFleetUnits.filter((unit) => {
@@ -1440,10 +1463,11 @@ export const ReportsPage = () => {
         client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
         type: getFleetUnitTypeLabel(unit.unitType),
         location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
+        status: getUnitStatusLabel(unit.id),
       }))
 
-    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Hidrogrúa', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación']
-    const detailColumnWidths = [68, 72, 82, 34, 120, 92, 92, 100, 100]
+    const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Hidrogrúa', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación', 'Estado']
+    const detailColumnWidths = [68, 72, 82, 34, 120, 92, 92, 100, 100, 110]
     const detailFontSize = 8
     const detailRowHeight = 20
     const tableWidth = detailColumnWidths.reduce((sum, width) => sum + width, 0)
@@ -1556,6 +1580,7 @@ export const ReportsPage = () => {
         row.client,
         row.type,
         row.location,
+        row.status,
       ]
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(detailFontSize)
@@ -1622,6 +1647,7 @@ export const ReportsPage = () => {
         client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
         type: getFleetUnitTypeLabel(unit.unitType),
         location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
+        status: getUnitStatusLabel(unit.id),
       }))
 
     const detailHeaders = [
@@ -1635,6 +1661,7 @@ export const ReportsPage = () => {
       'Cliente',
       'Tipo',
       'Ubicación',
+      'Estado',
     ]
     const detailAoa: Array<Array<string | number>> = [
       ['DETALLE DE DOMINIOS'],
@@ -1668,6 +1695,7 @@ export const ReportsPage = () => {
         row.client,
         row.type,
         row.location,
+        row.status,
       ])
     })
 

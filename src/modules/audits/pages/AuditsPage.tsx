@@ -10,6 +10,7 @@ import { AuditHistoryList } from '../components/AuditHistoryList'
 import { AuditPhotoPicker } from '../components/AuditPhotoPicker'
 import { exportAuditPdf, exportBlankAuditChecklistPdf } from '../services/auditPdfService'
 import {
+  AUTO_ITEMS,
   buildAuditHistoryView,
   CAMION_ITEMS,
   createChecklistFromDeviations,
@@ -540,13 +541,48 @@ export const AuditsPage = () => {
           }),
         ),
       )
-      const result = await apiRequest<{
+
+      type ScanApiResult = {
         header: { dominio: string; km: number | null; hidrogrua: string }
         checklistType: 'CAMION' | 'HIDROGUA'
         matchedItems: { itemCode: string; status: 'OK' | 'BAD' | 'NA'; observation: string }[]
         unmatchedNotes: { label: string; status: 'OK' | 'BAD' | 'NA' }[]
         overallConfidence: 'HIGH' | 'LOW'
-      }>('/inspection-scan', { method: 'POST', body: { dataUrls }, timeoutMs: 150000 })
+      }
+
+      // El escaneo corre en segundo plano en el servidor y se pregunta el
+      // estado con pedidos cortos -- así ninguna conexion depende de cuanto
+      // tarde la IA (arranque en frio de Render + generacion de la
+      // respuesta), que era lo que venia haciendo fallar por timeout.
+      const { jobId } = await apiRequest<{ jobId: string }>('/inspection-scan', {
+        method: 'POST',
+        body: { dataUrls },
+        timeoutMs: 20000,
+      })
+
+      const POLL_INTERVAL_MS = 3000
+      const MAX_WAIT_MS = 4 * 60 * 1000
+      const startedAt = Date.now()
+      let result: ScanApiResult | null = null
+
+      while (!result) {
+        if (Date.now() - startedAt > MAX_WAIT_MS) {
+          throw new Error(
+            'La IA está tardando más de lo normal. Puede seguir procesando en el servidor igual; probá cargar la inspección de nuevo en un rato antes de reintentar el escaneo.',
+          )
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS))
+        const status = await apiRequest<{ status: 'PENDING' | 'DONE' | 'ERROR'; result?: ScanApiResult; message?: string }>(
+          `/inspection-scan/${jobId}`,
+          { timeoutMs: 15000 },
+        )
+        if (status.status === 'ERROR') {
+          throw new Error(status.message || 'No se pudo leer la planilla.')
+        }
+        if (status.status === 'DONE' && status.result) {
+          result = status.result
+        }
+      }
 
       const plateMatch = findClosestUnitByPlate(result.header.dominio, fleetUnits)
       setDetectedPlate(result.header.dominio ? { dominio: result.header.dominio, match: plateMatch } : null)
@@ -1354,14 +1390,14 @@ export const AuditsPage = () => {
                       <div className="mt-4">
                         <span className="text-sm font-semibold text-slate-700">Tipo de vehículo</span>
                         <div className="mt-2 flex gap-2">
-                          {(['CAMION', 'HIDROGUA'] as const).map((t) => (
+                          {(['CAMION', 'AUTO', 'HIDROGUA'] as const).map((t) => (
                             <button
                               key={t}
                               type="button"
                               onClick={() => setFormData((prev) => ({ ...prev, checklistType: t }))}
                               className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${formData.checklistType === t ? 'border-amber-400 bg-amber-400 text-slate-900' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
                             >
-                              {t === 'CAMION' ? 'Camión' : 'Hidrogrúa'}
+                              {t === 'CAMION' ? 'Camión' : t === 'AUTO' ? 'Auto / Pickup' : 'Hidrogrúa'}
                             </button>
                           ))}
                         </div>
@@ -1398,6 +1434,7 @@ export const AuditsPage = () => {
                         <p className="mt-1 text-[11px] text-slate-500">
                           Sube 1 a 3 fotos (si la inspección ocupa más de una hoja, subilas todas juntas) y la IA
                           precompleta el checklist combinando el contenido. Revisá siempre antes de guardar.
+                          {isScanningSheet ? ' Puede tardar uno o dos minutos, no cierres ni recargues la página.' : ''}
                         </p>
                       </div>
                     )}
@@ -2037,7 +2074,7 @@ function NewChecklistTable({
   certEnteCert, certNro, certVenc, certCapacidad,
   cedulaVenc, tituloVenc, vtvVenc, seguroNroPol, seguroVenc,
 }: {
-  checklistType: 'HIDROGUA' | 'CAMION'
+  checklistType: 'HIDROGUA' | 'CAMION' | 'AUTO'
   items: Record<string, { estado: string; obs: string }>
   onItemChange: (code: string, field: 'estado' | 'obs', val: string) => void
   onFieldChange: (field: string, val: string) => void
@@ -2046,7 +2083,7 @@ function NewChecklistTable({
 }) {
   const safeItems = items ?? {}
   const allSections = checklistType === 'HIDROGUA' ? HIDROGUA_SECTIONS : null
-  const flatItems = checklistType === 'CAMION' ? CAMION_ITEMS : null
+  const flatItems = checklistType === 'AUTO' ? AUTO_ITEMS : checklistType === 'CAMION' ? CAMION_ITEMS : null
 
   return (
     <div className="space-y-4">
@@ -2070,7 +2107,7 @@ function NewChecklistTable({
           </div>
         </div>
       )}
-      {checklistType === 'CAMION' && (
+      {(checklistType === 'CAMION' || checklistType === 'AUTO') && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="mb-3 text-sm font-bold text-slate-900">Documentación</p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

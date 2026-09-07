@@ -152,6 +152,21 @@ export const CAMION_ITEMS: ChecklistItem[] = [
   { code: 'A-57', desc: 'Bomba de Toma de Fuerza' }, { code: 'A-58', desc: 'Estado Mangueras Hidráulicas / Fugas' },
 ]
 
+// Checklist simplificado para autos y pickups: mucho mas corto que el de
+// camion/hidrogrua, pensado para una inspeccion rapida de un vehiculo liviano.
+export const AUTO_ITEMS: ChecklistItem[] = [
+  { code: 'P-01', desc: 'Nivel de Aceite de Motor' }, { code: 'P-02', desc: 'Nivel de Líquido de Freno' },
+  { code: 'P-03', desc: 'Nivel de Refrigerante/Anticongelante' }, { code: 'P-04', desc: 'Nivel de Líquido de Dirección' },
+  { code: 'P-05', desc: 'Motor — Pérdidas visibles' }, { code: 'P-06', desc: 'Faros (Alta / Baja / Posición)' },
+  { code: 'P-07', desc: 'Luces de Giro / Freno / Retroceso' }, { code: 'P-08', desc: 'Parabrisas y Limpiaparabrisas' },
+  { code: 'P-09', desc: 'Espejos (Estado / Cantidad / Funcionamiento)' }, { code: 'P-10', desc: 'Batería (Estado / Anclaje)' },
+  { code: 'P-11', desc: 'Cinturones de Seguridad' }, { code: 'P-12', desc: 'Bocina' },
+  { code: 'P-13', desc: 'Aire Acondicionado / Calefacción' }, { code: 'P-14', desc: 'Tablero e Instrumental' },
+  { code: 'P-15', desc: 'Estado de Cubiertas' }, { code: 'P-16', desc: 'Rueda de Auxilio, Cric y Llave de Rueda' },
+  { code: 'P-17', desc: 'Sistema de Frenos / Freno de Mano' }, { code: 'P-18', desc: 'Puertas, Cerraduras y Levantavidrios' },
+  { code: 'P-19', desc: 'Matafuego y Baliza Reglamentaria' }, { code: 'P-20', desc: 'Estado de Limpieza (Interior / Exterior)' },
+]
+
 const initNewChecklistItems = (codes: string[]): Record<string, { estado: string; obs: string }> =>
   Object.fromEntries(codes.map((c) => [c, { estado: '', obs: '' }]))
 
@@ -162,7 +177,7 @@ const mapNewStatusToAudit = (s: string): AuditChecklistStatus => {
 }
 
 export const buildChecklistSectionsFromNew = (
-  checklistType: 'HIDROGUA' | 'CAMION',
+  checklistType: 'HIDROGUA' | 'CAMION' | 'AUTO',
   items: Record<string, { estado: string; obs: string }>,
 ): AuditChecklistSection[] => {
   if (checklistType === 'HIDROGUA') {
@@ -177,10 +192,11 @@ export const buildChecklistSectionsFromNew = (
       })),
     }))
   }
+  const flatItems = checklistType === 'AUTO' ? AUTO_ITEMS : CAMION_ITEMS
   return [{
     id: createId(),
     title: 'INSPECCIÓN TÉCNICA DEL VEHÍCULO',
-    items: CAMION_ITEMS.map((item) => ({
+    items: flatItems.map((item) => ({
       id: item.code,
       label: `[${item.code}] ${item.desc}`,
       status: mapNewStatusToAudit(items[item.code]?.estado ?? ''),
@@ -294,6 +310,7 @@ export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
   newChecklistItems: {
     ...initNewChecklistItems(CAMION_ITEMS.map((i) => i.code)),
     ...initNewChecklistItems(HIDROGUA_SECTIONS.flatMap((s) => s.items.map((i) => i.code))),
+    ...initNewChecklistItems(AUTO_ITEMS.map((i) => i.code)),
   },
   cedulaVenc: '', tituloVenc: '', vtvVenc: '', seguroNroPol: '', seguroVenc: '',
   certEnteCert: '', certNro: '', certVenc: '', certCapacidad: '',

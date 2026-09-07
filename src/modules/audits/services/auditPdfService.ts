@@ -1,7 +1,7 @@
 ﻿import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { AuditRecord, FleetUnit } from '../../../types/domain'
-import { CAMION_ITEMS, HIDROGUA_SECTIONS, statusLabelMap, type ChecklistItem } from './auditsService'
+import { AUTO_ITEMS, CAMION_ITEMS, HIDROGUA_SECTIONS, statusLabelMap, type ChecklistItem } from './auditsService'
 
 interface AuditPdfPayload {
   audit: AuditRecord
@@ -326,7 +326,7 @@ const drawLinesBox = (pdf: jsPDF, x: number, y: number, width: number, height: n
  * en papel y completar a mano — mismos items que usa el sistema al crear una
  * inspeccion nueva de tipo Camion o Hidrogrua.
  */
-export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HIDROGUA'): Promise<void> => {
+export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HIDROGUA' | 'AUTO'): Promise<void> => {
   const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   let logoDataUrl: string | null = null
@@ -338,7 +338,11 @@ export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HI
   }
 
   const subtitle =
-    checklistType === 'HIDROGUA' ? 'Checklist de Inspección — Hidrogrúa (en blanco)' : 'Checklist de Inspección — Camión (en blanco)'
+    checklistType === 'HIDROGUA'
+      ? 'Checklist de Inspección — Hidrogrúa (en blanco)'
+      : checklistType === 'AUTO'
+        ? 'Checklist de Inspección — Auto/Pickup (en blanco)'
+        : 'Checklist de Inspección — Camión (en blanco)'
 
   addWatermark(pdf, logoDataUrl)
   drawHeader(pdf, logoDataUrl, 'ENERTRANS S.R.L.', subtitle)
@@ -373,7 +377,7 @@ export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HI
   const sections: { title: string; items: ChecklistItem[] }[] =
     checklistType === 'HIDROGUA'
       ? HIDROGUA_SECTIONS.map((section) => ({ title: section.name, items: section.items }))
-      : [{ title: 'INSPECCIÓN TÉCNICA DEL VEHÍCULO', items: CAMION_ITEMS }]
+      : [{ title: 'INSPECCIÓN TÉCNICA DEL VEHÍCULO', items: checklistType === 'AUTO' ? AUTO_ITEMS : CAMION_ITEMS }]
 
   sections.forEach((section) => {
     if (cursorY > pageHeight - 30) {
@@ -442,7 +446,7 @@ export const exportBlankAuditChecklistPdf = async (checklistType: 'CAMION' | 'HI
   pdf.text('Realizado por', 15, sigY - 2)
   pdf.text('Aceptado por', pageWidth / 2 + 10, sigY - 2)
 
-  const fileSuffix = checklistType === 'HIDROGUA' ? 'Hidrogrua' : 'Camion'
+  const fileSuffix = checklistType === 'HIDROGUA' ? 'Hidrogrua' : checklistType === 'AUTO' ? 'Auto' : 'Camion'
   pdf.save(`Checklist_Inspeccion_${fileSuffix}_en_blanco.pdf`)
 }
 

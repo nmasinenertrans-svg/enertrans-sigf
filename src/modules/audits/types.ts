@@ -17,7 +17,7 @@ export interface AuditFormData {
   vehicleMode: 'fleet' | 'external'
   unitId: string | null
   externalVehicle: string
-  checklistType: 'HIDROGUA' | 'CAMION' | null
+  checklistType: 'HIDROGUA' | 'CAMION' | 'AUTO' | null
   newChecklistItems: Record<string, { estado: string; obs: string }>
   // Documentación Camión
   cedulaVenc: string
