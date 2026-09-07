@@ -491,7 +491,227 @@ export const TasksPage = () => {
   )
   const assignedTasks = useMemo(() => filteredTasks.filter((task) => !task.isInTaskBank), [filteredTasks])
 
+  // Separado en 3 apartados en vez de una sola lista mezclada: asignadas
+  // (todavia sin arrancar), en curso (incluye bloqueadas) y finalizadas
+  // (terminadas o canceladas) -- pedido explicito para no mezclar todo.
+  const pendingAssignedTasks = useMemo(() => assignedTasks.filter((task) => task.status === 'ASSIGNED'), [assignedTasks])
+  const inProgressTasks = useMemo(
+    () => assignedTasks.filter((task) => task.status === 'IN_PROGRESS' || task.status === 'BLOCKED'),
+    [assignedTasks],
+  )
+  const finishedTasks = useMemo(
+    () => assignedTasks.filter((task) => task.status === 'DONE' || task.status === 'CANCELED'),
+    [assignedTasks],
+  )
+
   const currentUserCanTake = currentUser?.role === 'AUDITOR' || currentUser?.role === 'MECANICO'
+
+  const renderTaskCard = (task: TaskRecord) => {
+    const canEditThisTask = isManager || (currentUser?.id && task.assignedToUserId === currentUser.id && can('TASKS', 'edit'))
+    const canCommentOnTask =
+      isManager ||
+      Boolean(
+        currentUser?.id &&
+          (task.assignedToUserId === currentUser.id ||
+            task.assignedByUserId === currentUser.id ||
+            task.createdByUserId === currentUser.id),
+      )
+    const overdue = isTaskOverdue(task)
+    return (
+      <div key={task.id} className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${priorityBadgeMap[task.priority]}`}>
+                {priorityLabelMap[task.priority]}
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                {statusLabelMap[task.status]}
+              </span>
+              <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                {taskTypeLabelMap[task.type]}
+              </span>
+              {task.unitId && fleetUnitById.get(task.unitId) ? (
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                  {fleetUnitById.get(task.unitId)?.internalCode}
+                </span>
+              ) : null}
+              {overdue ? (
+                <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                  Vencida
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-2 text-sm font-semibold text-slate-900">{task.title || 'Tarea sin titulo'}</p>
+            <p className="mt-1 text-sm text-slate-600">{task.description}</p>
+            <p className="mt-2 text-xs text-slate-500">
+              Asignada a{' '}
+              {task.assignedToUserName ||
+                (task.assignedToExternalName ? `${task.assignedToExternalName} (externo)` : 'Sin asignar')}{' '}
+              | Creada por {task.createdByUserName || task.createdByUserId}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Inicio: {formatDateOnly(task.startDate || task.createdAt)} | Fin aprox.:{' '}
+              {formatDateOnly(task.estimatedFinishDate)}
+            </p>
+            {task.assignedToUserId && isTaskAdmin ? (
+              <p className="mt-1 text-xs">
+                {task.viewedAt ? (
+                  <span className="font-semibold text-emerald-700">
+                    Vista por {task.viewedByUserName || task.assignedToUserName} el {formatDateTime(task.viewedAt)}
+                  </span>
+                ) : (
+                  <span className="font-semibold text-amber-700">Todavia no la vio el asignado</span>
+                )}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => downloadTaskPdf(task)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Descargar PDF
+            </button>
+            {isManager ? (
+              <button
+                type="button"
+                onClick={() => startEdit(task.id)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Editar
+              </button>
+            ) : null}
+            {canDeleteTasks ? (
+              <button
+                type="button"
+                onClick={() => handleDeleteTask(task.id)}
+                disabled={deletingTaskId === task.id}
+                className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+              >
+                {deletingTaskId === task.id ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {canEditThisTask ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600">Estado:</span>
+            <select
+              value={task.status}
+              onChange={(event) => handleQuickStatusChange(task.id, event.target.value as TaskStatus)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+            >
+              {(Object.keys(statusLabelMap) as TaskStatus[]).map((status) => (
+                <option key={status} value={status}>
+                  {statusLabelMap[status]}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        <details
+          className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2"
+          onToggle={(event) => {
+            if (event.currentTarget.open) {
+              handleOpenTaskDetail(task)
+            }
+          }}
+        >
+          <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+            Historico y mensajes ({task.events.length})
+          </summary>
+          <div className="mt-2 space-y-2">
+            {task.events.length === 0 ? (
+              <p className="text-xs text-slate-500">Sin eventos registrados.</p>
+            ) : (
+              [...task.events]
+                .sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime())
+                .map((event) =>
+                  event.type === 'COMMENT' ? (
+                    <div
+                      key={event.id}
+                      className="rounded-md border border-sky-200 bg-sky-50 px-2 py-2 text-xs text-slate-700"
+                    >
+                      <p className="font-semibold text-sky-800">{event.actorName || event.actorUserId}</p>
+                      <p className="mt-0.5 whitespace-pre-wrap">{event.notes}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(event.createdAt)}</p>
+                    </div>
+                  ) : (
+                    <div
+                      key={event.id}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs text-slate-600"
+                    >
+                      <p className="font-semibold text-slate-800">
+                        {taskEventTypeLabelMap[event.type] ?? event.type} | {event.actorName || event.actorUserId}
+                      </p>
+                      <p>{formatDateTime(event.createdAt)}</p>
+                      {event.fromStatus || event.toStatus ? (
+                        <p>
+                          Estado: {event.fromStatus ? statusLabelMap[event.fromStatus] : '-'} {'->'}{' '}
+                          {event.toStatus ? statusLabelMap[event.toStatus] : '-'}
+                        </p>
+                      ) : null}
+                    </div>
+                  ),
+                )
+            )}
+          </div>
+
+          {canCommentOnTask ? (
+            <div className="mt-3 flex flex-col gap-2 border-t border-slate-200 pt-2">
+              <textarea
+                rows={2}
+                value={commentDrafts[task.id] ?? ''}
+                onChange={(event) =>
+                  setCommentDrafts((previous) => ({ ...previous, [task.id]: event.target.value }))
+                }
+                placeholder="Escribir un mensaje o aclaracion..."
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-400"
+              />
+              <button
+                type="button"
+                onClick={() => handleSendComment(task.id)}
+                disabled={sendingCommentTaskId === task.id || !(commentDrafts[task.id] ?? '').trim()}
+                className="self-end rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50"
+              >
+                {sendingCommentTaskId === task.id ? 'Enviando...' : 'Enviar mensaje'}
+              </button>
+            </div>
+          ) : null}
+        </details>
+      </div>
+    )
+  }
+
+  const renderTaskSection = (title: string, subtitle: string, sectionTasks: TaskRecord[]) => (
+    <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+          <p className="text-xs text-slate-500">{subtitle}</p>
+        </div>
+        <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+          {sectionTasks.length}
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        {isLoading ? (
+          <p className="text-sm text-slate-500">Cargando tareas...</p>
+        ) : sectionTasks.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">
+            No hay tareas para el filtro seleccionado.
+          </p>
+        ) : (
+          sectionTasks.map(renderTaskCard)
+        )}
+      </div>
+    </article>
+  )
 
   if (!canViewTasks) {
     return (
@@ -948,208 +1168,9 @@ export const TasksPage = () => {
               </div>
             </article>
 
-            <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Asignadas / Historico</h3>
-                  <p className="text-xs text-slate-500">Seguimiento y cambios de estado.</p>
-                </div>
-                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
-                  {assignedTasks.length}
-                </span>
-              </div>
-
-              <div className="mt-3 space-y-3">
-                {isLoading ? (
-                  <p className="text-sm text-slate-500">Cargando tareas...</p>
-                ) : assignedTasks.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">
-                    No hay tareas para el filtro seleccionado.
-                  </p>
-                ) : (
-                  assignedTasks.map((task) => {
-                    const canEditThisTask = isManager || (currentUser?.id && task.assignedToUserId === currentUser.id && can('TASKS', 'edit'))
-                    const canCommentOnTask =
-                      isManager ||
-                      Boolean(
-                        currentUser?.id &&
-                          (task.assignedToUserId === currentUser.id ||
-                            task.assignedByUserId === currentUser.id ||
-                            task.createdByUserId === currentUser.id),
-                      )
-                    const overdue = isTaskOverdue(task)
-                    return (
-                      <div key={task.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${priorityBadgeMap[task.priority]}`}>
-                                {priorityLabelMap[task.priority]}
-                              </span>
-                              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                                {statusLabelMap[task.status]}
-                              </span>
-                              <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
-                                {taskTypeLabelMap[task.type]}
-                              </span>
-                              {task.unitId && fleetUnitById.get(task.unitId) ? (
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                                  {fleetUnitById.get(task.unitId)?.internalCode}
-                                </span>
-                              ) : null}
-                              {overdue ? (
-                                <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                                  Vencida
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="mt-2 text-sm font-semibold text-slate-900">{task.title || 'Tarea sin titulo'}</p>
-                            <p className="mt-1 text-sm text-slate-600">{task.description}</p>
-                            <p className="mt-2 text-xs text-slate-500">
-                              Asignada a{' '}
-                              {task.assignedToUserName ||
-                                (task.assignedToExternalName ? `${task.assignedToExternalName} (externo)` : 'Sin asignar')}{' '}
-                              | Creada por {task.createdByUserName || task.createdByUserId}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Inicio: {formatDateOnly(task.startDate || task.createdAt)} | Fin aprox.:{' '}
-                              {formatDateOnly(task.estimatedFinishDate)}
-                            </p>
-                            {task.assignedToUserId && isTaskAdmin ? (
-                              <p className="mt-1 text-xs">
-                                {task.viewedAt ? (
-                                  <span className="font-semibold text-emerald-700">
-                                    Vista por {task.viewedByUserName || task.assignedToUserName} el {formatDateTime(task.viewedAt)}
-                                  </span>
-                                ) : (
-                                  <span className="font-semibold text-amber-700">Todavia no la vio el asignado</span>
-                                )}
-                              </p>
-                            ) : null}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => downloadTaskPdf(task)}
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                            >
-                              Descargar PDF
-                            </button>
-                            {isManager ? (
-                              <button
-                                type="button"
-                                onClick={() => startEdit(task.id)}
-                                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                              >
-                                Editar
-                              </button>
-                            ) : null}
-                            {canDeleteTasks ? (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTask(task.id)}
-                                disabled={deletingTaskId === task.id}
-                                className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                              >
-                                {deletingTaskId === task.id ? 'Eliminando...' : 'Eliminar'}
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        {canEditThisTask ? (
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-semibold text-slate-600">Estado:</span>
-                            <select
-                              value={task.status}
-                              onChange={(event) => handleQuickStatusChange(task.id, event.target.value as TaskStatus)}
-                              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
-                            >
-                              {(Object.keys(statusLabelMap) as TaskStatus[]).map((status) => (
-                                <option key={status} value={status}>
-                                  {statusLabelMap[status]}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : null}
-
-                        <details
-                          className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2"
-                          onToggle={(event) => {
-                            if (event.currentTarget.open) {
-                              handleOpenTaskDetail(task)
-                            }
-                          }}
-                        >
-                          <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                            Historico y mensajes ({task.events.length})
-                          </summary>
-                          <div className="mt-2 space-y-2">
-                            {task.events.length === 0 ? (
-                              <p className="text-xs text-slate-500">Sin eventos registrados.</p>
-                            ) : (
-                              [...task.events]
-                                .sort((a, b) => new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime())
-                                .map((event) =>
-                                  event.type === 'COMMENT' ? (
-                                    <div
-                                      key={event.id}
-                                      className="rounded-md border border-sky-200 bg-sky-50 px-2 py-2 text-xs text-slate-700"
-                                    >
-                                      <p className="font-semibold text-sky-800">{event.actorName || event.actorUserId}</p>
-                                      <p className="mt-0.5 whitespace-pre-wrap">{event.notes}</p>
-                                      <p className="mt-1 text-[10px] text-slate-500">{formatDateTime(event.createdAt)}</p>
-                                    </div>
-                                  ) : (
-                                    <div
-                                      key={event.id}
-                                      className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs text-slate-600"
-                                    >
-                                      <p className="font-semibold text-slate-800">
-                                        {taskEventTypeLabelMap[event.type] ?? event.type} | {event.actorName || event.actorUserId}
-                                      </p>
-                                      <p>{formatDateTime(event.createdAt)}</p>
-                                      {event.fromStatus || event.toStatus ? (
-                                        <p>
-                                          Estado: {event.fromStatus ? statusLabelMap[event.fromStatus] : '-'} {'->'}{' '}
-                                          {event.toStatus ? statusLabelMap[event.toStatus] : '-'}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                  ),
-                                )
-                            )}
-                          </div>
-
-                          {canCommentOnTask ? (
-                            <div className="mt-3 flex flex-col gap-2 border-t border-slate-200 pt-2">
-                              <textarea
-                                rows={2}
-                                value={commentDrafts[task.id] ?? ''}
-                                onChange={(event) =>
-                                  setCommentDrafts((previous) => ({ ...previous, [task.id]: event.target.value }))
-                                }
-                                placeholder="Escribir un mensaje o aclaracion..."
-                                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-400"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleSendComment(task.id)}
-                                disabled={sendingCommentTaskId === task.id || !(commentDrafts[task.id] ?? '').trim()}
-                                className="self-end rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50"
-                              >
-                                {sendingCommentTaskId === task.id ? 'Enviando...' : 'Enviar mensaje'}
-                              </button>
-                            </div>
-                          ) : null}
-                        </details>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
-            </article>
+            {renderTaskSection('Asignadas', 'Aceptadas, todavia sin arrancar.', pendingAssignedTasks)}
+            {renderTaskSection('En curso', 'En progreso o bloqueadas.', inProgressTasks)}
+            {renderTaskSection('Finalizadas', 'Terminadas o canceladas.', finishedTasks)}
           </div>
         </section>
       </div>
