@@ -71,7 +71,7 @@ ${hidro}
 Devolve SOLO el JSON.`
 }
 
-export const scanInspectionImages = async (dataUrls: string[]): Promise<ScanResult> => {
+export const scanInspectionImages = async (dataUrls: string[], options: { signal?: AbortSignal } = {}): Promise<ScanResult> => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY no configurada en el servidor.')
@@ -90,6 +90,7 @@ export const scanInspectionImages = async (dataUrls: string[]): Promise<ScanResu
 
   const response = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
+    signal: options.signal,
     headers: {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',

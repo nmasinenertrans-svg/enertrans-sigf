@@ -546,7 +546,7 @@ export const AuditsPage = () => {
         matchedItems: { itemCode: string; status: 'OK' | 'BAD' | 'NA'; observation: string }[]
         unmatchedNotes: { label: string; status: 'OK' | 'BAD' | 'NA' }[]
         overallConfidence: 'HIGH' | 'LOW'
-      }>('/inspection-scan', { method: 'POST', body: { dataUrls }, timeoutMs: 60000 })
+      }>('/inspection-scan', { method: 'POST', body: { dataUrls }, timeoutMs: 150000 })
 
       const plateMatch = findClosestUnitByPlate(result.header.dominio, fleetUnits)
       setDetectedPlate(result.header.dominio ? { dominio: result.header.dominio, match: plateMatch } : null)
