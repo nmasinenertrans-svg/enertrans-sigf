@@ -526,19 +526,24 @@ export const AuditsPage = () => {
       return
     }
     if (files.length > MAX_SCAN_PAGES) {
-      setAppError(`Máximo ${MAX_SCAN_PAGES} fotos por inspección.`)
+      setAppError(`Máximo ${MAX_SCAN_PAGES} archivos por inspección.`)
       return
     }
     setIsScanningSheet(true)
     try {
+      // Si ya tenés la planilla como PDF (ej. escaneada con CamScanner), se
+      // manda tal cual -- suele salir mas nitido que sacarle una foto de
+      // nuevo, y eso ayuda a que la IA la lea con menos dudas.
       const dataUrls = await Promise.all(
         files.map((file) =>
-          readImageAsCompressedDataUrl(file, {
-            maxWidth: 1800,
-            maxHeight: 1800,
-            quality: 0.9,
-            outputType: 'image/jpeg',
-          }),
+          file.type === 'application/pdf'
+            ? readFileAsDataUrl(file)
+            : readImageAsCompressedDataUrl(file, {
+                maxWidth: 1800,
+                maxHeight: 1800,
+                quality: 0.9,
+                outputType: 'image/jpeg',
+              }),
         ),
       )
 
@@ -1418,7 +1423,7 @@ export const AuditsPage = () => {
                           {isScanningSheet ? 'Leyendo planilla con IA...' : 'Cargar desde planilla de papel (IA)'}
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/*,application/pdf"
                             multiple
                             className="hidden"
                             disabled={isScanningSheet}
@@ -1432,8 +1437,9 @@ export const AuditsPage = () => {
                           />
                         </label>
                         <p className="mt-1 text-[11px] text-slate-500">
-                          Sube 1 a 3 fotos (si la inspección ocupa más de una hoja, subilas todas juntas) y la IA
-                          precompleta el checklist combinando el contenido. Revisá siempre antes de guardar.
+                          Sube 1 a 3 fotos o PDFs (si la inspección ocupa más de una hoja, subilas todas juntas). Si
+                          ya la tenés escaneada en PDF, subí ese archivo directo — suele leerse mejor que una foto.
+                          La IA precompleta el checklist combinando el contenido. Revisá siempre antes de guardar.
                           {isScanningSheet ? ' Puede tardar uno o dos minutos, no cierres ni recargues la página.' : ''}
                         </p>
                       </div>

@@ -94,12 +94,14 @@ const scanSingleImage = async (dataUrl: string, apiKey: string): Promise<ScanRes
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 8192,
+      max_tokens: 16000,
       messages: [
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+            mediaType === 'application/pdf'
+              ? { type: 'document', source: { type: 'base64', media_type: mediaType, data: base64Data } }
+              : { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
             { type: 'text', text: buildPrompt() },
           ],
         },
