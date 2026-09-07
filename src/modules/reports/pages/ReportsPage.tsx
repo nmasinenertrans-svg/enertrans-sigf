@@ -576,7 +576,19 @@ export const ReportsPage = () => {
         new Date(audit.performedAt).getTime() > new Date(mostRecent.performedAt).getTime() ? audit : mostRecent,
       )
       const date = new Date(latest.performedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: '2-digit' })
-      map.set(unitId, `${auditResultLabelMap[latest.result]} (${date})`)
+      const resultLine = `${auditResultLabelMap[latest.result]} (${date})`
+
+      // Resumen real de que tiene mal la unidad, no solo aprobado/rechazado:
+      // se junta la lista de items marcados MAL de la ultima inspeccion.
+      // Es un resumen armado con datos ya guardados, no un pedido nuevo a
+      // la IA -- no gasta credito.
+      const badItemLabels = (latest.checklistSections ?? [])
+        .flatMap((section) => section.items)
+        .filter((item) => item.status === 'BAD')
+        .map((item) => item.label.replace(/^\[[A-Z]+-\d+\]\s*/, '').trim())
+        .filter((label, index, all) => label && all.indexOf(label) === index)
+
+      map.set(unitId, badItemLabels.length > 0 ? `${resultLine}: ${badItemLabels.join(', ')}` : resultLine)
     })
     return map
   }
@@ -1484,7 +1496,7 @@ export const ReportsPage = () => {
       }))
 
     const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Hidrogrúa', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación', 'Estado']
-    const detailColumnWidths = [62, 65, 75, 34, 95, 80, 80, 85, 85, 115]
+    const detailColumnWidths = [58, 58, 66, 30, 80, 64, 68, 68, 68, 190]
     const detailFontSize = 8
     const detailRowHeight = 20
     const tableWidth = detailColumnWidths.reduce((sum, width) => sum + width, 0)
@@ -1565,7 +1577,19 @@ export const ReportsPage = () => {
         rowIndexWithinSection = 0
       }
 
-      if (detailY > pageHeight - 34) {
+      // El resumen de Estado puede ocupar varias lineas (lista de items
+      // rechazados) -- se calcula el alto real de la fila antes de decidir
+      // si hace falta saltar de pagina, en vez de asumir una linea fija.
+      // Importante: fijar la fuente ANTES de splitTextToSize, que mide el
+      // ancho del texto con la fuente actualmente seteada en el doc.
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(detailFontSize)
+      const estadoWidth = detailColumnWidths[detailColumnWidths.length - 1]
+      const estadoLines = doc.splitTextToSize(row.status || '-', estadoWidth - 6) as string[]
+      const estadoLineHeight = 9
+      const dynamicRowHeight = Math.max(detailRowHeight, 10 + estadoLines.length * estadoLineHeight)
+
+      if (detailY > pageHeight - (dynamicRowHeight + 14)) {
         doc.addPage()
         detailY = 28
         doc.setFillColor('#000000')
@@ -1587,30 +1611,22 @@ export const ReportsPage = () => {
       }
 
       let x = margin
-      const values = [
-        row.domain,
-        row.brand,
-        row.model,
-        row.year,
-        row.hydroCrane,
-        row.owner,
-        row.client,
-        row.type,
-        row.location,
-        row.status,
-      ]
+      const values = [row.domain, row.brand, row.model, row.year, row.hydroCrane, row.owner, row.client, row.type, row.location]
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(detailFontSize)
       doc.setTextColor('#111827')
+      doc.setDrawColor('#cbd5e1')
+      doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
       values.forEach((value, index) => {
         const width = detailColumnWidths[index] ?? 60
-        doc.setDrawColor('#cbd5e1')
-        doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
-        doc.rect(x, detailY, width, detailRowHeight, 'FD')
+        doc.rect(x, detailY, width, dynamicRowHeight, 'FD')
         doc.text(cropCell(value, width), x + 3, detailY + 12)
         x += width
       })
-      detailY += detailRowHeight
+      doc.rect(x, detailY, estadoWidth, dynamicRowHeight, 'FD')
+      doc.text(estadoLines, x + 3, detailY + 12)
+
+      detailY += dynamicRowHeight
       rowIndexWithinSection += 1
     })
 
