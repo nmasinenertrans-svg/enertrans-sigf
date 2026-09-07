@@ -578,17 +578,27 @@ export const ReportsPage = () => {
       const date = new Date(latest.performedAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: '2-digit' })
       const resultLine = `${auditResultLabelMap[latest.result]} (${date})`
 
-      // Resumen real de que tiene mal la unidad, no solo aprobado/rechazado:
-      // se junta la lista de items marcados MAL de la ultima inspeccion.
-      // Es un resumen armado con datos ya guardados, no un pedido nuevo a
-      // la IA -- no gasta credito.
-      const badItemLabels = (latest.checklistSections ?? [])
+      // Detalle real de que tiene mal la unidad, item por item (no un
+      // parrafo corrido) -- se arma con los items marcados MAL de la
+      // ultima inspeccion, con la observacion puntual si la hay. Es un
+      // resumen armado con datos ya guardados, no un pedido nuevo a la
+      // IA -- no gasta credito.
+      const badItemLines = (latest.checklistSections ?? [])
         .flatMap((section) => section.items)
         .filter((item) => item.status === 'BAD')
-        .map((item) => item.label.replace(/^\[[A-Z]+-\d+\]\s*/, '').trim())
-        .filter((label, index, all) => label && all.indexOf(label) === index)
+        .map((item) => {
+          const label = item.label.replace(/^\[[A-Z]+-\d+\]\s*/, '').trim()
+          const observation = item.observation?.trim()
+          return observation && !label.toLowerCase().includes(observation.toLowerCase())
+            ? `${label}: ${observation}`
+            : label
+        })
+        .filter((line, index, all) => line && all.indexOf(line) === index)
 
-      map.set(unitId, badItemLabels.length > 0 ? `${resultLine}: ${badItemLabels.join(', ')}` : resultLine)
+      map.set(
+        unitId,
+        badItemLines.length > 0 ? `${resultLine}\n${badItemLines.map((line) => `- ${line}`).join('\n')}` : resultLine,
+      )
     })
     return map
   }
@@ -1580,7 +1590,18 @@ export const ReportsPage = () => {
         rowIndexWithinSection = 0
       }
 
-      if (detailY > pageHeight - 34) {
+      // El detalle de Estado puede tener varias lineas (una por item
+      // marcado mal) -- se calcula el alto real de la fila antes de
+      // decidir si hace falta saltar de pagina.
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(detailFontSize)
+      const estadoWidth = detailColumnWidths[detailColumnWidths.length - 1]
+      const estadoRawLines = (row.status || '-').split('\n')
+      const estadoLines = estadoRawLines.flatMap((line) => doc.splitTextToSize(line, estadoWidth - 6) as string[])
+      const estadoLineHeight = 9
+      const dynamicRowHeight = Math.max(detailRowHeight, 10 + estadoLines.length * estadoLineHeight)
+
+      if (detailY > pageHeight - (dynamicRowHeight + 14)) {
         doc.addPage()
         detailY = 28
         doc.setFillColor('#000000')
@@ -1602,35 +1623,29 @@ export const ReportsPage = () => {
       }
 
       let x = margin
-      const values = [
-        row.domain,
-        row.brand,
-        row.model,
-        row.year,
-        row.hydroCrane,
-        row.owner,
-        row.client,
-        row.type,
-        row.location,
-        row.status,
-      ]
+      const values = [row.domain, row.brand, row.model, row.year, row.hydroCrane, row.owner, row.client, row.type, row.location]
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(detailFontSize)
       doc.setTextColor('#111827')
       values.forEach((value, index) => {
         const width = detailColumnWidths[index] ?? 60
         // jsPDF (al menos en esta version) no mantiene el color de
-        // relleno/borde seteado antes del loop -- si no se llama de nuevo
-        // justo antes de cada rect(), a partir del segundo rectangulo
+        // relleno/borde seteado antes del loop -- hay que llamarlo de
+        // nuevo justo antes de CADA rect(), sino a partir del segundo
         // vuelve al negro por defecto (bug real, reproducido y confirmado
         // con un caso minimo antes de este fix).
         doc.setDrawColor('#cbd5e1')
         doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
-        doc.rect(x, detailY, width, detailRowHeight, 'FD')
+        doc.rect(x, detailY, width, dynamicRowHeight, 'FD')
         doc.text(cropCell(value, width), x + 3, detailY + 12)
         x += width
       })
-      detailY += detailRowHeight
+      doc.setDrawColor('#cbd5e1')
+      doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
+      doc.rect(x, detailY, estadoWidth, dynamicRowHeight, 'FD')
+      doc.text(estadoLines, x + 3, detailY + 12)
+
+      detailY += dynamicRowHeight
       rowIndexWithinSection += 1
     })
 
