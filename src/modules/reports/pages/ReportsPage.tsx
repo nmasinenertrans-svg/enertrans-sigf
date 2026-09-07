@@ -1505,9 +1505,12 @@ export const ReportsPage = () => {
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(detailFontSize)
       doc.setTextColor('#ffffff')
-      doc.setFillColor('#0f172a')
       detailHeaders.forEach((header, index) => {
         const width = detailColumnWidths[index] ?? 60
+        // Igual que en las filas de datos: hay que re-setear el color de
+        // relleno antes de cada rect(), sino jsPDF lo pierde a partir del
+        // segundo llamado.
+        doc.setFillColor('#0f172a')
         doc.rect(x, y, width, detailRowHeight, 'F')
         doc.text(header, x + 3, y + 12)
         x += width
@@ -1614,10 +1617,15 @@ export const ReportsPage = () => {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(detailFontSize)
       doc.setTextColor('#111827')
-      doc.setDrawColor('#cbd5e1')
-      doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
       values.forEach((value, index) => {
         const width = detailColumnWidths[index] ?? 60
+        // jsPDF (al menos en esta version) no mantiene el color de
+        // relleno/borde seteado antes del loop -- si no se llama de nuevo
+        // justo antes de cada rect(), a partir del segundo rectangulo
+        // vuelve al negro por defecto (bug real, reproducido y confirmado
+        // con un caso minimo antes de este fix).
+        doc.setDrawColor('#cbd5e1')
+        doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
         doc.rect(x, detailY, width, detailRowHeight, 'FD')
         doc.text(cropCell(value, width), x + 3, detailY + 12)
         x += width
