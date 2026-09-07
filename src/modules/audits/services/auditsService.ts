@@ -176,24 +176,19 @@ const mapNewStatusToAudit = (s: string): AuditChecklistStatus => {
   return 'BAD'
 }
 
-export const buildChecklistSectionsFromNew = (
-  checklistType: 'HIDROGUA' | 'CAMION' | 'AUTO',
+const CAMION_CODES = CAMION_ITEMS.map((item) => item.code)
+const AUTO_CODES = AUTO_ITEMS.map((item) => item.code)
+const HIDROGUA_CODES = HIDROGUA_SECTIONS.flatMap((section) => section.items.map((item) => item.code))
+
+const hasAnyAnswer = (codes: string[], items: Record<string, { estado: string; obs: string }>) =>
+  codes.some((code) => (items[code]?.estado ?? '') !== '')
+
+const buildVehicleSection = (
+  vehicleType: 'CAMION' | 'AUTO',
   items: Record<string, { estado: string; obs: string }>,
-): AuditChecklistSection[] => {
-  if (checklistType === 'HIDROGUA') {
-    return HIDROGUA_SECTIONS.map((section) => ({
-      id: createId(),
-      title: section.name,
-      items: section.items.map((item) => ({
-        id: item.code,
-        label: `[${item.code}] ${item.desc}`,
-        status: mapNewStatusToAudit(items[item.code]?.estado ?? ''),
-        observation: items[item.code]?.obs ?? '',
-      })),
-    }))
-  }
-  const flatItems = checklistType === 'AUTO' ? AUTO_ITEMS : CAMION_ITEMS
-  return [{
+): AuditChecklistSection => {
+  const flatItems = vehicleType === 'AUTO' ? AUTO_ITEMS : CAMION_ITEMS
+  return {
     id: createId(),
     title: 'INSPECCIÓN TÉCNICA DEL VEHÍCULO',
     items: flatItems.map((item) => ({
@@ -202,7 +197,49 @@ export const buildChecklistSectionsFromNew = (
       status: mapNewStatusToAudit(items[item.code]?.estado ?? ''),
       observation: items[item.code]?.obs ?? '',
     })),
-  }]
+  }
+}
+
+const buildHidroguaSections = (items: Record<string, { estado: string; obs: string }>): AuditChecklistSection[] =>
+  HIDROGUA_SECTIONS.map((section) => ({
+    id: createId(),
+    title: section.name,
+    items: section.items.map((item) => ({
+      id: item.code,
+      label: `[${item.code}] ${item.desc}`,
+      status: mapNewStatusToAudit(items[item.code]?.estado ?? ''),
+      observation: items[item.code]?.obs ?? '',
+    })),
+  }))
+
+/**
+ * Un camion/auto puede tener ademas hidrogrua: el operario completa la
+ * pestaña del vehiculo Y la de hidrogrua para la MISMA inspeccion. Antes se
+ * guardaba solo la pestaña activa al momento de guardar y se perdia en
+ * silencio lo cargado en la otra. Ahora se incluyen todas las que tengan
+ * al menos un item respondido, ademas de la pestaña activa (para no
+ * cambiar el comportamiento cuando solo se usa una y queda vacia).
+ */
+export const buildChecklistSectionsFromNew = (
+  checklistType: 'HIDROGUA' | 'CAMION' | 'AUTO',
+  items: Record<string, { estado: string; obs: string }>,
+): AuditChecklistSection[] => {
+  const sections: AuditChecklistSection[] = []
+
+  const includeCamion = checklistType === 'CAMION' || hasAnyAnswer(CAMION_CODES, items)
+  const includeAuto = !includeCamion && (checklistType === 'AUTO' || hasAnyAnswer(AUTO_CODES, items))
+  if (includeCamion) {
+    sections.push(buildVehicleSection('CAMION', items))
+  } else if (includeAuto) {
+    sections.push(buildVehicleSection('AUTO', items))
+  }
+
+  const includeHidrogua = checklistType === 'HIDROGUA' || hasAnyAnswer(HIDROGUA_CODES, items)
+  if (includeHidrogua) {
+    sections.push(...buildHidroguaSections(items))
+  }
+
+  return sections
 }
 
 const createId = (): string => {
