@@ -1577,19 +1577,7 @@ export const ReportsPage = () => {
         rowIndexWithinSection = 0
       }
 
-      // El resumen de Estado puede ocupar varias lineas (lista de items
-      // rechazados) -- se calcula el alto real de la fila antes de decidir
-      // si hace falta saltar de pagina, en vez de asumir una linea fija.
-      // Importante: fijar la fuente ANTES de splitTextToSize, que mide el
-      // ancho del texto con la fuente actualmente seteada en el doc.
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(detailFontSize)
-      const estadoWidth = detailColumnWidths[detailColumnWidths.length - 1]
-      const estadoLines = doc.splitTextToSize(row.status || '-', estadoWidth - 6) as string[]
-      const estadoLineHeight = 9
-      const dynamicRowHeight = Math.max(detailRowHeight, 10 + estadoLines.length * estadoLineHeight)
-
-      if (detailY > pageHeight - (dynamicRowHeight + 14)) {
+      if (detailY > pageHeight - 34) {
         doc.addPage()
         detailY = 28
         doc.setFillColor('#000000')
@@ -1611,7 +1599,18 @@ export const ReportsPage = () => {
       }
 
       let x = margin
-      const values = [row.domain, row.brand, row.model, row.year, row.hydroCrane, row.owner, row.client, row.type, row.location]
+      const values = [
+        row.domain,
+        row.brand,
+        row.model,
+        row.year,
+        row.hydroCrane,
+        row.owner,
+        row.client,
+        row.type,
+        row.location,
+        row.status,
+      ]
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(detailFontSize)
       doc.setTextColor('#111827')
@@ -1619,14 +1618,11 @@ export const ReportsPage = () => {
       doc.setFillColor(rowIndexWithinSection % 2 === 0 ? '#ffffff' : '#f8fafc')
       values.forEach((value, index) => {
         const width = detailColumnWidths[index] ?? 60
-        doc.rect(x, detailY, width, dynamicRowHeight, 'FD')
+        doc.rect(x, detailY, width, detailRowHeight, 'FD')
         doc.text(cropCell(value, width), x + 3, detailY + 12)
         x += width
       })
-      doc.rect(x, detailY, estadoWidth, dynamicRowHeight, 'FD')
-      doc.text(estadoLines, x + 3, detailY + 12)
-
-      detailY += dynamicRowHeight
+      detailY += detailRowHeight
       rowIndexWithinSection += 1
     })
 
