@@ -10,6 +10,7 @@ import { workOrderStatusLabelMap } from '../../workOrders/services/workOrdersSer
 import {
   fleetOperationalStatuses,
   fleetUnitTypes,
+  type AuditRecord,
   type ExternalRequest,
   type FleetOperationalStatus,
   type FleetUnit,
@@ -553,10 +554,16 @@ export const ReportsPage = () => {
     }
   }, [effectiveOccupancyBreakdownBy, occupancyBreakdownBy])
 
-  const unitStatusByUnitId = useMemo(() => {
+  // El estado de flota que ve el usuario normalmente viene de lo que ya
+  // esta sincronizado en el contexto global -- pero ese sync corre en
+  // segundo plano al abrir la app y puede no haber terminado todavia (mas
+  // con el arranque en frio de Render). Para el reporte, que se genera una
+  // sola vez y tiene que ser confiable, se piden las inspecciones directo
+  // al servidor en el momento en vez de confiar en lo que haya en memoria.
+  const buildUnitStatusMap = (auditList: AuditRecord[]): Map<string, string> => {
     const map = new Map<string, string>()
-    const auditsByUnit = new Map<string, typeof audits>()
-    audits.forEach((audit) => {
+    const auditsByUnit = new Map<string, AuditRecord[]>()
+    auditList.forEach((audit) => {
       if (!audit.unitId) {
         return
       }
@@ -572,9 +579,18 @@ export const ReportsPage = () => {
       map.set(unitId, `${auditResultLabelMap[latest.result]} (${date})`)
     })
     return map
-  }, [audits])
+  }
 
-  const getUnitStatusLabel = (unitId: string): string => unitStatusByUnitId.get(unitId) ?? 'Sin inspecciones'
+  const fetchFreshUnitStatusMap = async (): Promise<Map<string, string>> => {
+    try {
+      const freshAudits = await apiRequest<AuditRecord[]>('/audits', { timeoutMs: 20000 })
+      return buildUnitStatusMap(Array.isArray(freshAudits) ? freshAudits : [])
+    } catch {
+      // Si falla el pedido, mejor mostrar el estado con lo que ya tengamos
+      // en memoria que romper la generacion del reporte entero.
+      return buildUnitStatusMap(audits)
+    }
+  }
 
   const filteredOccupancyUnits = useMemo(
     () =>
@@ -1245,6 +1261,7 @@ export const ReportsPage = () => {
   }
 
   const exportOccupancyPdf = async () => {
+    const unitStatusMap = await fetchFreshUnitStatusMap()
     const { jsPDF } = await import('jspdf')
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
     const pageWidth = doc.internal.pageSize.getWidth()
@@ -1463,7 +1480,7 @@ export const ReportsPage = () => {
         client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
         type: getFleetUnitTypeLabel(unit.unitType),
         location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
-        status: getUnitStatusLabel(unit.id),
+        status: unitStatusMap.get(unit.id) ?? 'Sin inspecciones',
       }))
 
     const detailHeaders = ['Dominio', 'Marca', 'Modelo', 'Año', 'Hidrogrúa', 'Empresa prop.', 'Cliente', 'Tipo', 'Ubicación', 'Estado']
@@ -1601,6 +1618,7 @@ export const ReportsPage = () => {
   }
 
   const exportOccupancyXlsx = async () => {
+    const unitStatusMap = await fetchFreshUnitStatusMap()
     const XLSX = await import('xlsx')
     const groupLabel = occupancyDimensionLabelMap[occupancyGroupBy]
     const breakdownLabel = occupancyDimensionLabelMap[effectiveOccupancyBreakdownBy]
@@ -1647,7 +1665,7 @@ export const ReportsPage = () => {
         client: normalizeOccupancyValue(unit.clientName ?? '', 'Sin asignar'),
         type: getFleetUnitTypeLabel(unit.unitType),
         location: normalizeOccupancyValue(unit.location ?? '', 'Sin ubicación'),
-        status: getUnitStatusLabel(unit.id),
+        status: unitStatusMap.get(unit.id) ?? 'Sin inspecciones',
       }))
 
     const detailHeaders = [
