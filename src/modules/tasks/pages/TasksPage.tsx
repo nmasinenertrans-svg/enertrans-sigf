@@ -194,6 +194,23 @@ export const TasksPage = () => {
   )
 
   const lastAutoRefreshAtRef = useRef(0)
+  const lastActivityAtRef = useRef(Date.now())
+  const IDLE_THRESHOLD_MS = 8000
+
+  useEffect(() => {
+    // Si el usuario esta con algo abierto (completando un formulario,
+    // escribiendo un comentario, etc.) el refresco automatico no deberia
+    // interrumpirlo -- se marca actividad con cualquier tecleo/click/touch
+    // y el refresco se salta mientras haya actividad reciente.
+    const markActivity = () => {
+      lastActivityAtRef.current = Date.now()
+    }
+    const activityEvents = ['mousedown', 'keydown', 'input', 'touchstart'] as const
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, markActivity, { passive: true }))
+    return () => {
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, markActivity))
+    }
+  }, [])
 
   useEffect(() => {
     if (!canViewTasks) {
@@ -201,8 +218,13 @@ export const TasksPage = () => {
     }
     // El estado/asignacion de una tarea lo puede cambiar otra persona en cualquier momento
     // (el asignado, otro manager, etc.); sin esto la lista quedaba mostrando datos viejos
-    // hasta que alguien recargaba la pagina a mano.
+    // hasta que alguien recargaba la pagina a mano. Pero si el usuario esta activo, se
+    // pospone el refresco para no cortarle lo que este haciendo -- vuelve a intentar en
+    // el siguiente ciclo.
     const intervalId = window.setInterval(() => {
+      if (Date.now() - lastActivityAtRef.current < IDLE_THRESHOLD_MS) {
+        return
+      }
       lastAutoRefreshAtRef.current = Date.now()
       reload()
     }, 30000)
