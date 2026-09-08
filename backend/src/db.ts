@@ -668,15 +668,6 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   await safeExecuteCompatSql(
     `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "remitoAttachedByUserName" TEXT NOT NULL DEFAULT '';`,
   )
-  // Remitos de material/repuestos entregados junto a una unidad (ademas de
-  // los remitos de entrega/devolucion de la unidad en si): no cambian el
-  // estado logistico de la unidad, por eso targetLogisticsStatus pasa a ser
-  // opcional para estas filas.
-  await safeExecuteCompatSql(`ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'UNIT';`)
-  await safeExecuteCompatSql(
-    `ALTER TABLE "DeliveryOperation" ADD COLUMN IF NOT EXISTS "materialItems" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
-  )
-  await safeExecuteCompatSql(`ALTER TABLE "DeliveryOperation" ALTER COLUMN "targetLogisticsStatus" DROP NOT NULL;`)
 
   // CRM Comercial: tipos y tablas base para embudo y actividades.
   // Nota: el check usa pg_namespace para asegurar que el tipo exista en el schema

@@ -4,18 +4,11 @@ import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
-import type { DeliveryOperation, DeliveryOperationKind, FleetLogisticsStatus, FleetUnit } from '../../../types/domain'
+import type { DeliveryOperation, FleetLogisticsStatus, FleetUnit } from '../../../types/domain'
 import { exportDeliveryOperationPdf } from '../services/deliveryPdfService'
 import { getOperationalStatusLabel } from '../../fleet/services/fleetService'
 
-type MaterialItemDraft = {
-  description: string
-  quantityInput: string
-  unit: string
-}
-
 type DeliveryFormState = {
-  kind: DeliveryOperationKind
   unitId: string
   operationType: 'DELIVERY' | 'RETURN'
   targetLogisticsStatus: FleetLogisticsStatus
@@ -23,7 +16,6 @@ type DeliveryFormState = {
   summary: string
   reason: string
   effectiveAt: string
-  materialItems: MaterialItemDraft[]
 }
 
 const nowDateTimeLocal = () => {
@@ -32,10 +24,7 @@ const nowDateTimeLocal = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
 }
 
-const createEmptyMaterialItem = (): MaterialItemDraft => ({ description: '', quantityInput: '1', unit: '' })
-
 const createEmptyForm = (): DeliveryFormState => ({
-  kind: 'UNIT',
   unitId: '',
   operationType: 'DELIVERY',
   targetLogisticsStatus: 'PENDING_DELIVERY',
@@ -43,7 +32,6 @@ const createEmptyForm = (): DeliveryFormState => ({
   summary: '',
   reason: '',
   effectiveAt: nowDateTimeLocal(),
-  materialItems: [createEmptyMaterialItem()],
 })
 
 const logisticsLabelMap: Record<FleetLogisticsStatus, string> = {
@@ -135,7 +123,6 @@ export const DeliveriesPage = () => {
         item.reason,
         item.operationType,
         item.remitoFileName ?? '',
-        ...(item.materialItems ?? []).map((material) => `${material.description} ${material.unit ?? ''}`),
       ]
         .join(' ')
         .toLowerCase()
@@ -203,47 +190,6 @@ export const DeliveriesPage = () => {
       return
     }
 
-    if (form.kind === 'MATERIAL') {
-      const materialItems = form.materialItems
-        .map((item) => ({
-          description: item.description.trim(),
-          quantity: Number(item.quantityInput.replace(',', '.')),
-          unit: item.unit.trim(),
-        }))
-        .filter((item) => item.description && Number.isFinite(item.quantity) && item.quantity > 0)
-
-      if (materialItems.length === 0) {
-        setAppError('Agrega al menos un material con descripcion y cantidad validas.')
-        return
-      }
-
-      setIsSaving(true)
-      try {
-        const created = await apiRequest<DeliveryOperation>('/deliveries', {
-          method: 'POST',
-          body: {
-            kind: 'MATERIAL',
-            unitId: resolvedUnitId,
-            clientId: form.clientId || null,
-            summary: form.summary,
-            reason: form.reason,
-            materialItems,
-            effectiveAt: form.effectiveAt ? new Date(form.effectiveAt).toISOString() : undefined,
-          },
-        })
-
-        setDeliveries([created, ...deliveries])
-        setForm(createEmptyForm())
-        setUnitQuery('')
-        setAppError('Remito de materiales registrado correctamente.')
-      } catch (error) {
-        setAppError((error as Error)?.message || 'No se pudo registrar el remito de materiales.')
-      } finally {
-        setIsSaving(false)
-      }
-      return
-    }
-
     if (form.operationType === 'DELIVERY' && form.targetLogisticsStatus === 'DELIVERED' && !form.clientId && !unitForSubmit.clientId) {
       setAppError('Para marcar como entregado debes indicar cliente destino o mantener uno ya asignado.')
       return
@@ -254,12 +200,8 @@ export const DeliveriesPage = () => {
       const created = await apiRequest<DeliveryOperation>('/deliveries', {
         method: 'POST',
         body: {
-          kind: 'UNIT',
+          ...form,
           unitId: resolvedUnitId,
-          operationType: form.operationType,
-          targetLogisticsStatus: form.targetLogisticsStatus,
-          summary: form.summary,
-          reason: form.reason,
           clientId: form.operationType === 'DELIVERY' ? form.clientId || null : null,
           effectiveAt: form.effectiveAt ? new Date(form.effectiveAt).toISOString() : undefined,
         },
@@ -276,24 +218,6 @@ export const DeliveriesPage = () => {
     } finally {
       setIsSaving(false)
     }
-  }
-
-  const handleMaterialItemChange = (index: number, field: keyof MaterialItemDraft, value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      materialItems: prev.materialItems.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
-    }))
-  }
-
-  const handleAddMaterialItem = () => {
-    setForm((prev) => ({ ...prev, materialItems: [...prev.materialItems, createEmptyMaterialItem()] }))
-  }
-
-  const handleRemoveMaterialItem = (index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      materialItems: prev.materialItems.length > 1 ? prev.materialItems.filter((_, itemIndex) => itemIndex !== index) : prev.materialItems,
-    }))
   }
 
   const handleGeneratePdf = async (item: DeliveryOperation) => {
@@ -315,7 +239,7 @@ export const DeliveriesPage = () => {
       return
     }
 
-    if (item.kind !== 'MATERIAL' && !(item.targetLogisticsStatus && finalStatuses.has(item.targetLogisticsStatus))) {
+    if (!finalStatuses.has(item.targetLogisticsStatus)) {
       setAppError('Solo se puede adjuntar remito en operaciones Entregado o Devuelto.')
       return
     }
@@ -376,23 +300,6 @@ export const DeliveriesPage = () => {
               void handleSubmit()
             }}
           >
-            <div className="flex gap-1">
-              {(['UNIT', 'MATERIAL'] as const).map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setForm((prev) => ({ ...prev, kind }))}
-                  className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    form.kind === kind
-                      ? 'border-amber-400 bg-amber-400 text-slate-900'
-                      : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  {kind === 'UNIT' ? 'Entrega/devolucion de unidad' : 'Remito de materiales'}
-                </button>
-              ))}
-            </div>
-
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Unidad por dominio</label>
               <input
@@ -422,125 +329,57 @@ export const DeliveriesPage = () => {
               <p className="text-xs text-slate-500">Tip: escribi la patente y selecciona la coincidencia exacta.</p>
             </div>
 
-            {form.kind === 'UNIT' ? (
-              <>
+            <select
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              value={form.operationType}
+              onChange={(event) => handleOperationTypeChange(event.target.value as 'DELIVERY' | 'RETURN')}
+            >
+              <option value="DELIVERY">Entrega</option>
+              <option value="RETURN">Devolucion</option>
+            </select>
+
+            <select
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              value={form.targetLogisticsStatus}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  targetLogisticsStatus: event.target.value as FleetLogisticsStatus,
+                }))
+              }
+            >
+              {targetStatusOptions(form.operationType).map((status) => (
+                <option key={status} value={status}>
+                  {logisticsLabelMap[status]}
+                </option>
+              ))}
+            </select>
+
+            {form.operationType === 'DELIVERY' ? (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Cliente destino</label>
                 <select
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                  value={form.operationType}
-                  onChange={(event) => handleOperationTypeChange(event.target.value as 'DELIVERY' | 'RETURN')}
+                  value={form.clientId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, clientId: event.target.value }))}
                 >
-                  <option value="DELIVERY">Entrega</option>
-                  <option value="RETURN">Devolucion</option>
+                  <option value="">Mantener cliente actual de la unidad</option>
+                  {clients
+                    .filter((client) => client.isActive)
+                    .map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
                 </select>
-
-                <select
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                  value={form.targetLogisticsStatus}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      targetLogisticsStatus: event.target.value as FleetLogisticsStatus,
-                    }))
-                  }
-                >
-                  {targetStatusOptions(form.operationType).map((status) => (
-                    <option key={status} value={status}>
-                      {logisticsLabelMap[status]}
-                    </option>
-                  ))}
-                </select>
-
-                {form.operationType === 'DELIVERY' ? (
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Cliente destino</label>
-                    <select
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                      value={form.clientId}
-                      onChange={(event) => setForm((prev) => ({ ...prev, clientId: event.target.value }))}
-                    >
-                      <option value="">Mantener cliente actual de la unidad</option>
-                      {clients
-                        .filter((client) => client.isActive)
-                        .map((client) => (
-                          <option key={client.id} value={client.id}>
-                            {client.name}
-                          </option>
-                        ))}
-                    </select>
-                    <p className="text-xs text-slate-500">
-                      Si elegis "Mantener", se conserva el cliente que ya tenga la unidad en el sistema.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    En devolucion no se cambia cliente manualmente: al marcar "Devuelto" la unidad queda sin cliente.
-                  </p>
-                )}
-              </>
+                <p className="text-xs text-slate-500">
+                  Si elegis "Mantener", se conserva el cliente que ya tenga la unidad en el sistema.
+                </p>
+              </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Cliente que recibe (opcional)</label>
-                  <select
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                    value={form.clientId}
-                    onChange={(event) => setForm((prev) => ({ ...prev, clientId: event.target.value }))}
-                  >
-                    <option value="">Sin especificar</option>
-                    {clients
-                      .filter((client) => client.isActive)
-                      .map((client) => (
-                        <option key={client.id} value={client.id}>
-                          {client.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Materiales entregados</label>
-                  {form.materialItems.map((item, index) => (
-                    <div key={index} className="grid grid-cols-[1fr_70px_70px_auto] gap-1.5">
-                      <input
-                        className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
-                        placeholder="Descripcion (ej: filtro de aceite)"
-                        value={item.description}
-                        onChange={(event) => handleMaterialItemChange(index, 'description', event.target.value)}
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
-                        placeholder="Cant."
-                        value={item.quantityInput}
-                        onChange={(event) => handleMaterialItemChange(index, 'quantityInput', event.target.value)}
-                      />
-                      <input
-                        className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
-                        placeholder="Unidad"
-                        value={item.unit}
-                        onChange={(event) => handleMaterialItemChange(index, 'unit', event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveMaterialItem(index)}
-                        disabled={form.materialItems.length <= 1}
-                        className="rounded-lg border border-rose-300 bg-rose-50 px-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        X
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleAddMaterialItem}
-                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    + Agregar material
-                  </button>
-                </div>
-              </>
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                En devolucion no se cambia cliente manualmente: al marcar "Devuelto" la unidad queda sin cliente.
+              </p>
             )}
 
             <input
@@ -569,7 +408,7 @@ export const DeliveriesPage = () => {
               disabled={isSaving || !canCreate}
               className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-60"
             >
-              {isSaving ? 'Guardando...' : form.kind === 'MATERIAL' ? 'Registrar remito de materiales' : 'Registrar operacion'}
+              {isSaving ? 'Guardando...' : 'Registrar operacion'}
             </button>
           </form>
         </section>
@@ -628,8 +467,7 @@ export const DeliveriesPage = () => {
             </div>
           ) : (
             filteredHistory.map((item) => {
-              const canAttachRemito =
-                item.kind === 'MATERIAL' || (item.targetLogisticsStatus !== null && finalStatuses.has(item.targetLogisticsStatus))
+              const canAttachRemito = finalStatuses.has(item.targetLogisticsStatus)
               return (
                 <article key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -639,34 +477,14 @@ export const DeliveriesPage = () => {
                       </p>
                       <p className="text-xs text-slate-600">{item.client?.name || 'Sin cliente'}</p>
                     </div>
-                    <span
-                      className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
-                        item.kind === 'MATERIAL'
-                          ? 'border-sky-300 bg-sky-50 text-sky-700'
-                          : 'border-amber-300 bg-amber-50 text-amber-700'
-                      }`}
-                    >
-                      {item.kind === 'MATERIAL' ? 'MATERIAL' : item.operationType === 'DELIVERY' ? 'ENTREGA' : 'DEVOLUCION'}
+                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                      {item.operationType === 'DELIVERY' ? 'ENTREGA' : 'DEVOLUCION'}
                     </span>
                   </div>
                   <div className="mt-2 space-y-1 text-xs text-slate-600">
-                    {item.kind === 'MATERIAL' ? (
-                      <div>
-                        <span className="font-semibold">Materiales:</span>
-                        <ul className="mt-1 list-disc pl-4">
-                          {(item.materialItems ?? []).map((material, index) => (
-                            <li key={index}>
-                              {material.description} — {material.quantity} {material.unit || ''}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : (
-                      <p>
-                        <span className="font-semibold">Estado objetivo:</span>{' '}
-                        {item.targetLogisticsStatus ? logisticsLabelMap[item.targetLogisticsStatus] : '-'}
-                      </p>
-                    )}
+                    <p>
+                      <span className="font-semibold">Estado objetivo:</span> {logisticsLabelMap[item.targetLogisticsStatus]}
+                    </p>
                     <p>
                       <span className="font-semibold">Fecha:</span> {formatDateTime(item.effectiveAt || item.createdAt)}
                     </p>
