@@ -36,12 +36,16 @@ const drawBox = (pdf: jsPDF, x: number, y: number, width: number, height: number
   pdf.rect(x, y, width, height)
 }
 
-const buildTitle = (operation: DeliveryOperation) =>
-  operation.operationType === 'DELIVERY' ? 'INFORME DE ENTREGA' : 'INFORME DE DEVOLUCION'
+const buildTitle = (operation: DeliveryOperation) => {
+  if (operation.kind === 'MATERIAL') {
+    return 'REMITO DE MATERIALES'
+  }
+  return operation.operationType === 'DELIVERY' ? 'INFORME DE ENTREGA' : 'INFORME DE DEVOLUCION'
+}
 
 const buildFileName = (operation: DeliveryOperation) => {
-  const action = operation.operationType === 'DELIVERY' ? 'Entrega' : 'Devolucion'
   const unitCode = safeText(operation.unit?.internalCode) || 'Unidad'
+  const action = operation.kind === 'MATERIAL' ? 'Materiales' : operation.operationType === 'DELIVERY' ? 'Entrega' : 'Devolucion'
   return `${action}_${unitCode}_${operation.id.slice(0, 8)}.pdf`
 }
 
@@ -83,13 +87,18 @@ export const exportDeliveryOperationPdf = async ({ operation, unit, client }: De
   pdf.text(`Operacion: ${operation.id.slice(0, 8).toUpperCase()}`, pageWidth - 75, 24)
   pdf.text(`Fecha efectiva: ${formatDateTime(operation.effectiveAt || operation.createdAt)}`, pageWidth - 75, 30)
 
+  const isMaterial = operation.kind === 'MATERIAL'
+
   let y = 44
-  drawBox(pdf, 10, y, pageWidth - 20, 30)
+  const infoBoxHeight = isMaterial ? 20 : 30
+  drawBox(pdf, 10, y, pageWidth - 20, infoBoxHeight)
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(8)
   pdf.text('UNIDAD', 12, y + 6)
   pdf.text('CLIENTE', 12, y + 16)
-  pdf.text('ESTADO OBJETIVO', 12, y + 26)
+  if (!isMaterial) {
+    pdf.text('ESTADO OBJETIVO', 12, y + 26)
+  }
   pdf.setFont('helvetica', 'normal')
   pdf.text(safeText(unit?.internalCode) || safeText(operation.unit?.internalCode) || '-', 36, y + 6)
   pdf.text(
@@ -97,9 +106,29 @@ export const exportDeliveryOperationPdf = async ({ operation, unit, client }: De
     36,
     y + 16,
   )
-  pdf.text(operation.targetLogisticsStatus, 36, y + 26)
+  if (!isMaterial && operation.targetLogisticsStatus) {
+    pdf.text(operation.targetLogisticsStatus, 36, y + 26)
+  }
 
-  y += 36
+  y += infoBoxHeight + 6
+
+  if (isMaterial) {
+    const items = operation.materialItems ?? []
+    const materialsBoxHeight = Math.max(14, 8 + items.length * 5)
+    drawBox(pdf, 10, y, pageWidth - 20, materialsBoxHeight)
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('MATERIALES ENTREGADOS', 12, y + 6)
+    pdf.setFont('helvetica', 'normal')
+    if (items.length === 0) {
+      pdf.text('Sin materiales cargados.', 12, y + 12)
+    } else {
+      items.forEach((item, index) => {
+        const line = `${item.description} — Cant.: ${item.quantity}${item.unit ? ` ${item.unit}` : ''}`
+        pdf.text(line, 12, y + 12 + index * 5)
+      })
+    }
+    y += materialsBoxHeight + 6
+  }
   drawBox(pdf, 10, y, pageWidth - 20, 42)
   pdf.setFont('helvetica', 'bold')
   pdf.text('RESUMEN OPERATIVO', 12, y + 6)

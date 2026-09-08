@@ -10,15 +10,23 @@ const deliveryTargets = new Set(['PENDING_DELIVERY', 'DELIVERED'])
 const returnTargets = new Set(['PENDING_RETURN', 'RETURNED'])
 const finalStatuses = new Set(['DELIVERED', 'RETURNED'])
 
+const materialItemSchema = z.object({
+  description: z.string().trim().min(1).max(300),
+  quantity: z.coerce.number().positive(),
+  unit: z.string().trim().max(30).optional().default(''),
+})
+
 const operationSchema = z.object({
   id: z.string().optional(),
+  kind: z.enum(['UNIT', 'MATERIAL']).optional().default('UNIT'),
   unitId: z.string().min(1),
-  operationType: z.enum(['DELIVERY', 'RETURN']),
+  operationType: z.enum(['DELIVERY', 'RETURN']).optional().default('DELIVERY'),
   targetLogisticsStatus: z.enum(logisticsStatuses).optional(),
   clientId: z.string().optional().nullable(),
   summary: z.string().max(160).optional().default(''),
   reason: z.string().max(1000).optional().default(''),
   effectiveAt: z.string().optional(),
+  materialItems: z.array(materialItemSchema).optional().default([]),
 })
 
 const remitoAttachmentSchema = z.object({
@@ -136,6 +144,57 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
+  // Remito de material/repuestos: se registra junto a una unidad pero no
+  // mueve el estado logistico de la unidad ni pasa por la maquina de
+  // transiciones de entrega/devolucion -- es independiente de eso.
+  if (parsed.data.kind === 'MATERIAL') {
+    if (parsed.data.materialItems.length === 0) {
+      return res.status(400).json({ message: 'Agrega al menos un material.' })
+    }
+    try {
+      const unit = await runWithSchemaFailover(() => prisma.fleetUnit.findUnique({ where: { id: parsed.data.unitId } }))
+      if (!unit) {
+        return res.status(404).json({ message: 'Unidad no encontrada.' })
+      }
+
+      const selectedClientId = normalize(parsed.data.clientId ?? '') || null
+      const effectiveAt = parsed.data.effectiveAt ? new Date(parsed.data.effectiveAt) : new Date()
+      const safeEffectiveAt = Number.isNaN(effectiveAt.getTime()) ? new Date() : effectiveAt
+      const actor = req.userId
+        ? await runWithSchemaFailover(() =>
+            prisma.user.findUnique({ where: { id: req.userId }, select: { id: true, fullName: true } }),
+          )
+        : null
+
+      const created = await runWithSchemaFailover(() =>
+        prisma.deliveryOperation.create({
+          data: {
+            unitId: unit.id,
+            clientId: selectedClientId,
+            kind: 'MATERIAL',
+            operationType: 'DELIVERY',
+            targetLogisticsStatus: null,
+            materialItems: parsed.data.materialItems,
+            summary: normalize(parsed.data.summary),
+            reason: normalize(parsed.data.reason),
+            requestedByUserId: actor?.id ?? null,
+            requestedByUserName: actor?.fullName ?? '',
+            effectiveAt: safeEffectiveAt,
+          },
+          include: {
+            unit: { select: { id: true, internalCode: true, ownerCompany: true } },
+            client: { select: { id: true, name: true } },
+          },
+        }),
+      )
+
+      return res.status(201).json(created)
+    } catch (error) {
+      console.error('Deliveries POST (material) error:', error)
+      return res.status(500).json({ message: 'No se pudo registrar el remito de materiales.' })
+    }
+  }
+
   const targetStatus = resolveTargetStatus(parsed.data.operationType, parsed.data.targetLogisticsStatus)
   if (!ensureTargetMatchesOperation(parsed.data.operationType, targetStatus)) {
     return res.status(400).json({ message: 'El estado logistico no coincide con el tipo de operacion.' })
@@ -211,6 +270,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           data: {
             unitId: unit.id,
             clientId: operationClientId,
+            kind: 'UNIT',
             operationType: parsed.data.operationType,
             targetLogisticsStatus: targetStatus,
             summary: normalize(parsed.data.summary),
@@ -255,7 +315,10 @@ router.patch('/:id/remito', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ message: 'Operacion no encontrada.' })
     }
 
-    if (!finalStatuses.has(existing.targetLogisticsStatus)) {
+    // Un remito de material no tiene estado logistico de unidad asociado
+    // (targetLogisticsStatus queda null) -- se puede adjuntar el archivo
+    // apenas se crea, sin pasar por Entregado/Devuelto.
+    if (existing.kind !== 'MATERIAL' && !finalStatuses.has(existing.targetLogisticsStatus ?? '')) {
       return res.status(400).json({
         message: 'Solo se puede adjuntar remito cuando la operacion este en Entregado o Devuelto.',
       })

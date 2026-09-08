@@ -743,8 +743,10 @@ model DeliveryOperation {
   id                   String                @id @default(uuid())
   unitId               String
   clientId             String?
+  kind                 String                @default("UNIT")
   operationType        DeliveryOperationType
-  targetLogisticsStatus FleetLogisticsStatus
+  targetLogisticsStatus FleetLogisticsStatus?
+  materialItems        Json                  @default("[]")
   summary              String                @default("")
   reason               String                @default("")
   remitoFileName       String                @default("")

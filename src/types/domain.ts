@@ -74,6 +74,15 @@ export type FleetLogisticsStatus = (typeof fleetLogisticsStatuses)[number]
 export const deliveryOperationTypes = ['DELIVERY', 'RETURN'] as const
 export type DeliveryOperationType = (typeof deliveryOperationTypes)[number]
 
+export const deliveryOperationKinds = ['UNIT', 'MATERIAL'] as const
+export type DeliveryOperationKind = (typeof deliveryOperationKinds)[number]
+
+export interface DeliveryMaterialItem {
+  description: string
+  quantity: number
+  unit?: string
+}
+
 export const taskStatuses = ['UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'BLOCKED', 'DONE', 'CANCELED'] as const
 export type TaskStatus = (typeof taskStatuses)[number]
 
@@ -651,8 +660,10 @@ export interface DeliveryOperation {
   id: string
   unitId: string
   clientId?: string | null
+  kind: DeliveryOperationKind
   operationType: DeliveryOperationType
-  targetLogisticsStatus: FleetLogisticsStatus
+  targetLogisticsStatus: FleetLogisticsStatus | null
+  materialItems: DeliveryMaterialItem[]
   summary: string
   reason: string
   remitoFileName?: string
