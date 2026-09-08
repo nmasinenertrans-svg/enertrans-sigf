@@ -71,7 +71,7 @@ const navigationGroups: NavGroup[] = [
       { path: ROUTE_PATHS.handoverChecklists, label: 'Checklist entrega/devolución (prueba)', module: 'DELIVERIES', devOnly: true },
       {
         path: ROUTE_PATHS.trips,
-        label: 'Viajes / Traslados (prueba)',
+        label: 'Viajes / Traslados',
         module: 'DELIVERIES',
         allowedUsernames: TRIPS_ALLOWED_USERNAMES,
       },
