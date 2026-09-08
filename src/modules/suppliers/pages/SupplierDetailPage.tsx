@@ -77,7 +77,7 @@ const formatMoney = (value: number) =>
 export const SupplierDetailPage = () => {
   const { supplierId } = useParams()
   const {
-    state: { suppliers, repairs, featureFlags },
+    state: { suppliers, repairs, invoices, featureFlags },
     actions: { setSuppliers, setAppError },
   } = useAppContext()
 
@@ -125,6 +125,26 @@ export const SupplierDetailPage = () => {
       totalCost: related.reduce((acc, item) => acc + (item.realCost ?? 0), 0),
     }
   }, [repairs, supplier])
+
+  // El costo acumulado antes solo miraba reparaciones -- las facturas
+  // cargadas directo al proveedor (sin pasar por una reparacion) quedaban
+  // afuera de la cuenta, aunque hubiera un monton cargadas.
+  const invoiceMetrics = useMemo(() => {
+    if (!supplier) {
+      return { invoicesCount: 0, totalCost: 0 }
+    }
+
+    const related = invoices.filter(
+      (invoice) => invoice.supplierId === supplier.id || normalize(invoice.providerName || '') === normalize(supplier.name),
+    )
+
+    return {
+      invoicesCount: related.length,
+      totalCost: related.reduce((acc, item) => acc + (item.amount ?? 0), 0),
+    }
+  }, [invoices, supplier])
+
+  const combinedAccumulatedCost = repairMetrics.totalCost + invoiceMetrics.totalCost
 
   const mapEmbedUrl = useMemo(
     () => (supplier ? buildMapEmbedUrl(supplier.mapsUrl || '', supplier.address || '') : ''),
@@ -202,7 +222,11 @@ export const SupplierDetailPage = () => {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Metricas</p>
               <p className="mt-1 text-slate-700">Reparaciones: {repairMetrics.repairsCount}</p>
-              <p className="mt-1 text-slate-700">Costo acumulado: {formatMoney(repairMetrics.totalCost)}</p>
+              <p className="mt-1 text-slate-700">Facturas: {invoiceMetrics.invoicesCount}</p>
+              <p className="mt-1 font-semibold text-slate-900">Costo acumulado: {formatMoney(combinedAccumulatedCost)}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Reparaciones: {formatMoney(repairMetrics.totalCost)} + Facturas: {formatMoney(invoiceMetrics.totalCost)}
+              </p>
             </div>
           </div>
 

@@ -38,10 +38,12 @@ const createEmptyForm = (): SupplierFormState => ({
 const formatMoney = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value)
 
+const normalize = (value: string) => value.trim().toLowerCase()
+
 export const SuppliersPage = () => {
   const { can } = usePermissions()
   const {
-    state: { suppliers, repairs, featureFlags },
+    state: { suppliers, repairs, invoices, featureFlags },
     actions: { setSuppliers, setAppError },
   } = useAppContext()
 
@@ -76,17 +78,30 @@ export const SuppliersPage = () => {
     )
   }, [suppliers, search])
 
+  // El costo acumulado antes solo miraba reparaciones (y encima cruzaba por
+  // nombre sensible a mayusculas, con lo cual un proveedor con distinta
+  // capitalizacion en una reparacion vieja quedaba afuera) -- ahora suma
+  // tambien las facturas cargadas directo al proveedor, y cruza por id
+  // ademas de por nombre normalizado, igual que en la ficha del proveedor.
   const supplierMetrics = useMemo(() => {
-    const map = new Map<string, { repairs: number; totalCost: number }>()
-    repairs.forEach((repair) => {
-      const key = repair.supplierName?.trim() || 'Sin proveedor'
-      const current = map.get(key) ?? { repairs: 0, totalCost: 0 }
-      current.repairs += 1
-      current.totalCost += repair.realCost ?? 0
-      map.set(key, current)
+    const map = new Map<string, { repairs: number; invoicesCount: number; totalCost: number }>()
+    suppliers.forEach((supplier) => {
+      const relatedRepairs = repairs.filter(
+        (repair) => repair.supplierId === supplier.id || normalize(repair.supplierName || '') === normalize(supplier.name),
+      )
+      const relatedInvoices = invoices.filter(
+        (invoice) => invoice.supplierId === supplier.id || normalize(invoice.providerName || '') === normalize(supplier.name),
+      )
+      map.set(supplier.id, {
+        repairs: relatedRepairs.length,
+        invoicesCount: relatedInvoices.length,
+        totalCost:
+          relatedRepairs.reduce((acc, item) => acc + (item.realCost ?? 0), 0) +
+          relatedInvoices.reduce((acc, item) => acc + (item.amount ?? 0), 0),
+      })
     })
     return map
-  }, [repairs])
+  }, [suppliers, repairs, invoices])
 
   if (!featureFlags.showSuppliersModule) {
     return (
@@ -311,7 +326,7 @@ export const SuppliersPage = () => {
               </div>
             ) : (
               filteredSuppliers.map((supplier) => {
-                const metrics = supplierMetrics.get(supplier.name) ?? { repairs: 0, totalCost: 0 }
+                const metrics = supplierMetrics.get(supplier.id) ?? { repairs: 0, invoicesCount: 0, totalCost: 0 }
                 return (
                   <article key={supplier.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-start justify-between gap-2">
@@ -336,7 +351,8 @@ export const SuppliersPage = () => {
                       <p>Pago: {supplier.paymentMethod || 'Sin definir'}</p>
                       <p>Plazo: {supplier.paymentTerms || 'Sin definir'}</p>
                       <p>Reparaciones: {metrics.repairs}</p>
-                      <p>Costo acumulado: {formatMoney(metrics.totalCost)}</p>
+                      <p>Facturas: {metrics.invoicesCount}</p>
+                      <p className="font-semibold text-slate-900">Costo acumulado: {formatMoney(metrics.totalCost)}</p>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Link
