@@ -1,30 +1,13 @@
 import { Router } from 'express'
-import type { NextFunction, Response } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { calculateRouteDistanceKm } from '../services/routing.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
-
-// Modulo en construccion/prueba: restringido a este grupo puntual de
-// usuarios (no por rol, a diferencia de contratos/checklists/cubiertas)
-// mientras se termina de validar. "barce" todavia no tiene cuenta creada,
-// se deja el username ya cargado para que funcione apenas exista.
-const TRIPS_ALLOWED_USERNAMES = new Set(['nmasin', 'rbottero', 'crivas', 'mpinto', 'barce', 'emoreno'])
-
-router.use(async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  if (!req.userId) {
-    return res.status(401).json({ message: 'No autenticado.' })
-  }
-  const requester = await prisma.user.findUnique({ where: { id: req.userId }, select: { username: true } })
-  if (!requester || !TRIPS_ALLOWED_USERNAMES.has(requester.username.trim().toLowerCase())) {
-    return res.status(403).json({ message: 'Modulo en prueba, disponible solo para un grupo puntual de usuarios por ahora.' })
-  }
-  return next()
-})
 
 const geoPointSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -149,7 +132,7 @@ const tripDateRange = (legRows: { startDate: Date; endDate: Date }[]) => ({
   endDate: new Date(Math.max(...legRows.map((leg) => leg.endDate.getTime()))),
 })
 
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('TRIPS', 'view'), async (req, res) => {
   try {
     const { driverUserId } = req.query
     const where: Record<string, unknown> = {}
@@ -168,7 +151,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-router.post('/', async (req: AuthenticatedRequest, res) => {
+router.post('/', requirePermission('TRIPS', 'create'), async (req: AuthenticatedRequest, res) => {
   if (!req.userId) {
     return res.status(401).json({ message: 'No autenticado.' })
   }
@@ -206,14 +189,19 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   }
 })
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requirePermission('TRIPS', 'edit'), async (req, res) => {
   const parsed = tripUpdateSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Datos invalidos.' })
   }
 
+  const tripId = typeof req.params.id === 'string' ? req.params.id : null
+  if (!tripId) {
+    return res.status(400).json({ message: 'Id invalido.' })
+  }
+
   try {
-    const current = await prisma.trip.findUnique({ where: { id: req.params.id } })
+    const current = await prisma.trip.findUnique({ where: { id: tripId } })
     if (!current) {
       return res.status(404).json({ message: 'El viaje no existe.' })
     }
@@ -263,11 +251,16 @@ router.patch('/:id', async (req, res) => {
   }
 })
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('TRIPS', 'delete'), async (req, res) => {
+  const tripId = typeof req.params.id === 'string' ? req.params.id : null
+  if (!tripId) {
+    return res.status(400).json({ message: 'Id invalido.' })
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.tripLeg.deleteMany({ where: { tripId: req.params.id } })
-      await tx.trip.delete({ where: { id: req.params.id } })
+      await tx.tripLeg.deleteMany({ where: { tripId } })
+      await tx.trip.delete({ where: { id: tripId } })
     })
     return res.status(204).send()
   } catch (error) {

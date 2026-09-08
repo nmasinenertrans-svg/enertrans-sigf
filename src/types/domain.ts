@@ -10,6 +10,7 @@ export const permissionModules = [
   'CLIENTS',
   'DELIVERIES',
   'MOVEMENTS',
+  'TRIPS',
   'MAINTENANCE',
   'AUDITS',
   'WORK_ORDERS',

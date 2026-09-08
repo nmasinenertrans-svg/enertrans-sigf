@@ -11,16 +11,8 @@ type NavItem = {
   module: PermissionModule
   flagKey?: keyof FeatureFlags
   devOnly?: boolean
-  allowedUsernames?: string[]
 }
 type NavGroup = { id: string; label: string; items: NavItem[] }
-
-// Viajes/Traslados: mientras se termina de probar, en vez de dejarlo solo
-// para DEV se restringe a este grupo puntual de usuarios (independiente del
-// rol de cada uno). "barce" todavia no tiene cuenta creada -- se deja el
-// nombre ya cargado para que funcione apenas exista, sin tocar este archivo
-// de nuevo.
-const TRIPS_ALLOWED_USERNAMES = ['nmasin', 'rbottero', 'crivas', 'mpinto', 'barce', 'emoreno']
 
 const navigationGroups: NavGroup[] = [
   {
@@ -69,12 +61,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { path: ROUTE_PATHS.movements, label: 'Remitos', module: 'MOVEMENTS', flagKey: 'showMovementsModule' },
       { path: ROUTE_PATHS.handoverChecklists, label: 'Checklist entrega/devolución (prueba)', module: 'DELIVERIES', devOnly: true },
-      {
-        path: ROUTE_PATHS.trips,
-        label: 'Viajes / Traslados',
-        module: 'DELIVERIES',
-        allowedUsernames: TRIPS_ALLOWED_USERNAMES,
-      },
+      { path: ROUTE_PATHS.trips, label: 'Viajes / Traslados', module: 'TRIPS' },
     ],
   },
   {
@@ -150,9 +137,6 @@ export const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           return false
         }
         if (item.devOnly && currentUser?.role !== 'DEV') {
-          return false
-        }
-        if (item.allowedUsernames && !item.allowedUsernames.includes((currentUser?.username ?? '').trim().toLowerCase())) {
           return false
         }
         return true
