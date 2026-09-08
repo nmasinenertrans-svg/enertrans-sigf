@@ -181,7 +181,7 @@ export const LocationPicker = ({ label, lat, lng, addressLabel, onChange, errorM
         </div>
       ) : null}
 
-      <div className="mt-2 h-56 overflow-hidden rounded-lg border border-slate-300">
+      <div className="relative z-0 mt-2 h-56 overflow-hidden rounded-lg border border-slate-300">
         <MapContainer center={center} zoom={lat !== null ? 14 : 11} style={{ height: '100%', width: '100%' }}>
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

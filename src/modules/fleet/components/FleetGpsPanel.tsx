@@ -126,7 +126,7 @@ export const FleetGpsPanel = ({ unitId }: FleetGpsPanelProps) => {
         </div>
       </article>
 
-      <article className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <article className="relative z-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="h-[420px] w-full">
           <MapContainer center={[latest.latitude, latest.longitude]} zoom={13} className="h-full w-full">
             <TileLayer
