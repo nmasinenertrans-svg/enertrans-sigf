@@ -448,7 +448,9 @@ model ExternalRequest {
 
 model FleetMovement {
   id                   String            @id @default(uuid())
+  kind                 String            @default("UNIT")
   movementType         FleetMovementType
+  materialItems        Json              @default("[]")
   remitoNumber         String            @default("")
   remitoDate           DateTime?
   clientId             String?

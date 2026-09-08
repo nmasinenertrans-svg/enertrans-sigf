@@ -6,11 +6,14 @@ import { apiRequest } from '../../../services/api/apiClient'
 import type { FleetMovement } from '../../../types/domain'
 import {
   applyParsedPayload,
+  createEmptyMaterialItemDraft,
   createEmptyMovementFormData,
   expandMovementUnitIdsWithAssociations,
   formatMovementDateForView,
   normalizeRemitoDateInput,
+  parseMaterialItems,
   validateMovementFormData,
+  type MaterialItemDraft,
   type MovementFormData,
 } from '../services/movementsService'
 import { exportBlankMovementPdf, exportMovementPdf } from '../services/movementPdfService'
@@ -93,7 +96,7 @@ export const MovementsPage = () => {
   if (!featureFlags.showMovementsModule) {
     return (
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
+        <h2 className="text-2xl font-bold text-slate-900">Remitos</h2>
         <p className="mt-2 text-sm text-slate-600">Este modulo esta deshabilitado por configuracion.</p>
       </section>
     )
@@ -102,6 +105,25 @@ export const MovementsPage = () => {
   const handleFieldChange = <K extends keyof MovementFormData>(field: K, value: MovementFormData[K]) => {
     setFormData((previous) => ({ ...previous, [field]: value }))
     setErrors((previous) => ({ ...previous, [field]: undefined }))
+  }
+
+  const handleMaterialItemChange = (index: number, field: keyof MaterialItemDraft, value: string) => {
+    setFormData((previous) => ({
+      ...previous,
+      materialItems: previous.materialItems.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
+    }))
+    setErrors((previous) => ({ ...previous, materialItems: undefined }))
+  }
+
+  const handleAddMaterialItem = () => {
+    setFormData((previous) => ({ ...previous, materialItems: [...previous.materialItems, createEmptyMaterialItemDraft()] }))
+  }
+
+  const handleRemoveMaterialItem = (index: number) => {
+    setFormData((previous) => ({
+      ...previous,
+      materialItems: previous.materialItems.length > 1 ? previous.materialItems.filter((_, itemIndex) => itemIndex !== index) : previous.materialItems,
+    }))
   }
 
   const handleFileSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,6 +184,7 @@ export const MovementsPage = () => {
       const payload = {
         ...formData,
         unitIds: expandMovementUnitIdsWithAssociations(formData.unitIds, fleetUnits),
+        materialItems: parseMaterialItems(formData.materialItems),
         remitoDate: normalizeRemitoDateInput(formData.remitoDate),
         pdfFileUrl: pdfUrl,
       }
@@ -262,9 +285,16 @@ export const MovementsPage = () => {
     const normalizedDate = normalizeRemitoDateInput(selected.remitoDate ?? '')
     setEditingMovementId(selected.id)
     setClientSearch('')
+    const editedMaterialItems = (selected.materialItems ?? []).map((item) => ({
+      description: item.description,
+      quantityInput: String(item.quantity),
+      unit: item.unit ?? '',
+    }))
     setFormData({
       unitIds: selected.unitIds ?? [],
+      kind: selected.kind ?? 'UNIT',
       movementType: selected.movementType,
+      materialItems: editedMaterialItems.length > 0 ? editedMaterialItems : [createEmptyMaterialItemDraft()],
       remitoNumber: selected.remitoNumber ?? '',
       remitoDate: normalizedDate,
       clientId: selected.clientId ?? '',
@@ -292,9 +322,10 @@ export const MovementsPage = () => {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <BackLink to={ROUTE_PATHS.dashboard} label="Volver al inicio" />
-          <h2 className="text-2xl font-bold text-slate-900">Entregas y devoluciones</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Remitos</h2>
           <p className="text-sm text-slate-600">
-            Carga los remitos de entrada o devolucion. Se intenta auto-lectura del PDF y luego podes corregir manualmente.
+            Remitos de entrega/devolucion de unidades, o de materiales/repuestos entregados junto a una unidad. Se
+            intenta auto-lectura del PDF y luego podes corregir manualmente.
           </p>
         </div>
         <button
@@ -308,6 +339,24 @@ export const MovementsPage = () => {
 
       <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="text-lg font-semibold text-slate-900">{editingMovementId ? 'Editar remito' : 'Nuevo remito'}</h3>
+
+        <div className="mt-3 flex gap-1">
+          {(['UNIT', 'MATERIAL'] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => handleFieldChange('kind', kind)}
+              className={`flex-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                formData.kind === kind
+                  ? 'border-amber-400 bg-amber-400 text-slate-900'
+                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {kind === 'UNIT' ? 'Remito de unidad' : 'Remito de materiales'}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
             Unidades
@@ -476,6 +525,53 @@ export const MovementsPage = () => {
             />
           </label>
 
+          {formData.kind === 'MATERIAL' ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:col-span-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">Materiales entregados</label>
+              {formData.materialItems.map((item, index) => (
+                <div key={index} className="grid grid-cols-[1fr_80px_100px_auto] gap-1.5">
+                  <input
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    placeholder="Descripcion (ej: filtro de aceite)"
+                    value={item.description}
+                    onChange={(event) => handleMaterialItemChange(index, 'description', event.target.value)}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    placeholder="Cant."
+                    value={item.quantityInput}
+                    onChange={(event) => handleMaterialItemChange(index, 'quantityInput', event.target.value)}
+                  />
+                  <input
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    placeholder="Unidad"
+                    value={item.unit}
+                    onChange={(event) => handleMaterialItemChange(index, 'unit', event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMaterialItem(index)}
+                    disabled={formData.materialItems.length <= 1}
+                    className="rounded-lg border border-rose-300 bg-rose-50 px-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    X
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={handleAddMaterialItem}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                + Agregar material
+              </button>
+              {errors.materialItems ? <p className="text-xs text-rose-700">{errors.materialItems}</p> : null}
+            </div>
+          ) : null}
+
           <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700 lg:col-span-2">
             Observaciones
             <textarea
@@ -608,6 +704,7 @@ export const MovementsPage = () => {
                   <th className="px-3 py-2">Unidad</th>
                   <th className="px-3 py-2">Cliente</th>
                   <th className="px-3 py-2">Tipo</th>
+                  <th className="px-3 py-2">Detalle</th>
                   <th className="px-3 py-2">PDF app</th>
                   <th className="px-3 py-2">PDF</th>
                   {canManageMovements ? <th className="px-3 py-2">Acciones</th> : null}
@@ -622,7 +719,30 @@ export const MovementsPage = () => {
                       <td className="px-3 py-2">{movement.remitoNumber || 'Sin numero'}</td>
                       <td className="px-3 py-2">{unit?.internalCode ?? 'Unidad'}</td>
                       <td className="px-3 py-2">{movement.clientName || unit?.clientName || 'Sin cliente'}</td>
-                      <td className="px-3 py-2">{movement.movementType === 'ENTRY' ? 'ENTREGA' : 'Devolucion'}</td>
+                      <td className="px-3 py-2">
+                        {movement.kind === 'MATERIAL' ? (
+                          <span className="rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                            MATERIAL
+                          </span>
+                        ) : movement.movementType === 'ENTRY' ? (
+                          'ENTREGA'
+                        ) : (
+                          'Devolucion'
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {movement.kind === 'MATERIAL' ? (
+                          <ul className="list-disc pl-4 text-xs">
+                            {(movement.materialItems ?? []).map((item, index) => (
+                              <li key={index}>
+                                {item.description} — {item.quantity} {item.unit || ''}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          movement.equipmentDescription || '-'
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <button
                           type="button"

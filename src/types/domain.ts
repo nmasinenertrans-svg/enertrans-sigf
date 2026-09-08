@@ -584,10 +584,21 @@ export interface ExternalRequestPartItem {
   lineTotal: number
 }
 
+export const remitoKinds = ['UNIT', 'MATERIAL'] as const
+export type RemitoKind = (typeof remitoKinds)[number]
+
+export interface RemitoMaterialItem {
+  description: string
+  quantity: number
+  unit?: string
+}
+
 export interface FleetMovement {
   id: string
   unitIds: string[]
+  kind: RemitoKind
   movementType: FleetMovementType
+  materialItems: RemitoMaterialItem[]
   remitoNumber: string
   remitoDate?: string
   clientId?: string | null

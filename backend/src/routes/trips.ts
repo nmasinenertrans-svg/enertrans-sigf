@@ -9,15 +9,19 @@ import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
 
-// Modulo en construccion/prueba: solo DEV mientras se termina de validar,
-// igual que contratos, checklists, cubiertas e importacion de reparaciones.
+// Modulo en construccion/prueba: restringido a este grupo puntual de
+// usuarios (no por rol, a diferencia de contratos/checklists/cubiertas)
+// mientras se termina de validar. "barce" todavia no tiene cuenta creada,
+// se deja el username ya cargado para que funcione apenas exista.
+const TRIPS_ALLOWED_USERNAMES = new Set(['nmasin', 'rbottero', 'crivas', 'mpinto', 'barce', 'emoreno'])
+
 router.use(async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   if (!req.userId) {
     return res.status(401).json({ message: 'No autenticado.' })
   }
-  const requester = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } })
-  if (!requester || requester.role !== 'DEV') {
-    return res.status(403).json({ message: 'Modulo en prueba, disponible solo para DEV por ahora.' })
+  const requester = await prisma.user.findUnique({ where: { id: req.userId }, select: { username: true } })
+  if (!requester || !TRIPS_ALLOWED_USERNAMES.has(requester.username.trim().toLowerCase())) {
+    return res.status(403).json({ message: 'Modulo en prueba, disponible solo para un grupo puntual de usuarios por ahora.' })
   }
   return next()
 })

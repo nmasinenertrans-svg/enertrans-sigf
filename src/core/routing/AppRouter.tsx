@@ -108,6 +108,24 @@ const RequireDevOnly = ({ children }: { children: ReactElement }) => {
   return children
 }
 
+// Viajes/Traslados: restringido a este grupo puntual de usuarios (no por
+// rol) mientras se termina de probar. "barce" todavia no tiene cuenta
+// creada, se deja preparado para que funcione apenas exista.
+const TRIPS_ALLOWED_USERNAMES = ['nmasin', 'rbottero', 'crivas', 'mpinto', 'barce', 'emoreno']
+
+const RequireUsernameWhitelist = ({ usernames, children }: { usernames: string[]; children: ReactElement }) => {
+  const {
+    state: { currentUser },
+  } = useAppContext()
+
+  const username = (currentUser?.username ?? '').trim().toLowerCase()
+  if (!usernames.includes(username)) {
+    return <Navigate to={ROUTE_PATHS.dashboard} replace />
+  }
+
+  return children
+}
+
 export const AppRouter = () => (
   <BrowserRouter>
     <Suspense fallback={<RouteTransitionLoader isActive />}>
@@ -416,9 +434,9 @@ export const AppRouter = () => (
         <Route
           path={ROUTE_PATHS.trips}
           element={
-            <RequireDevOnly>
+            <RequireUsernameWhitelist usernames={TRIPS_ALLOWED_USERNAMES}>
               <TripsPage />
-            </RequireDevOnly>
+            </RequireUsernameWhitelist>
           }
         />
         <Route path="*" element={<Navigate to={ROUTE_PATHS.dashboard} replace />} />

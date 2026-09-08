@@ -149,28 +149,44 @@ export const exportMovementPdf = async ({ movement, units }: MovementPdfPayload)
 
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9)
-  pdf.text(String(Math.max(selectedUnits.length, 1)), tableX + 6, y + headerH + 7)
 
-  const descriptionLines: string[] = []
-  const mainDesc = safeText(movement.equipmentDescription)
-  if (mainDesc) descriptionLines.push(mainDesc)
-  selectedUnits.forEach((unit) => {
-    descriptionLines.push(`Dominio: ${unit.internalCode}`)
-    if (safeText(unit.chassisNumber)) descriptionLines.push(`Nro Chasis: ${unit.chassisNumber}`)
-    if (safeText(unit.engineNumber)) descriptionLines.push(`Nro Motor: ${unit.engineNumber}`)
-    if (unit.hasHydroCrane) {
-      const hydroLabel = [safeText(unit.hydroCraneBrand), safeText(unit.hydroCraneModel)].filter(Boolean).join(' ')
-      descriptionLines.push(`Hidrogrua: ${hydroLabel || 'Si'}`)
-      if (safeText(unit.hydroCraneSerialNumber)) {
-        descriptionLines.push(`Nro Serie Hidrogrua: ${unit.hydroCraneSerialNumber}`)
-      }
+  if (movement.kind === 'MATERIAL') {
+    const items = movement.materialItems ?? []
+    if (items.length === 0) {
+      pdf.text('-', tableX + qtyW + 2, y + headerH + 7)
+    } else {
+      const rowStep = 6
+      items.forEach((item, index) => {
+        const rowY = y + headerH + 7 + index * rowStep
+        pdf.text(`${item.quantity}${item.unit ? ` ${item.unit}` : ''}`, tableX + 2, rowY)
+        const lines = pdf.splitTextToSize(item.description, descW - 4)
+        pdf.text(lines, tableX + qtyW + 2, rowY)
+      })
     }
-  })
-  if (!descriptionLines.length) {
-    descriptionLines.push('Sin descripcion')
+  } else {
+    pdf.text(String(Math.max(selectedUnits.length, 1)), tableX + 6, y + headerH + 7)
+
+    const descriptionLines: string[] = []
+    const mainDesc = safeText(movement.equipmentDescription)
+    if (mainDesc) descriptionLines.push(mainDesc)
+    selectedUnits.forEach((unit) => {
+      descriptionLines.push(`Dominio: ${unit.internalCode}`)
+      if (safeText(unit.chassisNumber)) descriptionLines.push(`Nro Chasis: ${unit.chassisNumber}`)
+      if (safeText(unit.engineNumber)) descriptionLines.push(`Nro Motor: ${unit.engineNumber}`)
+      if (unit.hasHydroCrane) {
+        const hydroLabel = [safeText(unit.hydroCraneBrand), safeText(unit.hydroCraneModel)].filter(Boolean).join(' ')
+        descriptionLines.push(`Hidrogrua: ${hydroLabel || 'Si'}`)
+        if (safeText(unit.hydroCraneSerialNumber)) {
+          descriptionLines.push(`Nro Serie Hidrogrua: ${unit.hydroCraneSerialNumber}`)
+        }
+      }
+    })
+    if (!descriptionLines.length) {
+      descriptionLines.push('Sin descripcion')
+    }
+    const wrapped = pdf.splitTextToSize(descriptionLines.join('\n'), descW - 4)
+    pdf.text(wrapped, tableX + qtyW + 2, y + headerH + 7)
   }
-  const wrapped = pdf.splitTextToSize(descriptionLines.join('\n'), descW - 4)
-  pdf.text(wrapped, tableX + qtyW + 2, y + headerH + 7)
 
   y += headerH + bodyH + 6
   pdf.setFont('helvetica', 'bold')

@@ -1169,6 +1169,25 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     } catch (err) {
       console.warn('[DB] CREATE INDEX FleetMovement_clientId_idx:', err)
     }
+
+    // Remitos de material/repuestos entregados junto a una unidad (ademas de
+    // los remitos de unidad en si). Mismo motivo que clientId arriba: hay que
+    // qualificar el schema a mano porque FleetMovement no esta en
+    // COMPAT_TABLE_NAMES.
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE ${movementSchema}."FleetMovement" ADD COLUMN IF NOT EXISTS "kind" TEXT NOT NULL DEFAULT 'UNIT'`,
+      )
+    } catch (err) {
+      console.warn('[DB] ADD COLUMN FleetMovement.kind:', err)
+    }
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE ${movementSchema}."FleetMovement" ADD COLUMN IF NOT EXISTS "materialItems" JSONB NOT NULL DEFAULT '[]'::jsonb`,
+      )
+    } catch (err) {
+      console.warn('[DB] ADD COLUMN FleetMovement.materialItems:', err)
+    }
   }
 
   // NDP/Reparaciones: solo aplica cambios si tablas existen en schema activo.

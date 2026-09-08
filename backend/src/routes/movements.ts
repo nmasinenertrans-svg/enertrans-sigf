@@ -8,9 +8,17 @@ import { getErrorCode } from '../utils/errors.js'
 
 const router = Router()
 
+const materialItemSchema = z.object({
+  description: z.string().trim().min(1).max(300),
+  quantity: z.coerce.number().positive(),
+  unit: z.string().trim().max(30).optional().default(''),
+})
+
 const movementSchema = z.object({
   unitIds: z.array(z.string().min(1)).min(1),
+  kind: z.enum(['UNIT', 'MATERIAL']).optional().default('UNIT'),
   movementType: z.enum(['ENTRY', 'RETURN']),
+  materialItems: z.array(materialItemSchema).optional().default([]),
   remitoNumber: z.string().optional().default(''),
   remitoDate: z.string().optional().default(''),
   clientId: z.string().nullable().optional(),
@@ -39,7 +47,9 @@ const parseSchema = z.object({
 
 const movementUpdateSchema = z.object({
   unitIds: z.array(z.string().min(1)).min(1).optional(),
+  kind: z.enum(['UNIT', 'MATERIAL']).optional(),
   movementType: z.enum(['ENTRY', 'RETURN']).optional(),
+  materialItems: z.array(materialItemSchema).optional(),
   remitoNumber: z.string().optional(),
   remitoDate: z.string().optional(),
   clientId: z.string().nullable().optional(),
@@ -211,7 +221,9 @@ router.post('/', async (req, res) => {
     const remitoNumber = formatRemitoNumber(await getNextSequence('remito'))
     const created = await prisma.fleetMovement.create({
       data: {
+        kind: parsed.data.kind,
         movementType: parsed.data.movementType,
+        materialItems: parsed.data.materialItems,
         remitoNumber,
         remitoDate: remitoDate ?? undefined,
         clientId: parsed.data.clientId || null,
@@ -306,7 +318,9 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     await prisma.fleetMovement.update({
       where: { id: movementId },
       data: {
+        kind: parsed.data.kind,
         movementType: parsed.data.movementType,
+        materialItems: parsed.data.materialItems,
         remitoNumber: parsed.data.remitoNumber?.trim(),
         remitoDate: remitoDateValue ? remitoDate : undefined,
         clientId: parsed.data.clientId !== undefined ? parsed.data.clientId || null : undefined,

@@ -1,4 +1,4 @@
-import type { ClientAccount, FleetMovement, FleetMovementType, FleetUnit } from '../../../types/domain'
+import type { ClientAccount, FleetMovement, FleetMovementType, FleetUnit, RemitoKind } from '../../../types/domain'
 
 const createId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -7,9 +7,19 @@ const createId = (): string => {
   return `movement-${Date.now()}-${Math.round(Math.random() * 10000)}`
 }
 
+export interface MaterialItemDraft {
+  description: string
+  quantityInput: string
+  unit: string
+}
+
+export const createEmptyMaterialItemDraft = (): MaterialItemDraft => ({ description: '', quantityInput: '1', unit: '' })
+
 export interface MovementFormData {
   unitIds: string[]
+  kind: RemitoKind
   movementType: FleetMovementType
+  materialItems: MaterialItemDraft[]
   remitoNumber: string
   remitoDate: string
   clientId: string
@@ -93,7 +103,9 @@ export const expandMovementUnitIdsWithAssociations = (unitIds: string[], fleetUn
 
 export const createEmptyMovementFormData = (unitId?: string): MovementFormData => ({
   unitIds: unitId ? [unitId] : [],
+  kind: 'UNIT',
   movementType: 'ENTRY',
+  materialItems: [createEmptyMaterialItemDraft()],
   remitoNumber: '',
   remitoDate: '',
   clientId: '',
@@ -137,13 +149,33 @@ export const validateMovementFormData = (formData: MovementFormData, fleetUnits:
     errors.workLocation = 'El lugar de trabajo es obligatorio.'
   }
 
+  if (formData.kind === 'MATERIAL') {
+    const hasValidItem = formData.materialItems.some(
+      (item) => item.description.trim() && Number.isFinite(Number(item.quantityInput.replace(',', '.'))) && Number(item.quantityInput.replace(',', '.')) > 0,
+    )
+    if (!hasValidItem) {
+      errors.materialItems = 'Agrega al menos un material con descripcion y cantidad validas.'
+    }
+  }
+
   return errors
 }
+
+export const parseMaterialItems = (drafts: MaterialItemDraft[]) =>
+  drafts
+    .map((item) => ({
+      description: item.description.trim(),
+      quantity: Number(item.quantityInput.replace(',', '.')),
+      unit: item.unit.trim(),
+    }))
+    .filter((item) => item.description && Number.isFinite(item.quantity) && item.quantity > 0)
 
 export const toFleetMovement = (formData: MovementFormData): FleetMovement => ({
   id: createId(),
   unitIds: formData.unitIds,
+  kind: formData.kind,
   movementType: formData.movementType,
+  materialItems: parseMaterialItems(formData.materialItems),
   remitoNumber: formData.remitoNumber.trim(),
   remitoDate: normalizeRemitoDateInput(formData.remitoDate.trim()),
   clientId: formData.clientId || null,
