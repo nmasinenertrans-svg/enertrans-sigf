@@ -5,6 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { isRealUserId } from '../../../core/context/appState'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
+import { enqueueAndSync } from '../../../services/offline/sync'
 import type { TripRecord } from '../../../types/domain'
 import { LocationPicker } from '../components/LocationPicker'
 import {
@@ -122,6 +123,55 @@ export const TripsPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const createId = (): string =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `trip-${Date.now()}-${Math.round(Math.random() * 10000)}`
+
+  const isLikelyUnstableNetwork = (error: unknown): boolean => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return true
+    }
+    const message = String((error as Error)?.message ?? '').toLowerCase()
+    return (
+      message.includes('timeout') || message.includes('failed to fetch') || message.includes('network') || message.includes('abort')
+    )
+  }
+
+  const buildLocalTrip = (): TripRecord => {
+    const payload = toTripPayload(formData)
+    const driver = users.find((user) => user.id === payload.driverUserId)
+    const legs = payload.legs.map((leg, index) => ({
+      id: createId(),
+      order: index + 1,
+      label: leg.label || defaultLegLabel(index),
+      unitId: leg.unitId,
+      unitLabel: fleetUnits.find((unit) => unit.id === leg.unitId)?.internalCode ?? '',
+      startDate: leg.startDate,
+      endDate: leg.endDate,
+      originLabel: leg.originLabel,
+      originLat: leg.origin.lat,
+      originLng: leg.origin.lng,
+      destinationLabel: leg.destinationLabel,
+      destinationLat: leg.destination.lat,
+      destinationLng: leg.destination.lng,
+      distanceKm: 0,
+      distanceSource: 'STRAIGHT_LINE' as const,
+    }))
+    return {
+      id: createId(),
+      code: 'PENDIENTE',
+      driverUserId: payload.driverUserId,
+      driverName: driver?.fullName ?? '',
+      driverExternalName: payload.driverExternalName,
+      startDate: legs[0]?.startDate ?? new Date().toISOString(),
+      endDate: legs[legs.length - 1]?.endDate ?? new Date().toISOString(),
+      notes: payload.notes,
+      totalDistanceKm: 0,
+      legs,
+    }
+  }
+
   const handleSubmit = async () => {
     const validation = validateTripFormData(formData)
     if (hasValidationErrors(validation)) {
@@ -138,14 +188,26 @@ export const TripsPage = () => {
           body: toTripPayload(formData),
         })
         setTrips(trips.map((trip) => (trip.id === updated.id ? updated : trip)))
+        resetForm()
       } else {
-        const created = await apiRequest<TripRecord>('/trips', {
-          method: 'POST',
-          body: toTripPayload(formData),
-        })
-        setTrips([created, ...trips])
+        const localTrip = buildLocalTrip()
+        setTrips([localTrip, ...trips])
+        resetForm()
+        try {
+          await enqueueAndSync({
+            id: `trip.create.${localTrip.id}`,
+            type: 'trip.create',
+            payload: { ...toTripPayload(formData), id: localTrip.id },
+            createdAt: new Date().toISOString(),
+          })
+        } catch (error) {
+          setAppError(
+            isLikelyUnstableNetwork(error)
+              ? 'Red inestable detectada. El viaje quedo guardado localmente y se sincronizara cuando haya mejor conexion.'
+              : 'No se pudo confirmar el viaje en el servidor. Quedo en cola para reintento.',
+          )
+        }
       }
-      resetForm()
     } catch (error) {
       setAppError(String((error as Error)?.message ?? 'No se pudo guardar el viaje.'))
     } finally {

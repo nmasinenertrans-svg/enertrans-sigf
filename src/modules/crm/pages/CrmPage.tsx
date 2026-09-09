@@ -5,6 +5,8 @@ import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
+import { getQueueItems } from '../../../services/offline/queue'
+import { enqueueAndSync } from '../../../services/offline/sync'
 
 const getApiErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiRequestError) {
@@ -55,7 +57,7 @@ const num = (v: string, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d)
 const toForm = (deal: CrmDeal): DealForm => ({ title: deal.title || '', companyName: deal.companyName || '', dealKind: deal.dealKind || 'TENDER', referenceCode: deal.referenceCode || '', isHistorical: !!deal.isHistorical, contactName: deal.contactName || '', contactEmail: deal.contactEmail || '', contactPhone: deal.contactPhone || '', source: deal.source || '', serviceLine: deal.serviceLine || '', amount: String(deal.amount || 0), currency: deal.currency || 'ARS', probability: String(deal.probability || 0), stage: deal.stage, expectedCloseDate: asDateInput(deal.expectedCloseDate), assignedToUserId: deal.assignedToUserId || '', notes: deal.notes || '', lostReason: deal.lostReason || '' })
 
 export const CrmPage = () => {
-  const { can } = usePermissions()
+  const { can, currentUser } = usePermissions()
   const { state: { users }, actions: { setAppError } } = useAppContext()
   const canCreate = can('CRM', 'create')
   const canEdit = can('CRM', 'edit')
@@ -91,7 +93,16 @@ export const CrmPage = () => {
     if (withLoader) setIsLoading(true)
     try {
       const data = await apiRequest<{ deals: CrmDeal[]; activities: CrmActivity[] }>('/crm')
-      const nextDeals = Array.isArray(data.deals) ? data.deals : []
+      const remoteDeals = Array.isArray(data.deals) ? data.deals : []
+      // Las oportunidades creadas sin señal quedan en la cola offline hasta
+      // que se sincronizan; si todavia no llegaron al servidor, se siguen
+      // viendo en la lista.
+      const queuedDeals = (await getQueueItems())
+        .filter((item) => item.type === 'crmDeal.create')
+        .map((item) => item.payload as CrmDeal)
+      const remoteIds = new Set(remoteDeals.map((deal) => deal.id))
+      const pendingQueuedDeals = queuedDeals.filter((deal) => deal?.id && !remoteIds.has(deal.id))
+      const nextDeals = [...remoteDeals, ...pendingQueuedDeals]
       setDeals(nextDeals)
       setActivities(Array.isArray(data.activities) ? data.activities : [])
       setStageDraft(nextDeals.reduce<Record<string, CrmDealStage>>((acc, deal) => { acc[deal.id] = deal.stage; return acc }, {}))
@@ -144,9 +155,40 @@ export const CrmPage = () => {
     if (!trim(createForm.title) || !trim(createForm.companyName)) { setAppError('Completa titulo y empresa.'); return }
     setIsCreateSaving(true)
     try {
-      const created = await apiRequest<CrmDeal>('/crm/deals', { method: 'POST', body: payload(createForm) })
-      setDeals((prev) => [created, ...prev]); setStageDraft((prev) => ({ ...prev, [created.id]: created.stage })); setCreateForm(EMPTY_DEAL); setSelectedDealId(created.id)
-    } catch (error) { setAppError(getApiErrorMessage(error, 'No se pudo crear la oportunidad.')) } finally { setIsCreateSaving(false) }
+      const dealPayload = payload(createForm)
+      const localId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `crm-deal-${Date.now()}-${Math.round(Math.random() * 10000)}`
+      const localDeal: CrmDeal = {
+        ...dealPayload,
+        id: localId,
+        probability: dealPayload.probability ?? 0,
+        createdByUserId: currentUser?.id ?? '',
+      }
+      setDeals((prev) => [localDeal, ...prev])
+      setStageDraft((prev) => ({ ...prev, [localDeal.id]: localDeal.stage }))
+      setCreateForm(EMPTY_DEAL)
+      setSelectedDealId(localDeal.id)
+      try {
+        await enqueueAndSync({
+          id: `crmDeal.create.${localId}`,
+          type: 'crmDeal.create',
+          payload: localDeal,
+          createdAt: new Date().toISOString(),
+        })
+      } catch (error) {
+        const isNetworkIssue =
+          (typeof navigator !== 'undefined' && !navigator.onLine) ||
+          String((error as Error)?.message ?? '').toLowerCase().includes('timeout') ||
+          String((error as Error)?.message ?? '').toLowerCase().includes('failed to fetch')
+        setAppError(
+          isNetworkIssue
+            ? 'Red inestable detectada. La oportunidad quedo guardada localmente y se sincronizara cuando haya mejor conexion.'
+            : 'No se pudo confirmar la oportunidad en el servidor. Quedo en cola para reintento.',
+        )
+      }
+    } finally { setIsCreateSaving(false) }
   }
   const saveDeal = async () => {
     if (!canEdit || !selectedDeal) return

@@ -3,6 +3,7 @@ import { BackLink } from '../../../components/shared/BackLink'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
+import { enqueueAndSync } from '../../../services/offline/sync'
 import type { FleetMovement } from '../../../types/domain'
 import {
   applyParsedPayload,
@@ -12,6 +13,7 @@ import {
   formatMovementDateForView,
   normalizeRemitoDateInput,
   parseMaterialItems,
+  toFleetMovement,
   validateMovementFormData,
   type MaterialItemDraft,
   type MovementFormData,
@@ -158,6 +160,16 @@ export const MovementsPage = () => {
     }
   }
 
+  const isLikelyUnstableNetwork = (error: unknown): boolean => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return true
+    }
+    const message = String((error as Error)?.message ?? '').toLowerCase()
+    return (
+      message.includes('timeout') || message.includes('failed to fetch') || message.includes('network') || message.includes('abort')
+    )
+  }
+
   const handleSubmit = async () => {
     const validationErrors = validateMovementFormData(formData, fleetUnits)
     if (Object.keys(validationErrors).length > 0) {
@@ -168,17 +180,24 @@ export const MovementsPage = () => {
     setIsSaving(true)
     try {
       let pdfUrl = formData.pdfFileUrl
-      if (formData.pdfFileBase64 && !pdfUrl) {
-        const uploadResponse = await apiRequest<{ url: string }>('/files/upload', {
-          method: 'POST',
-          body: {
-            fileName: formData.pdfFileName || `remito-${Date.now()}.pdf`,
-            contentType: 'application/pdf',
-            dataUrl: formData.pdfFileBase64,
-            folder: 'remitos',
-          },
-        })
-        pdfUrl = uploadResponse.url
+      // Si no hay conexion no tiene sentido ni intentar subir el PDF ahora --
+      // se manda tal cual (base64) en la cola y se sube recien cuando se
+      // sincronice, como con facturas/reparaciones.
+      if (formData.pdfFileBase64 && !pdfUrl && typeof navigator !== 'undefined' && navigator.onLine) {
+        try {
+          const uploadResponse = await apiRequest<{ url: string }>('/files/upload', {
+            method: 'POST',
+            body: {
+              fileName: formData.pdfFileName || `remito-${Date.now()}.pdf`,
+              contentType: 'application/pdf',
+              dataUrl: formData.pdfFileBase64,
+              folder: 'remitos',
+            },
+          })
+          pdfUrl = uploadResponse.url
+        } catch {
+          // se sigue sin url: queda el base64 para reintentar la subida durante la sincronizacion
+        }
       }
 
       const payload = {
@@ -199,14 +218,37 @@ export const MovementsPage = () => {
         setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
         setClientSearch('')
       } else {
-        const created = await apiRequest<FleetMovement>('/movements', {
-          method: 'POST',
-          body: payload,
-        })
+        const localMovement: FleetMovement = {
+          ...toFleetMovement(formData),
+          unitIds: payload.unitIds,
+          materialItems: payload.materialItems,
+          remitoDate: payload.remitoDate,
+          pdfFileUrl: pdfUrl || undefined,
+        }
 
-        setMovements([created, ...movements])
+        setMovements([localMovement, ...movements])
         setFormData({ ...createEmptyMovementFormData(), remitoNumber: nextRemitoNumber })
         setClientSearch('')
+
+        try {
+          await enqueueAndSync({
+            id: `movement.create.${localMovement.id}`,
+            type: 'movement.create',
+            payload: {
+              ...localMovement,
+              pdfFileBase64: pdfUrl ? '' : formData.pdfFileBase64,
+              pdfFileName: formData.pdfFileName,
+            },
+            createdAt: new Date().toISOString(),
+          })
+        } catch (error) {
+          setAppError(
+            isLikelyUnstableNetwork(error)
+              ? 'Red inestable detectada. El remito quedo guardado localmente y se sincronizara cuando haya mejor conexion.'
+              : 'No se pudo confirmar el remito en el servidor. Quedo en cola para reintento.',
+          )
+        }
+
         try {
           const response = await apiRequest<NextRemitoResponse>('/movements/next-remito')
           setNextRemitoNumber(response.remitoNumber)

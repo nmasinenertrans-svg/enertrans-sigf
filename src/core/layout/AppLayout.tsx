@@ -120,6 +120,7 @@ export const AppLayout = () => {
       featureFlags,
       serviceOrders,
       invoices,
+      trips,
     },
     actions: {
       setFleetUnits,
@@ -164,6 +165,7 @@ export const AppLayout = () => {
   const inventoryRef = useRef(inventoryItems)
   const serviceOrdersRef = useRef(serviceOrders)
   const invoicesRef = useRef(invoices)
+  const tripsRef = useRef(trips)
   const featureFlagsRef = useRef(featureFlags)
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
   const workOrdersRefreshInProgressRef = useRef(false)
@@ -231,6 +233,10 @@ export const AppLayout = () => {
   useEffect(() => {
     invoicesRef.current = invoices
   }, [invoices])
+
+  useEffect(() => {
+    tripsRef.current = trips
+  }, [trips])
 
   useEffect(() => {
     featureFlagsRef.current = featureFlags
@@ -566,7 +572,9 @@ export const AppLayout = () => {
           setTires(tiresResponse)
         }
         if (tripsResponse) {
-          setTrips(tripsResponse)
+          setTrips(
+            mergeByIdWithLocal(tripsResponse, tripsRef.current, getQueuedPayloads('trip.create')) ?? tripsResponse,
+          )
         }
       } finally {
         if (!isBackground) {

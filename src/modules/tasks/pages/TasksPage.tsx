@@ -6,6 +6,8 @@ import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
 import { isRealUserId } from '../../../core/context/appState'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
+import { getQueueItems } from '../../../services/offline/queue'
+import { enqueueAndSync } from '../../../services/offline/sync'
 import type { TaskPriority, TaskRecord, TaskStatus, TaskType } from '../../../types/domain'
 import { downloadTaskPdf, downloadTasksSummaryPdf } from '../services/tasksPdfService'
 
@@ -190,7 +192,17 @@ export const TasksPage = () => {
       try {
         const response = await apiRequest<TaskRecord[]>('/tasks')
         if (!getMounted()) return
-        setTasks(Array.isArray(response) ? response : [])
+        const remoteTasks = Array.isArray(response) ? response : []
+        // Las tareas creadas sin señal quedan en la cola offline hasta que se
+        // sincronizan; si todavia no llegaron al servidor, se siguen viendo
+        // en la lista (si no, "desaparecian" hasta que el navegador volviera
+        // a sincronizar solo).
+        const queuedTasks = (await getQueueItems())
+          .filter((item) => item.type === 'task.create')
+          .map((item) => item.payload as TaskRecord)
+        const remoteIds = new Set(remoteTasks.map((task) => task.id))
+        const pendingQueuedTasks = queuedTasks.filter((task) => task?.id && !remoteIds.has(task.id))
+        setTasks([...remoteTasks, ...pendingQueuedTasks])
       } catch {
         setAppError('No se pudieron cargar las tareas.')
       }
@@ -295,11 +307,42 @@ export const TasksPage = () => {
       if (editingTaskId) {
         const updated = await apiRequest<TaskRecord>(`/tasks/${editingTaskId}`, { method: 'PATCH', body: payload })
         setTasks((previous) => previous.map((task) => (task.id === updated.id ? updated : task)))
+        resetForm()
       } else {
-        const created = await apiRequest<TaskRecord>('/tasks', { method: 'POST', body: payload })
-        setTasks((previous) => [created, ...previous])
+        const localId =
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `task-${Date.now()}-${Math.round(Math.random() * 10000)}`
+        const assignee = payload.assignedToUserId ? users.find((user) => user.id === payload.assignedToUserId) : undefined
+        const localTask: TaskRecord = {
+          ...payload,
+          id: localId,
+          assignedToUserName: assignee?.fullName ?? '',
+          createdByUserId: currentUser?.id ?? '',
+          createdByUserName: currentUser?.fullName ?? '',
+          events: [],
+        }
+        setTasks((previous) => [localTask, ...previous])
+        resetForm()
+        try {
+          await enqueueAndSync({
+            id: `task.create.${localId}`,
+            type: 'task.create',
+            payload: localTask,
+            createdAt: new Date().toISOString(),
+          })
+        } catch (error) {
+          const isNetworkIssue =
+            (typeof navigator !== 'undefined' && !navigator.onLine) ||
+            String((error as Error)?.message ?? '').toLowerCase().includes('timeout') ||
+            String((error as Error)?.message ?? '').toLowerCase().includes('failed to fetch')
+          setAppError(
+            isNetworkIssue
+              ? 'Red inestable detectada. La tarea quedo guardada localmente y se sincronizara cuando haya mejor conexion.'
+              : 'No se pudo confirmar la tarea en el servidor. Quedo en cola para reintento.',
+          )
+        }
       }
-      resetForm()
     } catch (error) {
       setAppError(String((error as Error)?.message ?? 'No se pudo guardar la tarea.'))
     } finally {

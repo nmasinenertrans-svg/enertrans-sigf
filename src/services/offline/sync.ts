@@ -30,6 +30,25 @@ type InvoicePayload = {
   fileName?: string
 } & Record<string, unknown>
 
+type MovementPayload = {
+  id: string
+  pdfFileUrl?: string
+  pdfFileBase64?: string
+  pdfFileName?: string
+} & Record<string, unknown>
+
+type TaskPayload = {
+  id: string
+} & Record<string, unknown>
+
+type TripPayload = {
+  id: string
+} & Record<string, unknown>
+
+type CrmDealPayload = {
+  id: string
+} & Record<string, unknown>
+
 type FleetUpdatePayload =
   | {
       id: string
@@ -298,6 +317,35 @@ const syncItem = async (item: OfflineQueueItem) => {
       })
       return
     }
+    case 'movement.create': {
+      const payload = item.payload as MovementPayload
+      let pdfFileUrl = payload.pdfFileUrl || ''
+      let pdfFileBase64 = payload.pdfFileBase64 || ''
+
+      if (pdfFileBase64 && !pdfFileUrl) {
+        pdfFileUrl = await uploadDataUrl(pdfFileBase64, payload.pdfFileName || `remito-${payload.id}.pdf`, 'remitos')
+        pdfFileBase64 = ''
+      }
+
+      await apiRequest('/movements', {
+        method: 'POST',
+        body: {
+          ...payload,
+          pdfFileUrl,
+          pdfFileBase64,
+        },
+      })
+      return
+    }
+    case 'task.create':
+      await apiRequest('/tasks', { method: 'POST', body: item.payload as TaskPayload })
+      return
+    case 'trip.create':
+      await apiRequest('/trips', { method: 'POST', body: item.payload as TripPayload })
+      return
+    case 'crmDeal.create':
+      await apiRequest('/crm/deals', { method: 'POST', body: item.payload as CrmDealPayload })
+      return
     default:
       return
   }
