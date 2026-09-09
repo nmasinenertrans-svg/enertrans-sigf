@@ -200,7 +200,11 @@ export const TasksPage = () => {
 
   const lastAutoRefreshAtRef = useRef(0)
   const lastActivityAtRef = useRef(Date.now())
-  const IDLE_THRESHOLD_MS = 8000
+  // 8s era un umbral irreal: cualquiera que se quede leyendo o pensando 8
+  // segundos sin tocar nada ya "cuenta" como inactivo y el refresco le
+  // reordena/tapa la lista igual. Se sube a 90s (recien ahi es de verdad
+  // "se fue a hacer otra cosa").
+  const IDLE_THRESHOLD_MS = 90000
 
   useEffect(() => {
     // Si el usuario esta con algo abierto (completando un formulario,
