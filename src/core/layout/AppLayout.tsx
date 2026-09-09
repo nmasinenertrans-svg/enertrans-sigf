@@ -37,6 +37,10 @@ import { buildAppNotifications } from '../notifications/notifications'
 const SIDEBAR_KEY = 'enertrans.sidebar.open'
 const RETRYABLE_SYNC_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
 const WORK_ORDERS_SYNC_INTERVAL_MS = 45000
+// En 4G/campo una senal debil hace que un ciclo entero de sync falle sin que
+// haya un problema real -- se avisa recien despues de varios ciclos seguidos
+// fallidos, no en el primero, para no bombardear con el cartel de error.
+const WORK_ORDERS_ERROR_AFTER_CONSECUTIVE_FAILURES = 3
 
 const waitMs = (ms: number) => new Promise<void>((resolve) => globalThis.setTimeout(resolve, ms))
 
@@ -157,6 +161,7 @@ export const AppLayout = () => {
   const featureFlagsRef = useRef(featureFlags)
   const lastSyncErrorAtRef = useRef<Record<string, number>>({})
   const workOrdersRefreshInProgressRef = useRef(false)
+  const workOrdersConsecutiveFailuresRef = useRef(0)
   const basicViewBlockedAtRef = useRef(0)
   const lastVisibilityRefreshAtRef = useRef(0)
 
@@ -682,18 +687,18 @@ export const AppLayout = () => {
       workOrdersRefreshInProgressRef.current = true
       try {
         let response: WorkOrder[] | null = null
-        for (let attempt = 1; attempt <= 3; attempt += 1) {
+        for (let attempt = 1; attempt <= 4; attempt += 1) {
           try {
-            response = await apiRequest<WorkOrder[]>('/work-orders', { timeoutMs: 22000 + (attempt - 1) * 5000 })
+            response = await apiRequest<WorkOrder[]>('/work-orders', { timeoutMs: 22000 + (attempt - 1) * 6000 })
             break
           } catch (error) {
             if (error instanceof ApiRequestError && (error.status === 401 || error.status === 403)) {
               return
             }
-            if (attempt >= 3 || !isRetryableSyncError(error)) {
+            if (attempt >= 4 || !isRetryableSyncError(error)) {
               throw error
             }
-            await waitMs(attempt * 600)
+            await waitMs(attempt * 1200)
           }
         }
 
@@ -701,6 +706,7 @@ export const AppLayout = () => {
           return
         }
 
+        workOrdersConsecutiveFailuresRef.current = 0
         const queueItems = await getQueueItems()
         const queuedWorkOrders = queueItems
           .filter((item) => item.type === 'workOrder.create')
@@ -710,6 +716,10 @@ export const AppLayout = () => {
           response
         setWorkOrders(merged)
       } catch {
+        workOrdersConsecutiveFailuresRef.current += 1
+        if (workOrdersConsecutiveFailuresRef.current < WORK_ORDERS_ERROR_AFTER_CONSECUTIVE_FAILURES) {
+          return
+        }
         const now = Date.now()
         const lastAt = lastSyncErrorAtRef.current['/work-orders'] ?? 0
         if (now - lastAt >= 120000) {
