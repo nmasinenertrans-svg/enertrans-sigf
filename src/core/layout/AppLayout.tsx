@@ -398,7 +398,7 @@ export const AppLayout = () => {
           currentUserRef.current?.role === 'DEV'
             ? safeRequest<Tire[]>('/tires', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
-          currentUserRef.current?.role === 'DEV'
+          canUser(currentUserRef.current ?? null, 'TRIPS', 'view')
             ? safeRequest<TripRecord[]>('/trips', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
         ])
