@@ -320,7 +320,6 @@ export const AppLayout = () => {
         setGlobalLoading(true)
       }
       try {
-        const canViewUsers = canUser(currentUserRef.current ?? null, 'USERS', 'view')
         const activeFlags = featureFlagsRef.current
         const shouldSyncMaintenance = activeFlags.showMaintenanceModule
         const shouldSyncAudits = activeFlags.showAuditsModule
@@ -359,7 +358,12 @@ export const AppLayout = () => {
           // no se puede sincronizar, el usuario tiene que enterarse en vez de ver datos viejos
           // sin saberlo (ver incidente de remitos "perdidos" que en realidad estaban en el
           // servidor pero el fetch fallaba una sola vez y se rendia sin avisar).
-          canViewUsers ? safeRequest<AppUser[]>('/users', { maxAttempts: 3, timeoutMs: 20000 }) : Promise.resolve(null),
+          // El listado basico de usuarios (para asignar tareas/choferes a companeros) no
+          // depende del permiso de administracion de Usuarios -- el backend ya lo permite a
+          // cualquier usuario autenticado, y roles como GERENTE/COORDINADOR no tienen ese
+          // permiso pero si necesitan poder asignarle algo a otra persona (ver reporte de
+          // Rodrigo: sin esto solo podia asignarse tareas a si mismo).
+          safeRequest<AppUser[]>('/users', { maxAttempts: 3, timeoutMs: 20000 }),
           safeRequest<FleetUnit[]>('/fleet', { maxAttempts: 3, timeoutMs: 20000 }),
           shouldSyncMaintenance
             ? safeRequest<MaintenancePlan[]>('/maintenance', { maxAttempts: 3, timeoutMs: 20000 })
