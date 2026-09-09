@@ -83,6 +83,7 @@ export const LoginPage = () => {
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const maintenanceStatus = useMemo<StoredMaintenanceStatus | null>(() => {
@@ -166,6 +167,28 @@ export const LoginPage = () => {
     throw lastError ?? new Error('Fallo de autenticacion')
   }
 
+  // Sin conexion real al backend, la unica forma de validar la contrasena es
+  // contra lo que quedo guardado la ultima vez que ESTE usuario inicio
+  // sesion online en este dispositivo (lastUser, con la contrasena que
+  // escribio en ese momento). El array global "users" no sirve para esto:
+  // el backend nunca manda la contrasena en /users, asi que ahi solo
+  // funciona el usuario semilla hardcodeado.
+  const tryOfflineLogin = (): AppUser | null => {
+    const normalizedUsername = username.trim().toLowerCase()
+    const matchesLastUser =
+      lastUser &&
+      lastUser.username.trim().toLowerCase() === normalizedUsername &&
+      lastUser.password === password.trim()
+    return matchesLastUser ? lastUser : authenticateUser(username, password, users)
+  }
+
+  const finishLogin = (user: AppUser) => {
+    setCurrentUser(user)
+    saveLastUser(user)
+    navigate(ROUTE_PATHS.dashboard, { replace: true })
+    setIsSubmitting(false)
+  }
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (isSubmitting) {
@@ -199,12 +222,14 @@ export const LoginPage = () => {
           permissions: response.user.permissions,
           permissionOverrides: response.user.permissionOverrides,
         }
-        setCurrentUser(nextUser)
-        saveLastUser(nextUser)
-        navigate(ROUTE_PATHS.dashboard, { replace: true })
-        setIsSubmitting(false)
+        finishLogin(nextUser)
         return
       } catch (error) {
+        if (error instanceof ApiRequestError && error.status === 401) {
+          setErrorMessage('Usuario o contrasena incorrectos.')
+          setIsSubmitting(false)
+          return
+        }
         if (error instanceof ApiRequestError && error.status === 503) {
           setErrorMessage(
             maintenanceStatus?.message || 'La aplicacion se encuentra en mantenimiento, contacte con el area de soporte.',
@@ -212,38 +237,37 @@ export const LoginPage = () => {
           setIsSubmitting(false)
           return
         }
-        if (error instanceof ApiRequestError && error.status === 401) {
-          setErrorMessage('Usuario o contrasena incorrectos.')
-          setIsSubmitting(false)
-          return
-        }
-        if (isRetryableLoginError(error)) {
+        // navigator.onLine dice "hay red" pero eso no garantiza que se pueda
+        // llegar al servidor (senal debil en el campo, cold-start de Render
+        // que nunca responde, DNS/firewall, etc.). Antes esto dejaba a la
+        // persona trabada con un cartel de error sin poder hacer nada, aun
+        // teniendo credenciales validas guardadas de la ultima vez que entro
+        // online -- se intenta el modo offline como respaldo antes de darse
+        // por vencido.
+        if (isRetryableLoginError(error) || !(error instanceof ApiRequestError)) {
+          const offlineUser = tryOfflineLogin()
+          if (offlineUser) {
+            finishLogin(offlineUser)
+            return
+          }
           setErrorMessage('Servidor no disponible temporalmente (arranque/red). Espera unos segundos y reintenta.')
           setIsSubmitting(false)
           return
         }
-        if (error instanceof ApiRequestError) {
-          setErrorMessage(`No se pudo autenticar en el servidor (${error.status}). Verifica backend/API y volve a intentar.`)
-          setIsSubmitting(false)
-          return
-        }
-        setErrorMessage('No se pudo autenticar en el servidor. Verifica backend/API y volve a intentar.')
+        setErrorMessage(`No se pudo autenticar en el servidor (${error.status}). Verifica backend/API y volve a intentar.`)
         setIsSubmitting(false)
         return
       }
     }
 
-    const user = authenticateUser(username, password, users)
+    const user = tryOfflineLogin()
     if (!user) {
       setErrorMessage('Usuario o contrasena incorrectos.')
       setIsSubmitting(false)
       return
     }
 
-    setCurrentUser(user)
-    saveLastUser(user)
-    navigate(ROUTE_PATHS.dashboard, { replace: true })
-    setIsSubmitting(false)
+    finishLogin(user)
   }
 
   return (
@@ -282,14 +306,33 @@ export const LoginPage = () => {
 
           <label className="flex flex-col gap-2 text-sm font-semibold text-amber-200">
             Contrasena
-            <input
-              type="password"
-              className="w-full rounded-lg border border-amber-400/30 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Contrasena"
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <input
+                type={isPasswordVisible ? 'text' : 'password'}
+                className="w-full rounded-lg border border-amber-400/30 bg-slate-950/70 px-3 py-2 pr-10 text-sm text-slate-100 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Contrasena"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setIsPasswordVisible((previous) => !previous)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-amber-300/70 hover:text-amber-200"
+                aria-label={isPasswordVisible ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+              >
+                {isPasswordVisible ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.58 10.58a2 2 0 002.83 2.83M9.88 5.09A9.77 9.77 0 0112 5c5 0 9 4 10 7-.3.9-.86 1.87-1.62 2.77M6.1 6.1C4.16 7.42 2.68 9.36 2 12c1 3 5 7 10 7 1.36 0 2.63-.28 3.75-.78" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+                    <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </label>
         </div>
 
