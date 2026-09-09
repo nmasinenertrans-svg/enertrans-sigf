@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { BackLink } from '../../../components/shared/BackLink'
 import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { useAppContext } from '../../../core/hooks/useAppContext'
+import { isRealUserId } from '../../../core/context/appState'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { TripRecord } from '../../../types/domain'
@@ -46,13 +47,14 @@ export const TripsPage = () => {
   )
 
   const selectedDriver = users.find((user) => user.id === formData.driverUserId)
+  const assignableUsers = useMemo(() => users.filter((user) => isRealUserId(user.id)), [users])
   const filteredDrivers = useMemo(() => {
     const query = driverSearch.trim().toLowerCase()
     if (!query) {
-      return users.slice(0, 8)
+      return assignableUsers.slice(0, 8)
     }
-    return users.filter((user) => user.fullName.toLowerCase().includes(query)).slice(0, 8)
-  }, [users, driverSearch])
+    return assignableUsers.filter((user) => user.fullName.toLowerCase().includes(query)).slice(0, 8)
+  }, [assignableUsers, driverSearch])
 
   const updateLeg = (index: number, patch: Partial<TripLegFormData>) => {
     setFormData((previous) => ({

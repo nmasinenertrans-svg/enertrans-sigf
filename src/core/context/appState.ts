@@ -91,15 +91,29 @@ export interface AppContextValue {
   actions: AppActions
 }
 
+// Este id de arranque (no es un UUID real de la base) solo existe para poder
+// entrar en modo offline sin haber sincronizado nunca con el servidor. No
+// tiene que llegar nunca a un selector de "asignar a" -- el backend rechaza
+// cualquier id que no sea un UUID real (ver isRealUserId mas abajo).
+const OFFLINE_FALLBACK_USER_ID = 'user-dev-nmasin'
+
 const defaultUsers: AppUser[] = [
   {
-    id: 'user-dev-nmasin',
+    id: OFFLINE_FALLBACK_USER_ID,
     username: 'Nmasin',
     fullName: 'Nicolas Masin',
     role: 'DEV',
     password: 'enermasin26',
   },
 ]
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Usar en cualquier selector de "asignar a"/chofer antes de mandar un id al
+// backend: filtra el usuario de arranque offline (y cualquier otro id que no
+// sea un UUID real) para que nunca se pueda elegir por error mientras
+// todavia no cargo la lista real de usuarios del servidor.
+export const isRealUserId = (id: string): boolean => id !== OFFLINE_FALLBACK_USER_ID && UUID_PATTERN.test(id)
 
 const defaultFeatureFlags: FeatureFlags = {
   showDemoUnitButton: true,

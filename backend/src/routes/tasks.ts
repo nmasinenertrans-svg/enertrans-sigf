@@ -244,7 +244,9 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 router.post('/', async (req: AuthenticatedRequest, res) => {
   const parsed = createTaskSchema.safeParse(req.body)
   if (!parsed.success) {
-    return res.status(400).json({ message: 'Datos invalidos.' })
+    const issue = parsed.error.issues[0]
+    const detail = issue ? ` (${issue.path.join('.')}: ${issue.message})` : ''
+    return res.status(400).json({ message: `Datos invalidos.${detail}` })
   }
 
   const actor = await getAuthenticatedUser(req)
@@ -365,7 +367,9 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
 router.patch('/:id', async (req: AuthenticatedRequest, res) => {
   const parsed = updateTaskSchema.safeParse(req.body)
   if (!parsed.success) {
-    return res.status(400).json({ message: 'Datos invalidos.' })
+    const issue = parsed.error.issues[0]
+    const detail = issue ? ` (${issue.path.join('.')}: ${issue.message})` : ''
+    return res.status(400).json({ message: `Datos invalidos.${detail}` })
   }
 
   const rawBody = (req.body ?? {}) as Record<string, unknown>
@@ -571,7 +575,9 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
 router.post('/:id/take', async (req: AuthenticatedRequest, res) => {
   const parsed = takeTaskSchema.safeParse(req.body ?? {})
   if (!parsed.success) {
-    return res.status(400).json({ message: 'Datos invalidos.' })
+    const issue = parsed.error.issues[0]
+    const detail = issue ? ` (${issue.path.join('.')}: ${issue.message})` : ''
+    return res.status(400).json({ message: `Datos invalidos.${detail}` })
   }
 
   const actor = await getAuthenticatedUser(req)

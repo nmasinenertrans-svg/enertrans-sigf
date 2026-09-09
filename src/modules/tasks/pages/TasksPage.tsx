@@ -3,6 +3,7 @@ import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { useAsyncLoader } from '../../../core/hooks/useAsyncLoader'
+import { isRealUserId } from '../../../core/context/appState'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { TaskPriority, TaskRecord, TaskStatus, TaskType } from '../../../types/domain'
@@ -159,11 +160,12 @@ export const TasksPage = () => {
     () =>
       users.filter(
         (user) =>
-          user.role === 'AUDITOR' ||
-          user.role === 'MECANICO' ||
-          user.role === 'COORDINADOR' ||
-          user.role === 'GERENTE' ||
-          user.role === 'DEV',
+          isRealUserId(user.id) &&
+          (user.role === 'AUDITOR' ||
+            user.role === 'MECANICO' ||
+            user.role === 'COORDINADOR' ||
+            user.role === 'GERENTE' ||
+            user.role === 'DEV'),
       ),
     [users],
   )
