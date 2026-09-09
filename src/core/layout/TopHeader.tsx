@@ -176,12 +176,9 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
       <div className="ml-auto flex flex-wrap items-center gap-2 md:ml-0 md:gap-3">
         <div className={`rounded-full border px-2 py-1 text-[10px] font-semibold md:px-3 md:text-xs ${statusClass}`}>
           {statusLabel}
-          {syncStatus.isSyncing ? <span className="hidden sm:inline"> • Sincronizando</span> : null}
-          {syncStatus.pendingCount > 0 ? (
-            <span className="hidden sm:inline">{` • Pendientes: ${syncStatus.pendingCount}`}</span>
-          ) : null}
-          {syncStatus.blockedCount > 0 ? (
-            <span className="hidden sm:inline">{` • Bloqueados: ${syncStatus.blockedCount}`}</span>
+          {syncStatus.isSyncing ? <span> • Enviando...</span> : null}
+          {!syncStatus.isSyncing && syncStatus.pendingCount > 0 ? (
+            <span>{` • Guardadas: ${syncStatus.pendingCount}`}</span>
           ) : null}
         </div>
 

@@ -953,6 +953,31 @@ export const AppLayout = () => {
             solo lectura para este usuario (sin acciones ni descargas).
           </div>
         ) : null}
+        {syncStatus.pendingCount > 0 ? (
+          <div className="mx-6 mt-4 rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900 md:mx-8">
+            {syncStatus.isOnline ? (
+              <>
+                <strong className="font-semibold">Enviando datos guardados...</strong>{' '}
+                Ten{syncStatus.pendingCount === 1 ? 'és' : 'és'} {syncStatus.pendingCount}{' '}
+                {syncStatus.pendingCount === 1 ? 'trabajo guardado' : 'trabajos guardados'} en este celular, se
+                está{syncStatus.pendingCount === 1 ? '' : 'n'} mandando al servidor.
+              </>
+            ) : (
+              <>
+                <strong className="font-semibold">Sin señal:</strong> tenés {syncStatus.pendingCount}{' '}
+                {syncStatus.pendingCount === 1 ? 'trabajo guardado' : 'trabajos guardados'} en este celular. Se
+                {syncStatus.pendingCount === 1 ? ' va a mandar solo' : 'n van a mandar solos'} apenas tengas señal
+                de nuevo — no hace falta que hagas nada, ni que cierres la app.
+              </>
+            )}
+            {syncStatus.blockedCount > 0 ? (
+              <p className="mt-1 text-xs text-sky-800">
+                Algunos están tardando mas en confirmarse; el sistema va a seguir intentando solo cada par de
+                minutos, no se pierden.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {isPushPromptVisible ? (
           <div className="mx-6 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:mx-8">
             <span>Activá las notificaciones para enterarte al toque cuando te asignen algo, aunque tengas la app cerrada.</span>

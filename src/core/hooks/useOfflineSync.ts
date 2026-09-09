@@ -72,6 +72,12 @@ export const useOfflineSync = () => {
     }
 
     refreshCount()
+    // Si al abrir la app ya hay señal y quedaron cosas guardadas de antes
+    // (se cerro la app sin señal y se volvio a abrir ya con señal), no tiene
+    // sentido esperar al primer intervalo de 15s para arrancar a mandarlas.
+    void triggerSync().catch(() => {
+      // keep hook stable on transient sync failures
+    })
 
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
