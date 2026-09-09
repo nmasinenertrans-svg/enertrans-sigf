@@ -1,5 +1,13 @@
+import { setMetaValue } from '../offline/queue'
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 const TOKEN_KEY = 'enertrans.sigf.token'
+
+if (typeof window !== 'undefined') {
+  // El Service Worker (Background Sync) necesita saber a que URL de backend
+  // pegarle, y no tiene acceso a las variables de entorno de build.
+  void setMetaValue('apiBaseUrl', API_URL).catch(() => undefined)
+}
 
 export class ApiRequestError extends Error {
   status: number
@@ -34,6 +42,7 @@ export const setAuthToken = (token: string | null) => {
   } else {
     window.localStorage.removeItem(TOKEN_KEY)
   }
+  void setMetaValue('authToken', token).catch(() => undefined)
 }
 
 export const apiRequest = async <T>(

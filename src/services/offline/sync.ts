@@ -192,6 +192,11 @@ const syncAudit = async (payload: AuditPayload) => {
   await apiRequest('/audits', { method: 'POST', body })
 }
 
+// ATENCION: public/sw.js tiene una copia en JS puro de este switch (para el
+// Background Sync, que corre con la app cerrada y no puede importar este
+// archivo). Si agregas/cambias un "case" aca, replica el mismo cambio en
+// SW_SYNC_HANDLERS de public/sw.js -- si no, esa asignacion va a fallar en
+// silencio cuando la app este cerrada en vez de fallar visiblemente.
 const syncItem = async (item: OfflineQueueItem) => {
   switch (item.type) {
     case 'fleet.create':
