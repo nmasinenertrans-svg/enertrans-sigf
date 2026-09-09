@@ -179,6 +179,7 @@ const COMPAT_TABLE_NAMES = [
   'Tire',
   'Trip',
   'TripLeg',
+  'UserNotification',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -773,6 +774,28 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   )
   await safeExecuteCompatSql(
     `CREATE INDEX IF NOT EXISTS "CrmDealUnit_unitId_status_idx" ON "CrmDealUnit"("unitId","status");`,
+  )
+  // Reemplaza el blob JSON de notificaciones (guardado antes adentro de
+  // AppSettings.featureFlags) por una tabla real: el blob se leia-modificaba-
+  // escribia sin lock, y con varias asignaciones llegando cerca en el tiempo
+  // (CRM, Proyectos, Ordenes de Servicio, Tareas) se pisaban entre si y se
+  // perdian notificaciones en silencio.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "UserNotification" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "userId" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "description" TEXT NOT NULL,
+      "severity" TEXT NOT NULL DEFAULT 'info',
+      "target" TEXT,
+      "actorUserId" TEXT,
+      "eventType" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "UserNotification_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "UserNotification_userId_createdAt_idx" ON "UserNotification"("userId","createdAt");`,
   )
 	  await safeExecuteCompatSql(`
 	    DO $$

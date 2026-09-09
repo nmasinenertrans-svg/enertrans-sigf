@@ -972,3 +972,17 @@ model TelemetryPosition {
   @@index([deviceId, capturedAt])
   @@index([capturedAt])
 }
+
+model UserNotification {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  description String
+  severity    String   @default("info")
+  target      String?
+  actorUserId String?
+  eventType   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

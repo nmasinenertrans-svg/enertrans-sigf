@@ -5,6 +5,8 @@ import { prisma, runWithSchemaFailover } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { runCrmAutomations } from '../services/crmAutomations.js'
+import { pushUserNotifications } from '../services/userNotifications.js'
+import { sendPushToUser } from '../services/webPush.js'
 
 const router = Router()
 
@@ -246,6 +248,25 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
         include: dealInclude,
       }),
     )
+
+    if (resolvedAssignedToUserId && resolvedAssignedToUserId !== req.userId) {
+      const dealLabel = normalizeText(parsed.data.title) || normalizeText(parsed.data.companyName)
+      void sendPushToUser(resolvedAssignedToUserId, {
+        title: 'Te asignaron una oportunidad',
+        body: dealLabel,
+        url: '/crm',
+        tag: 'crm-deal-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([resolvedAssignedToUserId], {
+        title: 'Te asignaron una oportunidad',
+        description: dealLabel,
+        severity: 'info',
+        target: '/crm',
+        eventType: 'CRM_DEAL_ASSIGNED',
+        actorUserId: req.userId,
+      }).catch(() => undefined)
+    }
+
     return res.status(201).json(created)
   } catch (error) {
     console.error('CRM POST deal error:', error)
@@ -335,6 +356,30 @@ router.patch('/deals/:id', requirePermission('CRM', 'edit'), async (req: any, re
         return deal
       }),
     )
+
+    if (
+      nextAssignedToUserId !== undefined &&
+      nextAssignedToUserId &&
+      nextAssignedToUserId !== existing.assignedToUserId &&
+      nextAssignedToUserId !== req.userId
+    ) {
+      const dealLabel = updated.title || updated.companyName
+      void sendPushToUser(nextAssignedToUserId, {
+        title: 'Te asignaron una oportunidad',
+        body: dealLabel,
+        url: '/crm',
+        tag: 'crm-deal-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([nextAssignedToUserId], {
+        title: 'Te asignaron una oportunidad',
+        description: dealLabel,
+        severity: 'info',
+        target: '/crm',
+        eventType: 'CRM_DEAL_ASSIGNED',
+        actorUserId: req.userId,
+      }).catch(() => undefined)
+    }
+
     return res.json(updated)
   } catch (error) {
     console.error('CRM PATCH deal error:', error)

@@ -1,7 +1,6 @@
-import { Prisma, UserRole } from '@prisma/client'
-import { prisma } from '../db.js'
+import { UserRole } from '@prisma/client'
+import { prisma, runWithSchemaFailover } from '../db.js'
 
-const USER_NOTIFICATIONS_BY_USER_KEY = '__userNotificationsByUser'
 const MAX_NOTIFICATIONS_PER_USER = 200
 const DEFAULT_TARGET_USERNAMES = ['rbottero', 'galonso', 'nmasin']
 
@@ -17,72 +16,6 @@ export interface UserInboxNotification {
   actorUserId?: string
   eventType?: string
 }
-
-const toFeatureFlagsRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
-
-const sanitizeNotification = (value: unknown): UserInboxNotification | null => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null
-  }
-  const source = value as Record<string, unknown>
-  const id = typeof source.id === 'string' ? source.id.trim() : ''
-  const title = typeof source.title === 'string' ? source.title.trim() : ''
-  const description = typeof source.description === 'string' ? source.description.trim() : ''
-  const severity = source.severity
-  const createdAt = typeof source.createdAt === 'string' ? source.createdAt : ''
-  const target = typeof source.target === 'string' ? source.target.trim() : ''
-  const actorUserId = typeof source.actorUserId === 'string' ? source.actorUserId.trim() : ''
-  const eventType = typeof source.eventType === 'string' ? source.eventType.trim() : ''
-
-  if (!id || !title || !description || !createdAt) {
-    return null
-  }
-  if (severity !== 'info' && severity !== 'warning' && severity !== 'danger') {
-    return null
-  }
-
-  return {
-    id,
-    title,
-    description,
-    severity,
-    createdAt,
-    target: target || undefined,
-    actorUserId: actorUserId || undefined,
-    eventType: eventType || undefined,
-  }
-}
-
-const readNotificationsByUser = (featureFlagsValue: unknown): Record<string, UserInboxNotification[]> => {
-  const source = toFeatureFlagsRecord(featureFlagsValue)
-  const rawMap = source[USER_NOTIFICATIONS_BY_USER_KEY]
-  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) {
-    return {}
-  }
-
-  return Object.entries(rawMap as Record<string, unknown>).reduce<Record<string, UserInboxNotification[]>>(
-    (acc, [userId, rawList]) => {
-      if (!Array.isArray(rawList)) {
-        return acc
-      }
-      const sanitizedList = rawList
-        .map((item) => sanitizeNotification(item))
-        .filter((item): item is UserInboxNotification => Boolean(item))
-      if (sanitizedList.length > 0) {
-        acc[userId] = sanitizedList
-      }
-      return acc
-    },
-    {},
-  )
-}
-
-const sortAndTrim = (items: UserInboxNotification[]): UserInboxNotification[] =>
-  items
-    .slice()
-    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-    .slice(0, MAX_NOTIFICATIONS_PER_USER)
 
 const resolveTargetUsernames = (): string[] => {
   const envValue = process.env.NOTIFICATION_TARGET_USERNAMES ?? ''
@@ -111,6 +44,13 @@ export const resolveOperationalNotificationRecipients = async (actorUserId?: str
   return Array.from(new Set(resolved))
 }
 
+// Antes esto se guardaba como un blob JSON compartido (un solo registro
+// AppSettings, leido-modificado-escrito sin lock). Con varias asignaciones
+// llegando cerca en el tiempo (CRM, Proyectos, Ordenes de Servicio, Tareas,
+// todas a la vez) el read-modify-write se pisaba entre si y se perdian
+// notificaciones en silencio (confirmado con un script de verificacion: de 3
+// asignaciones simultaneas solo sobrevivian 2). Una tabla real con un INSERT
+// por notificacion no tiene esa condicion de carrera.
 export const pushUserNotifications = async (
   recipientUserIds: string[],
   notification: Omit<UserInboxNotification, 'id' | 'createdAt'> & { id?: string; createdAt?: string },
@@ -119,42 +59,41 @@ export const pushUserNotifications = async (
     return
   }
 
-  const settings = await prisma.appSettings.findUnique({ where: { id: 'app' }, select: { featureFlags: true } })
-  const featureFlags = toFeatureFlagsRecord(settings?.featureFlags)
-  const notificationsByUser = readNotificationsByUser(featureFlags)
+  const createdAt = notification.createdAt ? new Date(notification.createdAt) : new Date()
 
-  const nextNotification: UserInboxNotification = {
-    id: notification.id ?? `notif-${Date.now()}-${Math.round(Math.random() * 100000)}`,
-    title: notification.title,
-    description: notification.description,
-    severity: notification.severity,
-    createdAt: notification.createdAt ?? new Date().toISOString(),
-    target: notification.target,
-    actorUserId: notification.actorUserId,
-    eventType: notification.eventType,
-  }
-
-  recipientUserIds.forEach((userId) => {
-    const current = notificationsByUser[userId] ?? []
-    notificationsByUser[userId] = sortAndTrim([nextNotification, ...current])
-  })
-
-  const nextFeatureFlags = JSON.parse(
-    JSON.stringify({
-      ...featureFlags,
-      [USER_NOTIFICATIONS_BY_USER_KEY]: notificationsByUser,
+  await runWithSchemaFailover(() =>
+    prisma.userNotification.createMany({
+      data: recipientUserIds.map((userId) => ({
+        userId,
+        title: notification.title,
+        description: notification.description,
+        severity: notification.severity,
+        target: notification.target ?? null,
+        actorUserId: notification.actorUserId ?? null,
+        eventType: notification.eventType ?? null,
+        createdAt,
+      })),
     }),
-  ) as Prisma.InputJsonObject
-
-  await prisma.appSettings.upsert({
-    where: { id: 'app' },
-    update: { featureFlags: nextFeatureFlags },
-    create: { id: 'app', featureFlags: nextFeatureFlags },
-  })
+  )
 }
 
 export const getUserInboxNotifications = async (userId: string): Promise<UserInboxNotification[]> => {
-  const settings = await prisma.appSettings.findUnique({ where: { id: 'app' }, select: { featureFlags: true } })
-  const notificationsByUser = readNotificationsByUser(settings?.featureFlags)
-  return sortAndTrim(notificationsByUser[userId] ?? [])
+  const rows = await runWithSchemaFailover(() =>
+    prisma.userNotification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_NOTIFICATIONS_PER_USER,
+    }),
+  )
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    severity: row.severity as UserNotificationSeverity,
+    createdAt: row.createdAt.toISOString(),
+    target: row.target ?? undefined,
+    actorUserId: row.actorUserId ?? undefined,
+    eventType: row.eventType ?? undefined,
+  }))
 }

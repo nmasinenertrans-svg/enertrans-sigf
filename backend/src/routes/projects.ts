@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { prisma } from '../db.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
+import { pushUserNotifications } from '../services/userNotifications.js'
+import { sendPushToUser } from '../services/webPush.js'
 
 const router = Router()
 
@@ -261,6 +263,24 @@ router.post('/:projectId/items', async (req: AuthenticatedRequest, res) => {
       where: { id: projectId },
       include: projectInclude,
     })
+
+    if (resolvedAssignedTo && resolvedAssignedTo !== req.userId) {
+      void sendPushToUser(resolvedAssignedTo, {
+        title: 'Te asignaron una tarea de proyecto',
+        body: rest.title,
+        url: '/projects',
+        tag: 'project-item-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([resolvedAssignedTo], {
+        title: 'Te asignaron una tarea de proyecto',
+        description: rest.title,
+        severity: 'info',
+        target: '/projects',
+        eventType: 'PROJECT_ITEM_ASSIGNED',
+        actorUserId: req.userId,
+      }).catch(() => undefined)
+    }
+
     return res.status(201).json(mapProject(updated))
   } catch (error) {
     console.error('Projects items POST error:', error)
@@ -269,7 +289,7 @@ router.post('/:projectId/items', async (req: AuthenticatedRequest, res) => {
 })
 
 // PATCH /projects/:projectId/items/:itemId
-router.patch('/:projectId/items/:itemId', async (req, res) => {
+router.patch('/:projectId/items/:itemId', async (req: AuthenticatedRequest, res) => {
   const parsed = updateItemSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ message: 'Datos inválidos' })
 
@@ -310,6 +330,25 @@ router.patch('/:projectId/items/:itemId', async (req, res) => {
       where: { id: projectId },
       include: projectInclude,
     })
+
+    if (resolvedAssignedTo && resolvedAssignedTo !== current.assignedToUserId && resolvedAssignedTo !== req.userId) {
+      const itemLabel = rest.title ?? current.title
+      void sendPushToUser(resolvedAssignedTo, {
+        title: 'Te asignaron una tarea de proyecto',
+        body: itemLabel,
+        url: '/projects',
+        tag: 'project-item-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([resolvedAssignedTo], {
+        title: 'Te asignaron una tarea de proyecto',
+        description: itemLabel,
+        severity: 'info',
+        target: '/projects',
+        eventType: 'PROJECT_ITEM_ASSIGNED',
+        actorUserId: req.userId,
+      }).catch(() => undefined)
+    }
+
     return res.json(mapProject(updated))
   } catch (error) {
     console.error('Projects items PATCH error:', error)

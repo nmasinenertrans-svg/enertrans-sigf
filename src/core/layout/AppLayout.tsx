@@ -33,6 +33,8 @@ import { canUser } from '../auth/permissions'
 import { Sidebar } from './Sidebar'
 import { TopHeader } from './TopHeader'
 import { buildAppNotifications } from '../notifications/notifications'
+import { playNotificationChime } from '../notifications/sound'
+import { getPushState, isPushSupported, subscribeToPush } from '../../services/push/pushClient'
 
 const SIDEBAR_KEY = 'enertrans.sidebar.open'
 const RETRYABLE_SYNC_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504])
@@ -41,6 +43,8 @@ const WORK_ORDERS_SYNC_INTERVAL_MS = 45000
 // haya un problema real -- se avisa recien despues de varios ciclos seguidos
 // fallidos, no en el primero, para no bombardear con el cartel de error.
 const WORK_ORDERS_ERROR_AFTER_CONSECUTIVE_FAILURES = 3
+const NOTIFICATIONS_POLL_INTERVAL_MS = 25000
+const PUSH_PROMPT_DISMISSED_KEY_PREFIX = 'enertrans.push.dismissed.'
 
 const waitMs = (ms: number) => new Promise<void>((resolve) => globalThis.setTimeout(resolve, ms))
 
@@ -91,6 +95,8 @@ const mergeByIdWithLocal = <T extends { id: string }>(remote: T[] | null, local?
 export const AppLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(readSidebarState)
   const [isRouteLoading, setIsRouteLoading] = useState(true)
+  const [isPushPromptVisible, setIsPushPromptVisible] = useState(false)
+  const [isEnablingPush, setIsEnablingPush] = useState(false)
   const location = useLocation()
   const syncStatus = useOfflineSync()
   const isFetchingRef = useRef(false)
@@ -742,6 +748,82 @@ export const AppLayout = () => {
     }
   }, [currentUser?.id, syncStatus.isOnline, featureFlags.showWorkOrdersModule, setAppError, setWorkOrders])
 
+  // Antes esto solo se pedia dentro de la carga general (al entrar o al volver
+  // a la pestana), asi que una notificacion nueva podia quedar sin verse
+  // durante mucho rato con la app abierta. Este polling la trae rapido y hace
+  // sonar un aviso cuando aparece algo que no estaba antes.
+  useEffect(() => {
+    if (!currentUser?.id || !syncStatus.isOnline) {
+      return
+    }
+
+    let previousIds: Set<string> | null = null
+
+    const pollNotifications = async () => {
+      try {
+        const response = await apiRequest<UserInboxNotification[]>('/notifications', { timeoutMs: 15000 })
+        if (previousIds) {
+          const hasNew = response.some((item) => !previousIds!.has(item.id))
+          if (hasNew) {
+            playNotificationChime()
+          }
+        }
+        previousIds = new Set(response.map((item) => item.id))
+        setUserNotifications(response)
+      } catch {
+        // silencioso: es un polling de fondo, la carga principal ya reintenta y avisa
+      }
+    }
+
+    void pollNotifications()
+    const intervalId = window.setInterval(() => {
+      void pollNotifications()
+    }, NOTIFICATIONS_POLL_INTERVAL_MS)
+
+    return () => window.clearInterval(intervalId)
+  }, [currentUser?.id, syncStatus.isOnline, setUserNotifications])
+
+  // Antes activar el push quedaba escondido atras de un boton en una pagina
+  // que nadie visitaba, asi que casi nadie terminaba suscripto. Ahora se
+  // ofrece solo (una vez por usuario/dispositivo) apenas entra a la app.
+  useEffect(() => {
+    if (!currentUser?.id || typeof window === 'undefined' || !isPushSupported()) {
+      return
+    }
+    const dismissKey = `${PUSH_PROMPT_DISMISSED_KEY_PREFIX}${currentUser.id}`
+    if (window.localStorage.getItem(dismissKey)) {
+      return
+    }
+    let cancelled = false
+    getPushState().then((state) => {
+      if (!cancelled && state === 'not-subscribed') {
+        setIsPushPromptVisible(true)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser?.id])
+
+  const dismissPushPrompt = useCallback(() => {
+    if (currentUser?.id && typeof window !== 'undefined') {
+      window.localStorage.setItem(`${PUSH_PROMPT_DISMISSED_KEY_PREFIX}${currentUser.id}`, '1')
+    }
+    setIsPushPromptVisible(false)
+  }, [currentUser?.id])
+
+  const handleEnablePushPrompt = useCallback(async () => {
+    setIsEnablingPush(true)
+    try {
+      await subscribeToPush()
+    } catch (error) {
+      setAppError(error instanceof Error ? error.message : 'No se pudieron activar las notificaciones push.')
+    } finally {
+      setIsEnablingPush(false)
+      dismissPushPrompt()
+    }
+  }, [dismissPushPrompt, setAppError])
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
@@ -857,6 +939,28 @@ export const AppLayout = () => {
           <div className="mx-6 mt-4 rounded-lg border border-rose-300 bg-rose-100 px-4 py-3 text-sm text-rose-900 md:mx-8">
             <strong className="font-semibold">Modo vista basica activo:</strong>{' '}
             solo lectura para este usuario (sin acciones ni descargas).
+          </div>
+        ) : null}
+        {isPushPromptVisible ? (
+          <div className="mx-6 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:mx-8">
+            <span>Activá las notificaciones para enterarte al toque cuando te asignen algo, aunque tengas la app cerrada.</span>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={dismissPushPrompt}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Ahora no
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleEnablePushPrompt()}
+                disabled={isEnablingPush}
+                className="rounded-lg border border-amber-400 bg-amber-400 px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-amber-500 disabled:opacity-50"
+              >
+                {isEnablingPush ? 'Activando...' : 'Activar notificaciones'}
+              </button>
+            </div>
           </div>
         ) : null}
         <ErrorBanner />

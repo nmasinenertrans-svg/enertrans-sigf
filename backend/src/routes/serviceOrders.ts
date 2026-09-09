@@ -4,6 +4,7 @@ import { prisma } from '../db.js'
 import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { getErrorCode } from '../utils/errors.js'
 import { sendPushToAllUsers, sendPushToUser } from '../services/webPush.js'
+import { pushUserNotifications } from '../services/userNotifications.js'
 
 const router = Router()
 
@@ -202,12 +203,20 @@ router.post('/', async (req, res) => {
       tag: 'service-order',
     }, item.assignedToUserId ?? undefined).catch(() => undefined)
 
-    if (item.assignedToUserId) {
+    if (item.assignedToUserId && item.assignedToUserId !== userId) {
       void sendPushToUser(item.assignedToUserId, {
         title: 'Te asignaron una Orden de Servicio',
         body: `${item.code}: ${item.reportedFault}`,
         url: '/service-orders',
         tag: 'service-order-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([item.assignedToUserId], {
+        title: 'Te asignaron una Orden de Servicio',
+        description: `${item.code}: ${item.reportedFault}`,
+        severity: 'info',
+        target: '/service-orders',
+        eventType: 'SERVICE_ORDER_ASSIGNED',
+        actorUserId: userId,
       }).catch(() => undefined)
     }
 
@@ -222,6 +231,7 @@ router.post('/', async (req, res) => {
 })
 
 router.patch('/:id', async (req, res) => {
+  const userId = (req as unknown as { userId?: string }).userId
   const parsed = serviceOrderUpdateSchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ message: 'Datos inválidos.', errors: parsed.error.flatten() })
@@ -230,12 +240,13 @@ router.patch('/:id', async (req, res) => {
   const data = parsed.data
 
   try {
+    const current = await prisma.serviceOrder.findUnique({
+      where: { id: req.params.id },
+      select: { resolutionDetail: true, assignedToUserId: true },
+    })
+
     // If closing, require resolutionDetail
     if (data.status === 'CLOSED') {
-      const current = await prisma.serviceOrder.findUnique({
-        where: { id: req.params.id },
-        select: { resolutionDetail: true },
-      })
       const finalDetail = data.resolutionDetail ?? current?.resolutionDetail ?? ''
       if (!finalDetail.trim()) {
         return res.status(400).json({ message: 'Se requiere detalle de resolución para cerrar la orden de servicio.' })
@@ -268,6 +279,24 @@ router.patch('/:id', async (req, res) => {
         assignedTo: { select: { id: true, fullName: true } },
       },
     })
+
+    if (item.assignedToUserId && item.assignedToUserId !== current?.assignedToUserId && item.assignedToUserId !== userId) {
+      void sendPushToUser(item.assignedToUserId, {
+        title: 'Te asignaron una Orden de Servicio',
+        body: `${item.code}: ${item.reportedFault}`,
+        url: '/service-orders',
+        tag: 'service-order-assigned',
+      }).catch(() => undefined)
+      void pushUserNotifications([item.assignedToUserId], {
+        title: 'Te asignaron una Orden de Servicio',
+        description: `${item.code}: ${item.reportedFault}`,
+        severity: 'info',
+        target: '/service-orders',
+        eventType: 'SERVICE_ORDER_ASSIGNED',
+        actorUserId: userId,
+      }).catch(() => undefined)
+    }
+
     return res.json(mapOs(item as unknown as Record<string, unknown>))
   } catch (error: unknown) {
     if (getErrorCode(error) === 'P2025') {
