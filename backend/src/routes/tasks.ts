@@ -98,30 +98,29 @@ const getAuthenticatedUser = async (req: AuthenticatedRequest) => {
   })
 }
 
-const mapTask = (task: any) => ({
-  id: task.id,
-  title: task.title ?? '',
-  description: task.description ?? '',
-  status: task.status,
-  priority: task.priority,
-  type: task.type ?? 'OTRA',
-  unitId: task.unitId ?? null,
-  assignedToUserId: task.assignedToUserId ?? null,
-  assignedToUserName: task.assignedTo?.fullName ?? '',
-  assignedToExternalName: task.assignedToExternalName ?? '',
-  assignedByUserId: task.assignedByUserId ?? null,
-  createdByUserId: task.createdByUserId,
-  createdByUserName: task.createdBy?.fullName ?? '',
-  isInTaskBank: Boolean(task.isInTaskBank),
-  startDate: task.startDate ? (task.startDate.toISOString?.() ?? task.startDate) : null,
-  estimatedFinishDate: task.estimatedFinishDate ? (task.estimatedFinishDate.toISOString?.() ?? task.estimatedFinishDate) : null,
-  createdAt: task.createdAt?.toISOString?.() ?? task.createdAt,
-  updatedAt: task.updatedAt?.toISOString?.() ?? task.updatedAt,
-  closedAt: task.closedAt ? (task.closedAt.toISOString?.() ?? task.closedAt) : null,
-  viewedAt: task.viewedAt ? (task.viewedAt.toISOString?.() ?? task.viewedAt) : null,
-  viewedByUserId: task.viewedByUserId ?? null,
-  viewedByUserName: task.viewedBy?.fullName ?? '',
-  events: Array.isArray(task.events)
+// Cuanto tardo la tarea desde que se asigno hasta que se termino. No hay
+// columna propia para esto -- se calcula del historial de eventos (primera
+// vez que entro en ASSIGNED, ultima vez que llego a DONE), asi que sigue
+// siendo correcto aunque la tarea se haya reabierto y vuelto a cerrar.
+const computeTaskDuration = (events: Array<{ toStatus: string | null; createdAt: string }>) => {
+  const sorted = [...events].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  const assignedEvent = sorted.find((event) => event.toStatus === 'ASSIGNED')
+  const finishedEvents = sorted.filter((event) => event.toStatus === 'DONE')
+  const finishedEvent = finishedEvents[finishedEvents.length - 1]
+  const assignedAt = assignedEvent?.createdAt ?? null
+  const finishedAt = finishedEvent?.createdAt ?? null
+  let durationMinutes: number | null = null
+  if (assignedAt && finishedAt) {
+    const delta = new Date(finishedAt).getTime() - new Date(assignedAt).getTime()
+    if (delta >= 0) {
+      durationMinutes = Math.round(delta / 60000)
+    }
+  }
+  return { assignedAt, finishedAt, durationMinutes }
+}
+
+const mapTask = (task: any) => {
+  const events = Array.isArray(task.events)
     ? task.events.map((event: any) => ({
         id: event.id,
         taskId: event.taskId,
@@ -135,8 +134,38 @@ const mapTask = (task: any) => ({
         toAssignedToUserId: event.toAssignedToUserId ?? null,
         createdAt: event.createdAt?.toISOString?.() ?? event.createdAt,
       }))
-    : [],
-})
+    : []
+  const { assignedAt, finishedAt, durationMinutes } = computeTaskDuration(events)
+
+  return {
+    id: task.id,
+    title: task.title ?? '',
+    description: task.description ?? '',
+    status: task.status,
+    priority: task.priority,
+    type: task.type ?? 'OTRA',
+    unitId: task.unitId ?? null,
+    assignedToUserId: task.assignedToUserId ?? null,
+    assignedToUserName: task.assignedTo?.fullName ?? '',
+    assignedToExternalName: task.assignedToExternalName ?? '',
+    assignedByUserId: task.assignedByUserId ?? null,
+    createdByUserId: task.createdByUserId,
+    createdByUserName: task.createdBy?.fullName ?? '',
+    isInTaskBank: Boolean(task.isInTaskBank),
+    startDate: task.startDate ? (task.startDate.toISOString?.() ?? task.startDate) : null,
+    estimatedFinishDate: task.estimatedFinishDate ? (task.estimatedFinishDate.toISOString?.() ?? task.estimatedFinishDate) : null,
+    createdAt: task.createdAt?.toISOString?.() ?? task.createdAt,
+    updatedAt: task.updatedAt?.toISOString?.() ?? task.updatedAt,
+    closedAt: task.closedAt ? (task.closedAt.toISOString?.() ?? task.closedAt) : null,
+    viewedAt: task.viewedAt ? (task.viewedAt.toISOString?.() ?? task.viewedAt) : null,
+    viewedByUserId: task.viewedByUserId ?? null,
+    viewedByUserName: task.viewedBy?.fullName ?? '',
+    assignedAt,
+    finishedAt,
+    durationMinutes,
+    events,
+  }
+}
 
 const includeTaskRelations = {
   assignedTo: { select: { id: true, fullName: true } },
@@ -645,6 +674,31 @@ router.post('/:id/take', async (req: AuthenticatedRequest, res) => {
         include: includeTaskRelations,
       })
     })
+
+    const takerLabel = actor.fullName || actor.username
+    const taskLabel = task.title.trim() || task.description.trim()
+    const notifyUsers = await prisma.user.findMany({
+      where: { username: { in: Array.from(taskFullVisibilityUsernames), mode: 'insensitive' } },
+      select: { id: true },
+    })
+    notifyUsers
+      .filter((user) => user.id !== actor.id)
+      .forEach((user) => {
+        void sendPushToUser(user.id, {
+          title: 'Tarea tomada del banco',
+          body: `${takerLabel} tomo: ${taskLabel}`,
+          url: '/tasks',
+          tag: 'task-taken',
+        }).catch(() => undefined)
+        void pushUserNotifications([user.id], {
+          title: 'Tarea tomada del banco',
+          description: `${takerLabel} tomo: ${taskLabel}`,
+          severity: 'info',
+          target: '/tasks',
+          eventType: 'TASK_TAKEN_FROM_BANK',
+          actorUserId: actor.id,
+        }).catch(() => undefined)
+      })
 
     return res.json(mapTask(task))
   } catch (error) {

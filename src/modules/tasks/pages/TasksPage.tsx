@@ -96,6 +96,20 @@ const formatDateTime = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('es-AR')
 }
 
+const formatDurationMinutes = (minutes: number): string => {
+  if (minutes < 60) {
+    return `${minutes} min`
+  }
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  if (hours < 24) {
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}min` : `${hours}h`
+  }
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`
+}
+
 const formatDateOnly = (value?: string | null) => {
   if (!value) {
     return '-'
@@ -625,6 +639,13 @@ export const TasksPage = () => {
               Inicio: {formatDateOnly(task.startDate || task.createdAt)} | Fin aprox.:{' '}
               {formatDateOnly(task.estimatedFinishDate)}
             </p>
+            {task.assignedAt ? (
+              <p className="mt-1 text-xs font-semibold text-slate-600">
+                {typeof task.durationMinutes === 'number'
+                  ? `Tiempo de ejecucion: ${formatDurationMinutes(task.durationMinutes)}`
+                  : `En curso desde ${formatDateTime(task.assignedAt)}`}
+              </p>
+            ) : null}
             {task.assignedToUserId && isTaskAdmin ? (
               <p className="mt-1 text-xs">
                 {task.viewedAt ? (

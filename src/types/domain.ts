@@ -828,6 +828,9 @@ export interface TaskRecord {
   viewedAt?: string | null
   viewedByUserId?: string | null
   viewedByUserName?: string
+  assignedAt?: string | null
+  finishedAt?: string | null
+  durationMinutes?: number | null
   events: TaskEventRecord[]
 }
 
