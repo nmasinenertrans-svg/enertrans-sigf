@@ -51,4 +51,6 @@ export interface RepairViewItem {
   margin: number
   invoiceFileName?: string
   invoiceFileUrl?: string
+  clientBillingStatus?: import('../../types/domain').ClientBillingStatus
+  billingStatusHistory?: import('../../types/domain').BillingStatusHistoryEntry[]
 }

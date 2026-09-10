@@ -4,6 +4,7 @@ import { getActiveDbSchema, prisma, runWithSchemaFailover } from '../db.js'
 import { getErrorCode } from '../utils/errors.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { pushUserNotifications, resolveOperationalNotificationRecipients } from '../services/userNotifications.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
@@ -1104,6 +1105,82 @@ router.patch('/:id', async (req, res) => {
     }
     console.error('Repairs PATCH error:', error)
     return res.status(500).json({ message: 'No se pudo actualizar la reparacion.' })
+  }
+})
+
+// Circuito de cobro al cliente: CARGADO -> PASADO_AL_CLIENTE -> ACEPTADO o
+// RECHAZADO (que vuelve a CARGADO para corregir monto/detalle) -> FACTURADO
+// -> COBRADO. Cualquiera con permiso de edicion de Reparaciones puede mover
+// el estado (no esta restringido a un usuario puntual).
+const clientBillingStatusValues = ['CARGADO', 'PASADO_AL_CLIENTE', 'ACEPTADO', 'RECHAZADO', 'FACTURADO', 'COBRADO'] as const
+const ALLOWED_BILLING_TRANSITIONS: Record<string, string[]> = {
+  CARGADO: ['PASADO_AL_CLIENTE'],
+  PASADO_AL_CLIENTE: ['ACEPTADO', 'RECHAZADO'],
+  ACEPTADO: ['FACTURADO'],
+  RECHAZADO: ['CARGADO'],
+  FACTURADO: ['COBRADO'],
+  COBRADO: [],
+}
+const billingStatusUpdateSchema = z.object({
+  status: z.enum(clientBillingStatusValues),
+  notes: z.string().max(500).optional().default(''),
+})
+
+router.patch('/:id/billing-status', requirePermission('REPAIRS', 'edit'), async (req: AuthenticatedRequest, res) => {
+  const parsed = billingStatusUpdateSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Datos invalidos.' })
+  }
+  const repairId = typeof req.params.id === 'string' ? req.params.id : null
+  if (!repairId) {
+    return res.status(400).json({ message: 'Id de reparacion requerido.' })
+  }
+
+  try {
+    const existing = await runWithSchemaFailover(() => prisma.repairRecord.findUnique({ where: { id: repairId } }))
+    if (!existing) {
+      return res.status(404).json({ message: 'Reparacion no encontrada.' })
+    }
+
+    const currentStatus = (existing as any).clientBillingStatus ?? 'CARGADO'
+    const allowedNext = ALLOWED_BILLING_TRANSITIONS[currentStatus] ?? []
+    if (!allowedNext.includes(parsed.data.status)) {
+      return res.status(409).json({
+        message: `No se puede pasar de ${currentStatus} a ${parsed.data.status}.`,
+      })
+    }
+
+    const actor = req.userId
+      ? await prisma.user.findUnique({ where: { id: req.userId }, select: { fullName: true } })
+      : null
+    const previousHistory = Array.isArray((existing as any).billingStatusHistory)
+      ? (existing as any).billingStatusHistory
+      : []
+    const nextHistory = [
+      ...previousHistory,
+      {
+        status: parsed.data.status,
+        notes: parsed.data.notes,
+        actorUserId: req.userId ?? null,
+        actorName: actor?.fullName ?? '',
+        at: new Date().toISOString(),
+      },
+    ]
+
+    const updated = await runWithSchemaFailover(() =>
+      prisma.repairRecord.update({
+        where: { id: repairId },
+        data: {
+          clientBillingStatus: parsed.data.status,
+          billingStatusHistory: nextHistory as any,
+        },
+      }),
+    )
+
+    return res.json(updated)
+  } catch (error) {
+    console.error('Repairs billing-status PATCH error:', error)
+    return res.status(500).json({ message: 'No se pudo actualizar el estado de facturacion.' })
   }
 })
 

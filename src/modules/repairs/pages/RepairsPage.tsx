@@ -16,6 +16,7 @@ import {
   validateRepairFormData,
 } from '../services/repairsService'
 import type { RepairFormData, RepairFormErrors, RepairFormField } from '../types'
+import type { ClientBillingStatus, RepairRecord } from '../../../types/domain'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { apiRequest } from '../../../services/api/apiClient'
 import { BackLink } from '../../../components/shared/BackLink'
@@ -188,6 +189,26 @@ export const RepairsPage = () => {
     setFormData(toRepairFormData(selectedRepair))
   }
 
+  const handleChangeBillingStatus = async (repairId: string, status: ClientBillingStatus) => {
+    if (!canEdit) {
+      return
+    }
+
+    const previousRepairs = repairs
+    setRepairs(repairs.map((repair) => (repair.id === repairId ? { ...repair, clientBillingStatus: status } : repair)))
+
+    try {
+      const updated = await apiRequest<RepairRecord>(`/repairs/${repairId}/billing-status`, {
+        method: 'PATCH',
+        body: { status },
+      })
+      setRepairs(previousRepairs.map((repair) => (repair.id === repairId ? updated : repair)))
+    } catch {
+      setRepairs(previousRepairs)
+      window.alert('No se pudo actualizar el estado de cobro al cliente. Intenta de nuevo.')
+    }
+  }
+
   const handleConfirmDelete = () => {
     if (!canDelete) {
       return
@@ -311,6 +332,7 @@ export const RepairsPage = () => {
                     linkedInvoices={invoices.filter((invoice) => invoice.repairId === item.id)}
                     onEdit={handleEdit}
                     onDelete={setRepairIdPendingDelete}
+                    onChangeBillingStatus={canEdit ? handleChangeBillingStatus : undefined}
                     canEdit={canEdit}
                     canDelete={canDelete}
                   />

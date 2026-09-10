@@ -390,5 +390,7 @@ export const buildRepairView = (
       margin: normalizeMoney(repair.margin),
       invoiceFileName: repair.invoiceFileName,
       invoiceFileUrl: repair.invoiceFileUrl,
+      clientBillingStatus: repair.clientBillingStatus ?? 'CARGADO',
+      billingStatusHistory: repair.billingStatusHistory ?? [],
     }
   })
