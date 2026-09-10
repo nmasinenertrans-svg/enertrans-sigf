@@ -1,5 +1,5 @@
-import type { FleetUnit, Invoice, RepairRecord } from '../../../types/domain'
-import type { InvoiceFormData, InvoiceFormErrors } from '../types'
+import type { FleetUnit, Invoice, InvoiceLineItem, RepairRecord, WorkOrder } from '../../../types/domain'
+import type { InvoiceFormData, InvoiceFormErrors, InvoiceLineItemDraft } from '../types'
 
 const createId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -52,6 +52,13 @@ export const parseMoney = (value: string): number => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
 }
 
+export const createEmptyLineItemDraft = (): InvoiceLineItemDraft => ({
+  workOrderId: '',
+  unitId: '',
+  description: '',
+  amountInput: '',
+})
+
 export const createEmptyInvoiceFormData = (): InvoiceFormData => ({
   providerName: '',
   supplierId: '',
@@ -67,6 +74,8 @@ export const createEmptyInvoiceFormData = (): InvoiceFormData => ({
   unitId: '',
   inventoryItemIds: [],
   inventoryItemQuantityInputs: {},
+  hasLineItems: false,
+  lineItems: [createEmptyLineItemDraft()],
 })
 
 export const validateInvoiceFormData = (formData: InvoiceFormData): InvoiceFormErrors => {
@@ -80,7 +89,38 @@ export const validateInvoiceFormData = (formData: InvoiceFormData): InvoiceFormE
     errors.amountInput = 'El monto debe ser mayor a cero.'
   }
 
+  if (formData.hasLineItems) {
+    const hasValidItem = formData.lineItems.some(
+      (item) => item.description.trim() && parseMoney(item.amountInput) > 0,
+    )
+    if (!hasValidItem) {
+      errors.lineItems = 'Agrega al menos un item del desglose con descripcion y monto validos.'
+    }
+  }
+
   return errors
+}
+
+export const parseInvoiceLineItems = (drafts: InvoiceLineItemDraft[]): InvoiceLineItem[] =>
+  drafts
+    .map((item) => ({
+      workOrderId: item.workOrderId || null,
+      unitId: item.unitId || null,
+      description: item.description.trim(),
+      amount: parseMoney(item.amountInput),
+    }))
+    .filter((item) => item.description && item.amount > 0)
+
+export const toLineItemDrafts = (lineItems?: InvoiceLineItem[]): InvoiceLineItemDraft[] => {
+  if (!lineItems || lineItems.length === 0) {
+    return [createEmptyLineItemDraft()]
+  }
+  return lineItems.map((item) => ({
+    workOrderId: item.workOrderId ?? '',
+    unitId: item.unitId ?? '',
+    description: item.description,
+    amountInput: String(item.amount),
+  }))
 }
 
 const buildInventoryItemQuantities = (formData: InvoiceFormData): Record<string, number> => {
@@ -111,6 +151,7 @@ export const toInvoicePayload = (formData: InvoiceFormData): Invoice => ({
   unitId: formData.unitId || null,
   inventoryItemIds: formData.inventoryItemIds,
   inventoryItemQuantities: buildInventoryItemQuantities(formData),
+  lineItems: formData.hasLineItems ? parseInvoiceLineItems(formData.lineItems) : [],
   createdByUserId: '',
 })
 
@@ -129,12 +170,19 @@ export const toInvoiceUpdateFields = (formData: InvoiceFormData): Partial<Invoic
   unitId: formData.unitId || null,
   inventoryItemIds: formData.inventoryItemIds,
   inventoryItemQuantities: buildInventoryItemQuantities(formData),
+  lineItems: formData.hasLineItems ? parseInvoiceLineItems(formData.lineItems) : [],
 })
+
+export interface InvoiceLineItemView extends InvoiceLineItem {
+  unitLabel: string
+  workOrderLabel: string
+}
 
 export interface InvoiceViewItem extends Invoice {
   repairLabel: string
   unitLabel: string
   inventoryItemLabels: string[]
+  lineItemViews: InvoiceLineItemView[]
 }
 
 export const buildInvoiceView = (
@@ -142,8 +190,10 @@ export const buildInvoiceView = (
   repairs: RepairRecord[],
   fleetUnits: FleetUnit[],
   inventoryItemLabelById: Map<string, string>,
+  workOrders: WorkOrder[] = [],
 ): InvoiceViewItem[] => {
   const unitCodeById = new Map(fleetUnits.map((unit) => [unit.id, unit.internalCode]))
+  const workOrderCodeById = new Map(workOrders.map((workOrder) => [workOrder.id, workOrder.code]))
 
   return invoices.map((invoice) => {
     const repair = invoice.repairId ? repairs.find((item) => item.id === invoice.repairId) : undefined
@@ -154,12 +204,18 @@ export const buildInvoiceView = (
     const inventoryItemLabels = invoice.inventoryItemIds
       .map((id) => inventoryItemLabelById.get(id))
       .filter((label): label is string => Boolean(label))
+    const lineItemViews = (invoice.lineItems ?? []).map((item) => ({
+      ...item,
+      unitLabel: item.unitId ? unitCodeById.get(item.unitId) ?? '' : '',
+      workOrderLabel: item.workOrderId ? workOrderCodeById.get(item.workOrderId) ?? '' : '',
+    }))
 
     return {
       ...invoice,
       repairLabel,
       unitLabel,
       inventoryItemLabels,
+      lineItemViews,
     }
   })
 }

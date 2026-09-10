@@ -1,3 +1,10 @@
+export interface InvoiceLineItemDraft {
+  workOrderId: string
+  unitId: string
+  description: string
+  amountInput: string
+}
+
 export interface InvoiceFormData {
   providerName: string
   supplierId: string
@@ -13,6 +20,8 @@ export interface InvoiceFormData {
   unitId: string
   inventoryItemIds: string[]
   inventoryItemQuantityInputs: Record<string, string>
+  hasLineItems: boolean
+  lineItems: InvoiceLineItemDraft[]
 }
 
 export type InvoiceFormField = keyof InvoiceFormData

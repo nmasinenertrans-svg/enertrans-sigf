@@ -14,6 +14,7 @@ import {
   createEmptyInvoiceFormData,
   toInvoicePayload,
   toInvoiceUpdateFields,
+  toLineItemDrafts,
   validateInvoiceFormData,
   type InvoiceViewItem,
 } from '../services/invoicesService'
@@ -31,7 +32,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 export const InvoicesPage = () => {
   const { can } = usePermissions()
   const {
-    state: { invoices, repairs, fleetUnits, inventoryItems, suppliers, externalRequests },
+    state: { invoices, repairs, fleetUnits, inventoryItems, suppliers, externalRequests, workOrders },
     actions: { setInvoices, setAppError },
   } = useAppContext()
   const [searchParams] = useSearchParams()
@@ -84,8 +85,8 @@ export const InvoicesPage = () => {
   )
 
   const invoiceView = useMemo(
-    () => buildInvoiceView(invoices, repairs, fleetUnits, inventoryItemLabelById),
-    [invoices, repairs, fleetUnits, inventoryItemLabelById],
+    () => buildInvoiceView(invoices, repairs, fleetUnits, inventoryItemLabelById, workOrders),
+    [invoices, repairs, fleetUnits, inventoryItemLabelById, workOrders],
   )
 
   const filteredInvoices = useMemo(() => {
@@ -150,6 +151,8 @@ export const InvoicesPage = () => {
       inventoryItemQuantityInputs: Object.fromEntries(
         Object.entries(invoice.inventoryItemQuantities ?? {}).map(([id, quantity]) => [id, String(quantity)]),
       ),
+      hasLineItems: Boolean(invoice.lineItems && invoice.lineItems.length > 0),
+      lineItems: toLineItemDrafts(invoice.lineItems),
     })
     setErrors({})
     setPendingFile(null)
@@ -294,6 +297,7 @@ export const InvoicesPage = () => {
               fleetUnits={fleetUnits}
               inventoryItems={inventoryItems}
               suppliers={suppliers}
+              workOrders={workOrders}
               isSaving={isSaving}
               isEditing={Boolean(editingInvoiceId)}
               onFieldChange={handleFieldChange}

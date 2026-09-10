@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { FormRow } from '../../../components/shared/FormRow'
-import type { FleetUnit, InventoryItem, RepairRecord, Supplier } from '../../../types/domain'
-import { parseMoney } from '../services/invoicesService'
-import type { InvoiceFormData, InvoiceFormErrors, InvoiceFormField } from '../types'
+import type { FleetUnit, InventoryItem, RepairRecord, Supplier, WorkOrder } from '../../../types/domain'
+import { createEmptyLineItemDraft, parseMoney } from '../services/invoicesService'
+import type { InvoiceFormData, InvoiceFormErrors, InvoiceFormField, InvoiceLineItemDraft } from '../types'
 
 interface InvoiceFormProps {
   formData: InvoiceFormData
@@ -11,6 +11,7 @@ interface InvoiceFormProps {
   fleetUnits: FleetUnit[]
   inventoryItems: InventoryItem[]
   suppliers: Supplier[]
+  workOrders: WorkOrder[]
   isSaving: boolean
   isEditing?: boolean
   onFieldChange: <TField extends InvoiceFormField>(field: TField, value: InvoiceFormData[TField]) => void
@@ -29,6 +30,7 @@ export const InvoiceForm = ({
   fleetUnits,
   inventoryItems,
   suppliers,
+  workOrders,
   isSaving,
   isEditing = false,
   onFieldChange,
@@ -58,6 +60,45 @@ export const InvoiceForm = ({
   }
 
   const unitCodeById = useMemo(() => new Map(fleetUnits.map((unit) => [unit.id, unit.internalCode])), [fleetUnits])
+
+  const workOrdersByUnit = useMemo(() => {
+    const map = new Map<string, WorkOrder[]>()
+    workOrders.forEach((workOrder) => {
+      if (!workOrder.unitId) return
+      const list = map.get(workOrder.unitId) ?? []
+      list.push(workOrder)
+      map.set(workOrder.unitId, list)
+    })
+    return map
+  }, [workOrders])
+
+  const updateLineItem = (index: number, field: keyof InvoiceLineItemDraft, value: string) => {
+    onFieldChange(
+      'lineItems',
+      formData.lineItems.map((item, itemIndex) => {
+        if (itemIndex !== index) return item
+        const next = { ...item, [field]: value }
+        // Si cambia la unidad, la OT elegida antes puede ya no corresponder.
+        if (field === 'unitId') next.workOrderId = ''
+        return next
+      }),
+    )
+  }
+
+  const addLineItem = () => {
+    onFieldChange('lineItems', [...formData.lineItems, createEmptyLineItemDraft()])
+  }
+
+  const removeLineItem = (index: number) => {
+    onFieldChange(
+      'lineItems',
+      formData.lineItems.length > 1
+        ? formData.lineItems.filter((_, itemIndex) => itemIndex !== index)
+        : formData.lineItems,
+    )
+  }
+
+  const lineItemsTotal = formData.lineItems.reduce((sum, item) => sum + parseMoney(item.amountInput), 0)
 
   const filteredRepairs = useMemo(() => {
     const query = repairSearch.trim().toLowerCase()
@@ -381,6 +422,96 @@ export const InvoiceForm = ({
             })}
             {filteredInventoryItems.length === 0 ? <p className="px-1 text-xs text-slate-400">Sin resultados.</p> : null}
           </div>
+        </FormRow>
+
+        <FormRow label="Desglosar entre varias unidades/OTs (opcional)" errorMessage={errors.lineItems}>
+          <p className="mb-2 text-xs text-slate-500">
+            Usalo cuando una misma factura cubre varios equipos (repuestos para varios camiones en una factura del
+            proveedor, o una factura mensual de RTO con todas las unidades del mes).
+          </p>
+          <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={formData.hasLineItems}
+              onChange={(event) => onFieldChange('hasLineItems', event.target.checked)}
+            />
+            Esta factura cubre más de un equipo
+          </label>
+
+          {formData.hasLineItems ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              {formData.lineItems.map((item, index) => (
+                <div key={index} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-2 md:grid-cols-12">
+                  <select
+                    className={`${inputClassName} md:col-span-3`}
+                    value={item.unitId}
+                    onChange={(event) => updateLineItem(index, 'unitId', event.target.value)}
+                  >
+                    <option value="">Unidad...</option>
+                    {fleetUnits.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.internalCode} · {unit.brand} {unit.model}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className={`${inputClassName} md:col-span-2`}
+                    value={item.workOrderId}
+                    onChange={(event) => updateLineItem(index, 'workOrderId', event.target.value)}
+                    disabled={!item.unitId}
+                  >
+                    <option value="">Sin OT</option>
+                    {(workOrdersByUnit.get(item.unitId) ?? []).map((workOrder) => (
+                      <option key={workOrder.id} value={workOrder.id}>
+                        {workOrder.code}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className={`${inputClassName} md:col-span-4`}
+                    value={item.description}
+                    onChange={(event) => updateLineItem(index, 'description', event.target.value)}
+                    placeholder="Descripción (ej: RTO, filtro de aceite)"
+                  />
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className={`${inputClassName} md:col-span-2`}
+                    value={item.amountInput}
+                    onChange={(event) => updateLineItem(index, 'amountInput', event.target.value)}
+                    placeholder="Monto"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeLineItem(index)}
+                    className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 md:col-span-1"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={addLineItem}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  + Agregar item
+                </button>
+                <p className="text-xs font-semibold text-slate-600">
+                  Total del desglose:{' '}
+                  <span className={lineItemsTotal !== parseMoney(formData.amountInput) ? 'text-rose-600' : 'text-emerald-700'}>
+                    {new Intl.NumberFormat('es-AR', {
+                      style: 'currency',
+                      currency: formData.currency,
+                      minimumFractionDigits: 2,
+                    }).format(lineItemsTotal)}
+                  </span>
+                  {lineItemsTotal !== parseMoney(formData.amountInput) ? ' (no coincide con el monto de la factura)' : ''}
+                </p>
+              </div>
+            </div>
+          ) : null}
         </FormRow>
 
         <FormRow label="Notas (opcional)">

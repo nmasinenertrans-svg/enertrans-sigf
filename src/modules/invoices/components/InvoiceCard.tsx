@@ -58,6 +58,18 @@ export const InvoiceCard = ({ invoice, onDelete, onEdit, canDelete = true, canEd
         </div>
       ) : null}
 
+      {invoice.lineItemViews.length > 0 ? (
+        <div className="mt-2 space-y-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1.5">
+          <p className="text-xs font-semibold text-violet-700">Desglose:</p>
+          {invoice.lineItemViews.map((item, index) => (
+            <p key={item.id ?? index} className="text-xs text-violet-700">
+              {[item.unitLabel, item.workOrderLabel].filter(Boolean).join(' · ') || 'Sin unidad'} — {item.description}{' '}
+              ({formatCurrency(item.amount, invoice.currency)})
+            </p>
+          ))}
+        </div>
+      ) : null}
+
       {invoice.notes ? <p className="mt-2 text-xs text-slate-600">{invoice.notes}</p> : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

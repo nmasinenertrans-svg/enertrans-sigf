@@ -7,6 +7,13 @@ import type { AuthenticatedRequest } from '../middleware/auth.js'
 
 const router = Router()
 
+const invoiceLineItemSchema = z.object({
+  workOrderId: z.string().nullable().optional(),
+  unitId: z.string().nullable().optional(),
+  description: z.string().optional().default(''),
+  amount: z.number().min(0).optional().default(0),
+})
+
 const invoiceCreateSchema = z.object({
   id: z.string().min(1).optional(),
   providerName: z.string().min(1),
@@ -23,9 +30,21 @@ const invoiceCreateSchema = z.object({
   unitId: z.string().nullable().optional(),
   inventoryItemIds: z.array(z.string()).optional().default([]),
   inventoryItemQuantities: z.record(z.string(), z.number().positive()).optional().default({}),
+  // Desglose opcional: cuando una misma factura cubre varias unidades/OTs
+  // (ej. repuestos para varios camiones en una sola factura del proveedor,
+  // o una factura mensual de RTO con todas las unidades del mes).
+  lineItems: z.array(invoiceLineItemSchema).optional().default([]),
 })
 
 const invoiceUpdateSchema = invoiceCreateSchema.partial()
+
+const toLineItemCreateData = (items: z.infer<typeof invoiceLineItemSchema>[]) =>
+  items.map((item) => ({
+    workOrderId: item.workOrderId || null,
+    unitId: item.unitId || null,
+    description: (item.description ?? '').trim(),
+    amount: item.amount ?? 0,
+  }))
 
 const mapInvoice = (invoice: Record<string, unknown> & { createdBy?: { fullName?: string } | null }) => {
   const { createdBy, ...rest } = invoice
@@ -104,7 +123,7 @@ router.get('/', async (req, res) => {
     const items = await prisma.invoice.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: { createdBy: { select: { fullName: true } } },
+      include: { createdBy: { select: { fullName: true } }, lineItems: true },
     })
 
     const mapped = items.map((item) => mapInvoice(item as unknown as Record<string, unknown>))
@@ -154,8 +173,10 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           inventoryItemIds: parsed.data.inventoryItemIds,
           inventoryItemQuantities: quantities,
           createdByUserId: userId,
+          lineItems:
+            parsed.data.lineItems.length > 0 ? { create: toLineItemCreateData(parsed.data.lineItems) } : undefined,
         },
-        include: { createdBy: { select: { fullName: true } } },
+        include: { createdBy: { select: { fullName: true } }, lineItems: true },
       })
       await applyInvoiceStockDeltas(tx, buildInvoiceStockIncrementMap({}, quantities))
       return created
@@ -168,7 +189,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       // en el camino). Se devuelve la existente en vez de duplicarla.
       const existing = await prisma.invoice.findUnique({
         where: { id: parsed.data.id },
-        include: { createdBy: { select: { fullName: true } } },
+        include: { createdBy: { select: { fullName: true } }, lineItems: true },
       })
       if (existing) {
         return res.status(200).json(mapInvoice(existing as unknown as Record<string, unknown>))
@@ -189,6 +210,8 @@ router.patch('/:id', async (req, res) => {
   }
 
   const data: Record<string, unknown> = { ...parsed.data }
+  delete data.lineItems
+  const nextLineItems = parsed.data.lineItems !== undefined ? parsed.data.lineItems : undefined
   if (parsed.data.providerName !== undefined) {
     data.providerName = parsed.data.providerName.trim()
   }
@@ -231,10 +254,19 @@ router.patch('/:id', async (req, res) => {
         await applyInvoiceStockDeltas(tx, buildInvoiceStockIncrementMap(previousQuantities, nextQuantities))
       }
 
+      if (nextLineItems !== undefined) {
+        await tx.invoiceLineItem.deleteMany({ where: { invoiceId: req.params.id } })
+      }
+
       return tx.invoice.update({
         where: { id: req.params.id },
-        data,
-        include: { createdBy: { select: { fullName: true } } },
+        data: {
+          ...data,
+          ...(nextLineItems !== undefined
+            ? { lineItems: nextLineItems.length > 0 ? { create: toLineItemCreateData(nextLineItems) } : undefined }
+            : {}),
+        },
+        include: { createdBy: { select: { fullName: true } }, lineItems: true },
       })
     })
     return res.json(mapInvoice(item as unknown as Record<string, unknown>))

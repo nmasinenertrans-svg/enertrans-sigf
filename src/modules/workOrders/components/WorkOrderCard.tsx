@@ -50,6 +50,29 @@ export const WorkOrderCard = ({
       </p>
     </div>
 
+    {item.linkedInvoiceItems.length > 0 ? (
+      <div className="mt-3 space-y-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
+        <p className="text-xs font-semibold text-violet-700">Facturas vinculadas:</p>
+        {item.linkedInvoiceItems.map((invoiceItem, index) => (
+          <p key={`${invoiceItem.invoiceId}-${index}`} className="text-xs text-violet-700">
+            {invoiceItem.invoiceCode} · {invoiceItem.providerName} — {invoiceItem.description} (
+            {new Intl.NumberFormat('es-AR', {
+              style: 'currency',
+              currency: invoiceItem.currency,
+              maximumFractionDigits: 0,
+            }).format(invoiceItem.amount)}
+            )
+          </p>
+        ))}
+        <p className="text-xs font-bold text-violet-800">
+          Total facturado:{' '}
+          {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(
+            item.linkedInvoiceItems.reduce((sum, invoiceItem) => sum + invoiceItem.amount, 0),
+          )}
+        </p>
+      </div>
+    ) : null}
+
     <div className="mt-4 space-y-2">
       {item.taskList.map((task) => {
         const hasEvidence = Boolean((task.resolutionPhotoUrl ?? '').trim() || (task.resolutionPhotoBase64 ?? '').trim())

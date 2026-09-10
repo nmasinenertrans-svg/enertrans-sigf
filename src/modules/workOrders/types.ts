@@ -17,6 +17,15 @@ export type WorkOrderFormErrors = Partial<Record<WorkOrderFormField, string>> & 
   taskResolution?: string
 }
 
+export interface WorkOrderLinkedInvoiceItem {
+  invoiceId: string
+  invoiceCode: string
+  providerName: string
+  description: string
+  amount: number
+  currency: 'ARS' | 'USD'
+}
+
 export interface WorkOrderViewItem {
   id: string
   code: string
@@ -30,4 +39,5 @@ export interface WorkOrderViewItem {
   spareParts: string[]
   laborDetail: string
   linkedInventorySkuList: string[]
+  linkedInvoiceItems: WorkOrderLinkedInvoiceItem[]
 }

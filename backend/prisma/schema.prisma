@@ -248,6 +248,7 @@ model FleetUnit {
   serviceOrders            ServiceOrder[]
   telemetryDevices         TelemetryDevice[]
   invoices                 Invoice[]
+  invoiceLineItems         InvoiceLineItem[]
   rentalContracts          RentalContract[]
   handoverChecklists       HandoverChecklist[]
   tires                    Tire[]
@@ -338,7 +339,8 @@ model WorkOrder {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  unit FleetUnit? @relation(fields: [unitId], references: [id])
+  unit             FleetUnit?        @relation(fields: [unitId], references: [id])
+  invoiceLineItems InvoiceLineItem[]
 }
 
 model RepairRecord {
@@ -396,10 +398,33 @@ model Invoice {
   unit      FleetUnit?    @relation(fields: [unitId], references: [id])
   supplier  Supplier?     @relation(fields: [supplierId], references: [id])
   createdBy User          @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
+  lineItems InvoiceLineItem[]
 
   @@index([repairId])
   @@index([unitId])
   @@index([supplierId])
+}
+
+// Desglose de una factura que cubre varios equipos/OTs a la vez (ej: el
+// proveedor manda una sola factura con repuestos para varios camiones, o el
+// taller de RTO manda una factura mensual con todas las unidades que hizo
+// ese mes). La factura sigue siendo UN solo documento/monto total; esto es
+// el detalle de como se reparte ese total entre unidades/OTs.
+model InvoiceLineItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  workOrderId String?
+  unitId      String?
+  description String  @default("")
+  amount      Float   @default(0)
+
+  invoice   Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  workOrder WorkOrder? @relation(fields: [workOrderId], references: [id])
+  unit      FleetUnit? @relation(fields: [unitId], references: [id])
+
+  @@index([invoiceId])
+  @@index([workOrderId])
+  @@index([unitId])
 }
 
 model InventoryItem {

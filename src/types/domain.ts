@@ -392,6 +392,14 @@ export interface RepairPartUsed {
   lineTotal?: number
 }
 
+export interface InvoiceLineItem {
+  id?: string
+  workOrderId?: string | null
+  unitId?: string | null
+  description: string
+  amount: number
+}
+
 export interface Invoice {
   id: string
   code: string
@@ -409,6 +417,7 @@ export interface Invoice {
   unitId?: string | null
   inventoryItemIds: string[]
   inventoryItemQuantities?: Record<string, number>
+  lineItems?: InvoiceLineItem[]
   createdByUserId: string
   createdByUserName?: string
   createdAt?: string

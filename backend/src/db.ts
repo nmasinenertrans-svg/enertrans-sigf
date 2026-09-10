@@ -180,6 +180,7 @@ const COMPAT_TABLE_NAMES = [
   'Trip',
   'TripLeg',
   'UserNotification',
+  'InvoiceLineItem',
 ] as const
 
 const getNormalizedActiveSchema = (): string => {
@@ -570,6 +571,32 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   // por una nota de pedido/OT — antes solo se podia vincular via reparacion.
   await safeExecuteCompatSql(`ALTER TABLE "Invoice" ADD COLUMN IF NOT EXISTS "unitId" TEXT;`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Invoice_unitId_idx" ON "Invoice"("unitId");`)
+
+  // Desglose de una factura que cubre varios equipos/OTs a la vez (proveedor
+  // manda una sola factura con repuestos para varios camiones, o el taller
+  // de RTO manda una factura mensual con todas las unidades de ese mes). La
+  // factura sigue siendo un solo documento/monto total; esto es el detalle
+  // de como se reparte entre unidades/OTs.
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "InvoiceLineItem" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "invoiceId" TEXT NOT NULL,
+      "workOrderId" TEXT,
+      "unitId" TEXT,
+      "description" TEXT NOT NULL DEFAULT '',
+      "amount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+      CONSTRAINT "InvoiceLineItem_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "InvoiceLineItem_invoiceId_idx" ON "InvoiceLineItem"("invoiceId");`,
+  )
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "InvoiceLineItem_workOrderId_idx" ON "InvoiceLineItem"("workOrderId");`,
+  )
+  await safeExecuteCompatSql(
+    `CREATE INDEX IF NOT EXISTS "InvoiceLineItem_unitId_idx" ON "InvoiceLineItem"("unitId");`,
+  )
 
   // Telemetria/GPS: ingesta de proveedores externos (RSV, Microtrack, etc.) via
   // webhook. TelemetryDevice = equipo GPS del proveedor (deviceExternalId+provider,

@@ -37,7 +37,7 @@ export const WorkOrdersPage = () => {
   const [searchParams] = useSearchParams()
   const { can } = usePermissions()
   const {
-    state: { currentUser, fleetUnits, inventoryItems, workOrders, featureFlags },
+    state: { currentUser, fleetUnits, inventoryItems, workOrders, featureFlags, invoices },
     actions: { setWorkOrders, setInventoryItems, setFleetUnits, setAppError },
   } = useAppContext()
   const manualAuditMode = featureFlags.manualAuditMode
@@ -63,7 +63,10 @@ export const WorkOrdersPage = () => {
   const [draftChecked, setDraftChecked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const workOrderViewList = useMemo(() => buildWorkOrderView(workOrders, fleetUnits), [workOrders, fleetUnits])
+  const workOrderViewList = useMemo(
+    () => buildWorkOrderView(workOrders, fleetUnits, invoices),
+    [workOrders, fleetUnits, invoices],
+  )
 
   const filteredWorkOrders = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()

@@ -1,5 +1,5 @@
-﻿import type { FleetUnit, InventoryItem, WorkOrder, WorkOrderDeviation, WorkOrderStatus } from '../../../types/domain'
-import type { WorkOrderFormData, WorkOrderFormErrors, WorkOrderViewItem } from '../types'
+﻿import type { FleetUnit, Invoice, InventoryItem, WorkOrder, WorkOrderDeviation, WorkOrderStatus } from '../../../types/domain'
+import type { WorkOrderFormData, WorkOrderFormErrors, WorkOrderLinkedInvoiceItem, WorkOrderViewItem } from '../types'
 import { getNextSequenceCode } from '../../../services/sequence'
 
 const MIN_TASK_ITEMS = 1
@@ -154,9 +154,26 @@ export const mergeWorkOrderFromForm = (workOrder: WorkOrder, formData: WorkOrder
   linkedInventorySkuList: formData.linkedInventorySkuList,
 })
 
-export const buildWorkOrderView = (workOrders: WorkOrder[], fleetUnits: FleetUnit[]): WorkOrderViewItem[] =>
+export const buildWorkOrderView = (
+  workOrders: WorkOrder[],
+  fleetUnits: FleetUnit[],
+  invoices: Invoice[] = [],
+): WorkOrderViewItem[] =>
   workOrders.map((workOrder) => {
     const unit = workOrder.unitId ? fleetUnits.find((fleetUnit) => fleetUnit.id === workOrder.unitId) : null
+
+    const linkedInvoiceItems: WorkOrderLinkedInvoiceItem[] = invoices.flatMap((invoice) =>
+      (invoice.lineItems ?? [])
+        .filter((lineItem) => lineItem.workOrderId === workOrder.id)
+        .map((lineItem) => ({
+          invoiceId: invoice.id,
+          invoiceCode: invoice.code,
+          providerName: invoice.providerName,
+          description: lineItem.description,
+          amount: lineItem.amount,
+          currency: invoice.currency,
+        })),
+    )
 
     return {
       id: workOrder.id,
@@ -173,6 +190,7 @@ export const buildWorkOrderView = (workOrders: WorkOrder[], fleetUnits: FleetUni
       spareParts: workOrder.spareParts,
       laborDetail: workOrder.laborDetail,
       linkedInventorySkuList: workOrder.linkedInventorySkuList,
+      linkedInvoiceItems,
     }
   })
 
