@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -101,7 +101,17 @@ const formatDateOnly = (value?: string | null) => {
     return '-'
   }
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  // Estas fechas son "solo dia" (sin hora), guardadas en UTC medianoche.
+  // toLocaleDateString aplica el huso horario local (UTC-3 en Argentina) y
+  // corria un dia para atras -- se lee el dia directo en UTC, igual que
+  // toDateInputValue (asi la tarjeta y el formulario de edicion muestran
+  // siempre la misma fecha).
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  return `${day}/${month}/${date.getUTCFullYear()}`
 }
 
 const isTaskOverdue = (task: TaskRecord): boolean => {
@@ -186,28 +196,37 @@ export const TasksPage = () => {
       .slice(0, 8)
   }, [fleetUnits, unitSearch])
 
-  const { isLoading, reload } = useAsyncLoader(
+  // Separada de useAsyncLoader a proposito: el refresco automatico de fondo
+  // (cada tanto, o al recuperar foco) NO tiene que tapar la lista entera con
+  // "Cargando tareas..." -- eso es lo que hacia que la pantalla "parpadeara"
+  // cada vez que se actualizaba sola. Solo la carga inicial (al entrar a la
+  // pagina) muestra ese estado de carga.
+  const fetchTasksSilently = useCallback(async () => {
+    if (!canViewTasks) return
+    try {
+      const response = await apiRequest<TaskRecord[]>('/tasks')
+      const remoteTasks = Array.isArray(response) ? response : []
+      // Las tareas creadas sin señal quedan en la cola offline hasta que se
+      // sincronizan; si todavia no llegaron al servidor, se siguen viendo
+      // en la lista (si no, "desaparecian" hasta que el navegador volviera
+      // a sincronizar solo).
+      const queuedTasks = (await getQueueItems())
+        .filter((item) => item.type === 'task.create')
+        .map((item) => item.payload as TaskRecord)
+      const remoteIds = new Set(remoteTasks.map((task) => task.id))
+      const pendingQueuedTasks = queuedTasks.filter((task) => task?.id && !remoteIds.has(task.id))
+      setTasks([...remoteTasks, ...pendingQueuedTasks])
+    } catch {
+      setAppError('No se pudieron cargar las tareas.')
+    }
+  }, [canViewTasks, setAppError, setTasks])
+
+  const { isLoading } = useAsyncLoader(
     async (getMounted) => {
-      if (!canViewTasks) return
-      try {
-        const response = await apiRequest<TaskRecord[]>('/tasks')
-        if (!getMounted()) return
-        const remoteTasks = Array.isArray(response) ? response : []
-        // Las tareas creadas sin señal quedan en la cola offline hasta que se
-        // sincronizan; si todavia no llegaron al servidor, se siguen viendo
-        // en la lista (si no, "desaparecian" hasta que el navegador volviera
-        // a sincronizar solo).
-        const queuedTasks = (await getQueueItems())
-          .filter((item) => item.type === 'task.create')
-          .map((item) => item.payload as TaskRecord)
-        const remoteIds = new Set(remoteTasks.map((task) => task.id))
-        const pendingQueuedTasks = queuedTasks.filter((task) => task?.id && !remoteIds.has(task.id))
-        setTasks([...remoteTasks, ...pendingQueuedTasks])
-      } catch {
-        setAppError('No se pudieron cargar las tareas.')
-      }
+      await fetchTasksSilently()
+      if (!getMounted()) return
     },
-    [canViewTasks, setAppError],
+    [fetchTasksSilently],
   )
 
   const lastAutoRefreshAtRef = useRef(0)
@@ -247,7 +266,7 @@ export const TasksPage = () => {
         return
       }
       lastAutoRefreshAtRef.current = Date.now()
-      reload()
+      void fetchTasksSilently()
     }, 30000)
 
     const handleVisibilityRegain = () => {
@@ -258,7 +277,7 @@ export const TasksPage = () => {
         return
       }
       lastAutoRefreshAtRef.current = Date.now()
-      reload()
+      void fetchTasksSilently()
     }
 
     document.addEventListener('visibilitychange', handleVisibilityRegain)
@@ -268,7 +287,7 @@ export const TasksPage = () => {
       document.removeEventListener('visibilitychange', handleVisibilityRegain)
       window.removeEventListener('focus', handleVisibilityRegain)
     }
-  }, [canViewTasks, reload])
+  }, [canViewTasks, fetchTasksSilently])
 
   const resetForm = () => {
     setEditingTaskId(null)
