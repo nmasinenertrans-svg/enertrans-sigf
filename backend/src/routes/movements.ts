@@ -15,6 +15,7 @@ const materialItemSchema = z.object({
 })
 
 const movementSchema = z.object({
+  id: z.string().uuid().optional(),
   unitIds: z.array(z.string().min(1)).min(1),
   kind: z.enum(['UNIT', 'MATERIAL']).optional().default('UNIT'),
   movementType: z.enum(['ENTRY', 'RETURN']),
@@ -217,10 +218,24 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ message: 'Fecha de remito invalida.' })
   }
 
+  // Si viene con id (creado offline y ya sincronizado, o un reintento de la
+  // cola tras un corte a mitad de camino) y ya existe, devolvemos el que ya
+  // esta en vez de duplicarlo (y de gastar un numero de remito de mas).
+  if (parsed.data.id) {
+    const existing = await prisma.fleetMovement.findUnique({
+      where: { id: parsed.data.id },
+      include: { units: { select: { unitId: true } } },
+    })
+    if (existing) {
+      return res.status(201).json({ ...existing, unitIds: existing.units.map((unit) => unit.unitId) })
+    }
+  }
+
   try {
     const remitoNumber = formatRemitoNumber(await getNextSequence('remito'))
     const created = await prisma.fleetMovement.create({
       data: {
+        id: parsed.data.id,
         kind: parsed.data.kind,
         movementType: parsed.data.movementType,
         materialItems: parsed.data.materialItems,

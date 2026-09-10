@@ -32,6 +32,7 @@ const legSchema = z
 
 const tripCreateSchema = z
   .object({
+    id: z.string().uuid().optional(),
     driverUserId: z.string().nullable().optional(),
     driverExternalName: z.string().optional().default(''),
     notes: z.string().optional().default(''),
@@ -161,6 +162,16 @@ router.post('/', requirePermission('TRIPS', 'create'), async (req: Authenticated
     return res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Datos invalidos.' })
   }
 
+  // Si viene con id (creado offline y ya sincronizado, o un reintento de la
+  // cola tras un corte a mitad de camino) y ya existe, devolvemos el que ya
+  // esta en vez de duplicarlo.
+  if (parsed.data.id) {
+    const existing = await prisma.trip.findUnique({ where: { id: parsed.data.id }, include: includeRelations })
+    if (existing) {
+      return res.status(201).json(mapTrip(existing))
+    }
+  }
+
   try {
     const legRows = await buildLegRows(parsed.data.legs)
     const { startDate, endDate } = tripDateRange(legRows)
@@ -168,6 +179,7 @@ router.post('/', requirePermission('TRIPS', 'create'), async (req: Authenticated
 
     const item = await prisma.trip.create({
       data: {
+        id: parsed.data.id,
         code,
         driverUserId: parsed.data.driverUserId || null,
         driverExternalName: parsed.data.driverUserId ? '' : parsed.data.driverExternalName.trim(),

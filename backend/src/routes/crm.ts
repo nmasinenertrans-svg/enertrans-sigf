@@ -45,6 +45,7 @@ const stageDefaultProbability: Record<(typeof stageValues)[number], number> = {
 }
 
 const dealSchema = z.object({
+  id: z.string().uuid().optional(),
   title: z.string().min(2).max(180),
   companyName: z.string().min(2).max(160),
   dealKind: z.enum(dealKindValues).optional().default('TENDER'),
@@ -213,6 +214,18 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
     return res.status(401).json({ message: 'No autorizado.' })
   }
 
+  // Si viene con id (creada offline y ya sincronizada, o un reintento de la
+  // cola tras un corte a mitad de camino) y ya existe, devolvemos la que ya
+  // esta en vez de duplicarla.
+  if (parsed.data.id) {
+    const existing = await runWithSchemaFailover(() =>
+      prisma.crmDeal.findUnique({ where: { id: parsed.data.id }, include: dealInclude }),
+    )
+    if (existing) {
+      return res.status(201).json(existing)
+    }
+  }
+
   try {
     const stage = parsed.data.stage
     const expectedCloseDate = parseOptionalDate(parsed.data.expectedCloseDate)
@@ -223,6 +236,7 @@ router.post('/deals', requirePermission('CRM', 'create'), async (req: any, res) 
     const created = await runWithSchemaFailover(() =>
       prisma.crmDeal.create({
         data: {
+          id: parsed.data.id,
           title: normalizeText(parsed.data.title),
           companyName: normalizeText(parsed.data.companyName),
           dealKind: parsed.data.dealKind,
