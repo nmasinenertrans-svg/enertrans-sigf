@@ -98,6 +98,65 @@ const resolveAuditKind = async (unitId: string): Promise<'AUDIT' | 'REAUDIT'> =>
   return closedWorkOrders ? 'REAUDIT' : 'AUDIT'
 }
 
+// Tareas postergadas (WorkOrderDeviation.status === 'POSTERGADA') que quedaron
+// sin resolver en una OT ya CERRADA de esta unidad: si la OT sigue abierta la
+// tarea ya es visible/accionable ahi mismo, por eso solo miramos CERRADAS.
+const findOutstandingPostponedDeviations = async (
+  unitId: string,
+): Promise<Array<{ workOrderId: string; task: any }>> => {
+  const closedWorkOrders = await prisma.workOrder.findMany({
+    where: { unitId, status: 'CLOSED' },
+    select: { id: true, taskList: true },
+  })
+  const outstanding: Array<{ workOrderId: string; task: any }> = []
+  for (const workOrder of closedWorkOrders) {
+    const tasks = Array.isArray(workOrder.taskList) ? (workOrder.taskList as any[]) : []
+    for (const task of tasks) {
+      if (task && task.status === 'POSTERGADA' && !task.carriedForwardToWorkOrderId) {
+        outstanding.push({ workOrderId: workOrder.id, task })
+      }
+    }
+  }
+  return outstanding
+}
+
+const buildCarriedForwardDeviations = (outstanding: Array<{ task: any }>) =>
+  outstanding.map(({ task }) => ({
+    id: createDeviationId(),
+    section: task.section ?? 'GENERAL',
+    item: task.item ?? 'Desvio',
+    observation: task.observation ?? '',
+    status: 'PENDING',
+    resolutionNote: '',
+    resolutionPhotoBase64: '',
+    resolutionPhotoUrl: '',
+  }))
+
+// Marca en la OT vieja que esa tarea postergada ya se traslado a la OT nueva,
+// para no volver a arrastrarla de nuevo en una inspeccion futura.
+const markDeviationsCarriedForward = async (
+  outstanding: Array<{ workOrderId: string; task: any }>,
+  targetWorkOrderId: string,
+): Promise<void> => {
+  const taskIdsByWorkOrder = new Map<string, Set<string>>()
+  for (const { workOrderId, task } of outstanding) {
+    if (!taskIdsByWorkOrder.has(workOrderId)) {
+      taskIdsByWorkOrder.set(workOrderId, new Set())
+    }
+    taskIdsByWorkOrder.get(workOrderId)!.add(task.id)
+  }
+
+  for (const [workOrderId, taskIds] of taskIdsByWorkOrder) {
+    const workOrder = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { taskList: true } })
+    if (!workOrder) continue
+    const tasks = Array.isArray(workOrder.taskList) ? (workOrder.taskList as any[]) : []
+    const nextTasks = tasks.map((task) =>
+      task && taskIds.has(task.id) ? { ...task, carriedForwardToWorkOrderId: targetWorkOrderId } : task,
+    )
+    await prisma.workOrder.update({ where: { id: workOrderId }, data: { taskList: nextTasks } })
+  }
+}
+
 const isManualAuditModeEnabled = async (): Promise<boolean> => {
   const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
   const featureFlags =
@@ -367,20 +426,25 @@ router.post('/', async (req, res) => {
     if (item.result === 'REJECTED') {
       if (!manualAuditMode) {
         const workOrderCode = parsed.data.workOrderCode ?? formatCode('OT', await getNextSequence('workOrder'), unitCode)
+        const workOrderId = parsed.data.workOrderId ?? createDeviationId()
+        const outstandingPostponed = item.unitId ? await findOutstandingPostponedDeviations(item.unitId) : []
         await prisma.workOrder.create({
           data: {
-            id: parsed.data.workOrderId,
+            id: workOrderId,
             code: workOrderCode,
             pendingReaudit: false,
             unitId: item.unitId ?? null,
             externalVehicle: item.externalVehicle ?? null,
             status: 'OPEN',
-            taskList: extractBadItems(parsed.data.checklist),
+            taskList: [...extractBadItems(parsed.data.checklist), ...buildCarriedForwardDeviations(outstandingPostponed)],
             spareParts: [],
             laborDetail: `Desvios detectados en inspeccion ${code}`,
             linkedInventorySkuList: [],
           },
         })
+        if (outstandingPostponed.length > 0) {
+          await markDeviationsCarriedForward(outstandingPostponed, workOrderId)
+        }
       }
 
       if (item.unitId) {
@@ -418,6 +482,35 @@ router.post('/', async (req, res) => {
             where: { id: item.unitId },
             data: { operationalStatus: 'OPERATIONAL' },
           })
+        }
+      }
+
+      // Aunque la inspeccion apruebe, si la unidad tiene tareas postergadas de
+      // una OT vieja ya cerrada, se genera una OT nueva solo para esas tareas
+      // (no se pierden). A proposito NO se toca operationalStatus aca: las
+      // tareas postergadas, por definicion, no afectan que la unidad pueda
+      // seguir operando (ver mas arriba, ya se decidio OPERATIONAL/lo que
+      // corresponda antes de llegar a este punto).
+      if (!manualAuditMode && item.unitId) {
+        const outstandingPostponed = await findOutstandingPostponedDeviations(item.unitId)
+        if (outstandingPostponed.length > 0) {
+          const carryForwardWorkOrderId = createDeviationId()
+          const carryForwardCode = formatCode('OT', await getNextSequence('workOrder'), unitCode)
+          await prisma.workOrder.create({
+            data: {
+              id: carryForwardWorkOrderId,
+              code: carryForwardCode,
+              pendingReaudit: false,
+              unitId: item.unitId,
+              externalVehicle: item.externalVehicle ?? null,
+              status: 'OPEN',
+              taskList: buildCarriedForwardDeviations(outstandingPostponed),
+              spareParts: [],
+              laborDetail: 'Tareas postergadas de inspecciones anteriores (no afectan la operatividad de la unidad).',
+              linkedInventorySkuList: [],
+            },
+          })
+          await markDeviationsCarriedForward(outstandingPostponed, carryForwardWorkOrderId)
         }
       }
     }

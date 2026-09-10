@@ -30,8 +30,11 @@ const WORK_ORDER_DRAFT_KEY = 'enertrans.workOrderDraft'
 const WORK_ORDER_RESOLUTION_DRAFT_KEY = 'enertrans.workOrderResolutionDraft'
 const WORK_ORDER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000
 
-const hasResolutionEvidence = (task: WorkOrderDeviation): boolean =>
-  Boolean((task.resolutionPhotoUrl ?? '').trim() || (task.resolutionPhotoBase64 ?? '').trim())
+// DESHABILITADO por pedido de Nicolas (2026-09): ya no se exige evidencia
+// fotografica para resolver un desvio ni para poder cerrar la OT. Se deja la
+// funcion (sin usar) por si en el futuro se quiere volver a exigir.
+// const hasResolutionEvidence = (task: WorkOrderDeviation): boolean =>
+//   Boolean((task.resolutionPhotoUrl ?? '').trim() || (task.resolutionPhotoBase64 ?? '').trim())
 
 export const WorkOrdersPage = () => {
   const [searchParams] = useSearchParams()
@@ -60,6 +63,8 @@ export const WorkOrdersPage = () => {
   const [resolutionNote, setResolutionNote] = useState('')
   const [resolutionPhoto, setResolutionPhoto] = useState<File | null>(null)
   const [resolutionPhotoBase64, setResolutionPhotoBase64] = useState('')
+  const [postponeTarget, setPostponeTarget] = useState<{ workOrderId: string; deviation: WorkOrderDeviation } | null>(null)
+  const [postponeNote, setPostponeNote] = useState('')
   const [draftChecked, setDraftChecked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -472,15 +477,75 @@ export const WorkOrdersPage = () => {
     setResolutionPhotoBase64(deviation.resolutionPhotoBase64 ?? '')
   }
 
+  const handlePostponeDeviation = (workOrderId: string, deviation: WorkOrderDeviation) => {
+    setPostponeTarget({ workOrderId, deviation })
+    setPostponeNote(deviation.postponeNote ?? '')
+  }
+
+  const handleSavePostponement = () => {
+    if (!postponeTarget) {
+      return
+    }
+
+    if (!postponeNote.trim()) {
+      setAppError('El motivo de la postergacion es obligatorio.')
+      return
+    }
+
+    const updatedWorkOrders: WorkOrder[] = workOrders.map((order) => {
+      if (order.id !== postponeTarget.workOrderId) {
+        return order
+      }
+
+      const normalizedTasks = normalizeTaskList(order.taskList)
+      const nextTasks: WorkOrderDeviation[] = normalizedTasks.map((task) =>
+        task.id === postponeTarget.deviation.id
+          ? {
+              ...task,
+              status: 'POSTERGADA' as WorkOrderDeviationStatus,
+              postponeNote: postponeNote.trim(),
+              postponedAt: new Date().toISOString(),
+            }
+          : task,
+      )
+
+      return { ...order, taskList: nextTasks }
+    })
+
+    setWorkOrders(updatedWorkOrders)
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      const updatedWorkOrder = updatedWorkOrders.find((order) => order.id === postponeTarget.workOrderId)
+      if (updatedWorkOrder) {
+        apiRequest(`/work-orders/${postponeTarget.workOrderId}`, { method: 'PATCH', body: updatedWorkOrder }).catch(
+          async (error) => {
+            const message = String((error as Error)?.message ?? '')
+            if (message.startsWith('404')) {
+              await apiRequest('/work-orders', { method: 'POST', body: updatedWorkOrder })
+            }
+          },
+        )
+      }
+    }
+
+    setPostponeTarget(null)
+    setPostponeNote('')
+  }
+
   const handleSaveResolution = async () => {
     if (!resolveTarget) {
       return
     }
 
-    if (!resolutionNote.trim() || (!resolutionPhoto && !resolutionPhotoBase64)) {
-      setAppError('La foto y la descripcion de la reparacion son obligatorias.')
+    if (!resolutionNote.trim()) {
+      setAppError('La descripcion de la reparacion es obligatoria.')
       return
     }
+    // Foto obligatoria: DESHABILITADO por pedido de Nicolas (2026-09).
+    // if (!resolutionPhoto && !resolutionPhotoBase64) {
+    //   setAppError('La foto y la descripcion de la reparacion son obligatorias.')
+    //   return
+    // }
 
     const readFileAsDataUrl = (file: File): Promise<string> =>
       new Promise((resolve, reject) => {
@@ -558,9 +623,12 @@ export const WorkOrdersPage = () => {
     clearResolutionDraft()
   }
 
+  // Las tareas postergadas nunca se auto-resuelven por jerarquia: quedan
+  // POSTERGADA a proposito para que la proxima inspeccion de la unidad las
+  // vuelva a traer (ver backend/src/routes/audits.ts).
   const autoResolveTasks = (tasks: WorkOrderDeviation[]): WorkOrderDeviation[] =>
     tasks.map((task) =>
-      task.status === 'RESOLVED'
+      task.status !== 'PENDING'
         ? task
         : {
             ...task,
@@ -575,7 +643,9 @@ export const WorkOrdersPage = () => {
     if (!workOrder) return
 
     const normalizedTasks = normalizeTaskList(workOrder.taskList)
-    const blockingTasks = normalizedTasks.filter((task) => task.status !== 'RESOLVED' || !hasResolutionEvidence(task))
+    // Solo las tareas PENDING bloquean el cierre: RESOLVED (ya no exige foto,
+    // ver mas arriba) y POSTERGADA (a proposito, ver autoResolveTasks) no.
+    const blockingTasks = normalizedTasks.filter((task) => task.status === 'PENDING')
 
     if (blockingTasks.length > 0 && !isHighHierarchy) {
       const sample = blockingTasks
@@ -583,7 +653,7 @@ export const WorkOrdersPage = () => {
         .map((task) => `${task.section} / ${task.item}`)
         .join(' | ')
       setAppError(
-        `No podes cerrar la OT. Hay ${blockingTasks.length} desvio(s) pendiente(s) o sin evidencia fotografica.${sample ? ` Ej: ${sample}` : ''}`,
+        `No podes cerrar la OT. Hay ${blockingTasks.length} desvio(s) pendiente(s). Resolvelos o postergalos para poder cerrar.${sample ? ` Ej: ${sample}` : ''}`,
       )
       return
     }
@@ -782,6 +852,7 @@ export const WorkOrdersPage = () => {
                       onDelete={setWorkOrderIdPendingDelete}
                       onExportPdf={handleExportPdf}
                       onResolveDeviation={handleResolveDeviation}
+                      onPostponeDeviation={handlePostponeDeviation}
                       canEdit={canEdit}
                       canDelete={canDelete}
                     />
@@ -846,7 +917,7 @@ export const WorkOrdersPage = () => {
             </label>
 
             <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
-              Foto de la reparacion (obligatoria)
+              Foto de la reparacion (opcional)
               <input
                 type="file"
                 accept="image/*"
@@ -886,6 +957,66 @@ export const WorkOrdersPage = () => {
                 className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
               >
                 Guardar resolucion
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {postponeTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Postergar desvio</h3>
+                <p className="text-xs text-slate-500">
+                  {postponeTarget.deviation.section} - {postponeTarget.deviation.item}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPostponeTarget(null)
+                  setPostponeNote('')
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-500">
+              La tarea queda postergada (no bloquea el cierre de la OT). Si sigue pendiente, se va a agregar de nuevo
+              automaticamente en la proxima inspeccion de esta unidad.
+            </p>
+
+            <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              Motivo de la postergacion
+              <textarea
+                rows={3}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                value={postponeNote}
+                onChange={(event) => setPostponeNote(event.target.value)}
+              />
+            </label>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPostponeTarget(null)
+                  setPostponeNote('')
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePostponement}
+                className="rounded-lg bg-amber-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-500"
+              >
+                Postergar
               </button>
             </div>
           </div>

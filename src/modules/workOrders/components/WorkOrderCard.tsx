@@ -8,6 +8,7 @@ interface WorkOrderCardProps {
   onDelete: (workOrderId: string) => void
   onExportPdf: (workOrderId: string) => void
   onResolveDeviation: (workOrderId: string, deviation: WorkOrderDeviation) => void
+  onPostponeDeviation: (workOrderId: string, deviation: WorkOrderDeviation) => void
   canEdit?: boolean
   canDelete?: boolean
 }
@@ -18,6 +19,7 @@ export const WorkOrderCard = ({
   onDelete,
   onExportPdf,
   onResolveDeviation,
+  onPostponeDeviation,
   canEdit = true,
   canDelete = true,
 }: WorkOrderCardProps) => (
@@ -75,9 +77,14 @@ export const WorkOrderCard = ({
 
     <div className="mt-4 space-y-2">
       {item.taskList.map((task) => {
-        const hasEvidence = Boolean((task.resolutionPhotoUrl ?? '').trim() || (task.resolutionPhotoBase64 ?? '').trim())
         const isResolved = task.status === 'RESOLVED'
-        const canResolveTask = !isResolved || !hasEvidence
+        const isPostponed = task.status === 'POSTERGADA'
+        const statusLabel = isResolved ? 'RESUELTO' : isPostponed ? 'POSTERGADA' : 'PENDIENTE'
+        const statusClass = isResolved
+          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+          : isPostponed
+            ? 'border-amber-300 bg-amber-50 text-amber-700'
+            : 'border-rose-300 bg-rose-50 text-rose-700'
 
         return (
         <div key={task.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
@@ -86,27 +93,28 @@ export const WorkOrderCard = ({
               <p className="font-semibold text-slate-900">{task.section}</p>
               <p className="text-slate-600">{task.item}</p>
               {task.observation ? <p className="text-slate-500">Obs: {task.observation}</p> : null}
-              {isResolved && !hasEvidence ? (
-                <p className="text-amber-700">Falta evidencia fotografica para cerrar la OT.</p>
+              {isPostponed && task.postponeNote ? (
+                <p className="text-amber-700">Motivo de postergacion: {task.postponeNote}</p>
               ) : null}
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
-                  isResolved
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                    : 'border-rose-300 bg-rose-50 text-rose-700'
-                }`}
-              >
-                {isResolved ? 'RESUELTO' : 'PENDIENTE'}
-              </span>
-              {canResolveTask ? (
+              <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${statusClass}`}>{statusLabel}</span>
+              {!isResolved ? (
                 <button
                   type="button"
                   onClick={() => onResolveDeviation(item.id, task)}
                   className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
                 >
-                  {isResolved ? 'Completar evidencia' : 'Resolver'}
+                  Resolver
+                </button>
+              ) : null}
+              {!isResolved && !isPostponed ? (
+                <button
+                  type="button"
+                  onClick={() => onPostponeDeviation(item.id, task)}
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Postergar
                 </button>
               ) : null}
             </div>

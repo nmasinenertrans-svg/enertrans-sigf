@@ -331,7 +331,7 @@ export interface AuditRecord {
   syncError?: string
 }
 
-export type WorkOrderDeviationStatus = 'PENDING' | 'RESOLVED'
+export type WorkOrderDeviationStatus = 'PENDING' | 'RESOLVED' | 'POSTERGADA'
 
 export interface WorkOrderDeviation {
   id: string
@@ -343,6 +343,12 @@ export interface WorkOrderDeviation {
   resolutionPhotoBase64: string
   resolutionPhotoUrl: string
   resolvedAt?: string
+  postponeNote?: string
+  postponedAt?: string
+  // Cuando una tarea postergada se traslada a una OT nueva (al generarse otra
+  // inspeccion para la misma unidad), se marca con el id de esa OT nueva para
+  // no volver a arrastrarla de nuevo en inspecciones futuras.
+  carriedForwardToWorkOrderId?: string | null
 }
 
 export interface WorkOrder {

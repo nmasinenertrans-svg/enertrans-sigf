@@ -192,7 +192,7 @@ export const exportWorkOrderPdf = async ({ workOrder, unit }: WorkOrderPdfPayloa
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8)
     pdf.setTextColor(17, 24, 39)
-    pdf.text(task.status === 'RESOLVED' ? 'OK' : 'MAL', 16, cursorY + 4)
+    pdf.text(task.status === 'RESOLVED' ? 'OK' : task.status === 'POSTERGADA' ? 'POST' : 'MAL', 16, cursorY + 4)
     pdf.text(
       clampText(pdf, task.section || 'GENERAL', deviationsColumns[1].width - 4),
       14 + deviationsColumns[0].width + 2,

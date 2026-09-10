@@ -49,6 +49,9 @@ export const normalizeTaskList = (taskList: WorkOrder['taskList']): WorkOrderDev
       resolutionPhotoBase64: task?.resolutionPhotoBase64 ?? '',
       resolutionPhotoUrl: task?.resolutionPhotoUrl ?? '',
       resolvedAt: task?.resolvedAt,
+      postponeNote: task?.postponeNote ?? '',
+      postponedAt: task?.postponedAt,
+      carriedForwardToWorkOrderId: task?.carriedForwardToWorkOrderId ?? null,
     }
   })
 
