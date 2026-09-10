@@ -42,6 +42,7 @@ export const InvoiceForm = ({
   const [unitSearch, setUnitSearch] = useState('')
   const [inventorySearch, setInventorySearch] = useState('')
   const [supplierSearch, setSupplierSearch] = useState('')
+  const [lineItemUnitSearch, setLineItemUnitSearch] = useState<Record<number, string>>({})
 
   const selectedSupplier = suppliers.find((supplier) => supplier.id === formData.supplierId)
 
@@ -96,6 +97,10 @@ export const InvoiceForm = ({
         ? formData.lineItems.filter((_, itemIndex) => itemIndex !== index)
         : formData.lineItems,
     )
+    // Los indices de las filas siguientes corren uno para atras -- se
+    // resetean las busquedas en curso para no dejar el texto de una fila
+    // pegado a la fila equivocada.
+    setLineItemUnitSearch({})
   }
 
   const lineItemsTotal = formData.lineItems.reduce((sum, item) => sum + parseMoney(item.amountInput), 0)
@@ -439,57 +444,119 @@ export const InvoiceForm = ({
           </label>
 
           {formData.hasLineItems ? (
-            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              {formData.lineItems.map((item, index) => (
-                <div key={index} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-2 md:grid-cols-12">
-                  <select
-                    className={`${inputClassName} md:col-span-3`}
-                    value={item.unitId}
-                    onChange={(event) => updateLineItem(index, 'unitId', event.target.value)}
-                  >
-                    <option value="">Unidad...</option>
-                    {fleetUnits.map((unit) => (
-                      <option key={unit.id} value={unit.id}>
-                        {unit.internalCode} · {unit.brand} {unit.model}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className={`${inputClassName} md:col-span-2`}
-                    value={item.workOrderId}
-                    onChange={(event) => updateLineItem(index, 'workOrderId', event.target.value)}
-                    disabled={!item.unitId}
-                  >
-                    <option value="">Sin OT</option>
-                    {(workOrdersByUnit.get(item.unitId) ?? []).map((workOrder) => (
-                      <option key={workOrder.id} value={workOrder.id}>
-                        {workOrder.code}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className={`${inputClassName} md:col-span-4`}
-                    value={item.description}
-                    onChange={(event) => updateLineItem(index, 'description', event.target.value)}
-                    placeholder="Descripción (ej: RTO, filtro de aceite)"
-                  />
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    className={`${inputClassName} md:col-span-2`}
-                    value={item.amountInput}
-                    onChange={(event) => updateLineItem(index, 'amountInput', event.target.value)}
-                    placeholder="Monto"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeLineItem(index)}
-                    className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 md:col-span-1"
-                  >
-                    Quitar
-                  </button>
-                </div>
-              ))}
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              {formData.lineItems.map((item, index) => {
+                const itemUnit = fleetUnits.find((unit) => unit.id === item.unitId)
+                const itemSearch = lineItemUnitSearch[index] ?? ''
+                const filteredItemUnits = (() => {
+                  const query = itemSearch.trim().toLowerCase()
+                  if (!query) return fleetUnits.slice(0, 8)
+                  return fleetUnits
+                    .filter((unit) => `${unit.internalCode} ${unit.brand} ${unit.model}`.toLowerCase().includes(query))
+                    .slice(0, 8)
+                })()
+
+                return (
+                  <div key={index} className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-500">Item {index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeLineItem(index)}
+                        className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                      >
+                        Quitar item
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-slate-700">Unidad</label>
+                      {itemUnit ? (
+                        <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          <span>
+                            {itemUnit.internalCode} · {itemUnit.brand} {itemUnit.model}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateLineItem(index, 'unitId', '')}
+                            className="font-semibold text-amber-700 hover:underline"
+                          >
+                            Cambiar
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            className={`${inputClassName} mt-1`}
+                            value={itemSearch}
+                            onChange={(event) =>
+                              setLineItemUnitSearch((previous) => ({ ...previous, [index]: event.target.value }))
+                            }
+                            placeholder="Buscar por dominio, marca o modelo..."
+                          />
+                          <div className="mt-1 max-h-32 space-y-1 overflow-y-auto">
+                            {filteredItemUnits.map((unit) => (
+                              <button
+                                key={unit.id}
+                                type="button"
+                                onClick={() => {
+                                  updateLineItem(index, 'unitId', unit.id)
+                                  setLineItemUnitSearch((previous) => ({ ...previous, [index]: '' }))
+                                }}
+                                className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                              >
+                                {unit.internalCode} · {unit.brand} {unit.model}
+                              </button>
+                            ))}
+                            {filteredItemUnits.length === 0 ? (
+                              <p className="px-1 text-xs text-slate-400">Sin resultados.</p>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700 sm:col-span-1">
+                        OT (opcional)
+                        <select
+                          className={inputClassName}
+                          value={item.workOrderId}
+                          onChange={(event) => updateLineItem(index, 'workOrderId', event.target.value)}
+                          disabled={!item.unitId}
+                        >
+                          <option value="">Sin OT</option>
+                          {(workOrdersByUnit.get(item.unitId) ?? []).map((workOrder) => (
+                            <option key={workOrder.id} value={workOrder.id}>
+                              {workOrder.code}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700 sm:col-span-1">
+                        Monto
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className={inputClassName}
+                          value={item.amountInput}
+                          onChange={(event) => updateLineItem(index, 'amountInput', event.target.value)}
+                          placeholder="Monto"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700 sm:col-span-1">
+                        Descripción
+                        <input
+                          className={inputClassName}
+                          value={item.description}
+                          onChange={(event) => updateLineItem(index, 'description', event.target.value)}
+                          placeholder="Ej: RTO, filtro de aceite"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )
+              })}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <button
                   type="button"
