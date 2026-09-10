@@ -19,8 +19,8 @@ type TaskFormData = {
   status: TaskStatus
   priority: TaskPriority
   type: TaskType
-  unitId: string
-  assignedToUserId: string
+  unitIds: string[]
+  assignedToUserIds: string[]
   assignedToExternalName: string
   isInTaskBank: boolean
   startDate: string
@@ -80,8 +80,8 @@ const createEmptyForm = (): TaskFormData => ({
   status: 'UNASSIGNED',
   priority: 'MEDIUM',
   type: 'OTRA',
-  unitId: '',
-  assignedToUserId: '',
+  unitIds: [],
+  assignedToUserIds: [],
   assignedToExternalName: '',
   isInTaskBank: true,
   startDate: todayDateInputValue(),
@@ -127,6 +127,20 @@ const formatDateOnly = (value?: string | null) => {
   const month = String(date.getUTCMonth() + 1).padStart(2, '0')
   return `${day}/${month}/${date.getUTCFullYear()}`
 }
+
+// Tareas viejas solo tenian un asignado/unidad sueltos (assignedToUserId/
+// unitId); las nuevas usan los arrays (assignedToUserIds/unitIds). Estas dos
+// funciones leen cualquiera de las dos formas sin repetir el fallback en
+// cada lugar que necesita saber "a quien esta asignada" / "que unidades".
+const getTaskAssigneeIds = (task: TaskRecord): string[] =>
+  task.assignedToUserIds && task.assignedToUserIds.length > 0
+    ? task.assignedToUserIds
+    : task.assignedToUserId
+      ? [task.assignedToUserId]
+      : []
+
+const getTaskUnitIds = (task: TaskRecord): string[] =>
+  task.unitIds && task.unitIds.length > 0 ? task.unitIds : task.unitId ? [task.unitId] : []
 
 const isTaskOverdue = (task: TaskRecord): boolean => {
   if (!task.estimatedFinishDate || task.status === 'DONE' || task.status === 'CANCELED') {
@@ -198,17 +212,37 @@ export const TasksPage = () => {
 
   const fleetUnitById = useMemo(() => new Map(fleetUnits.map((unit) => [unit.id, unit])), [fleetUnits])
 
-  const selectedFormUnit = formData.unitId ? fleetUnitById.get(formData.unitId) : undefined
+  const selectedFormUnits = formData.unitIds.map((id) => fleetUnitById.get(id)).filter((unit): unit is (typeof fleetUnits)[number] => Boolean(unit))
 
   const filteredFormUnits = useMemo(() => {
     const query = unitSearch.trim().toLowerCase()
+    const available = fleetUnits.filter((unit) => !formData.unitIds.includes(unit.id))
     if (!query) {
-      return fleetUnits.slice(0, 8)
+      return available.slice(0, 8)
     }
-    return fleetUnits
+    return available
       .filter((unit) => `${unit.internalCode} ${unit.brand} ${unit.model}`.toLowerCase().includes(query))
       .slice(0, 8)
-  }, [fleetUnits, unitSearch])
+  }, [fleetUnits, unitSearch, formData.unitIds])
+
+  const toggleFormAssignee = (userId: string) => {
+    setFormData((previous) => ({
+      ...previous,
+      assignedToUserIds: previous.assignedToUserIds.includes(userId)
+        ? previous.assignedToUserIds.filter((id) => id !== userId)
+        : [...previous.assignedToUserIds, userId],
+      assignedToExternalName: '',
+    }))
+  }
+
+  const addFormUnit = (unitId: string) => {
+    setFormData((previous) => ({ ...previous, unitIds: [...previous.unitIds, unitId] }))
+    setUnitSearch('')
+  }
+
+  const removeFormUnit = (unitId: string) => {
+    setFormData((previous) => ({ ...previous, unitIds: previous.unitIds.filter((id) => id !== unitId) }))
+  }
 
   // Separada de useAsyncLoader a proposito: el refresco automatico de fondo
   // (cada tanto, o al recuperar foco) NO tiene que tapar la lista entera con
@@ -329,8 +363,10 @@ export const TasksPage = () => {
         status: formData.status,
         priority: formData.priority,
         type: formData.type,
-        unitId: formData.unitId || null,
-        assignedToUserId: formData.assignedToUserId || null,
+        unitId: formData.unitIds[0] ?? null,
+        unitIds: formData.unitIds,
+        assignedToUserId: formData.assignedToUserIds[0] ?? null,
+        assignedToUserIds: formData.assignedToUserIds,
         assignedToExternalName: formData.assignedToExternalName.trim(),
         isInTaskBank: formData.isInTaskBank,
         startDate: formData.startDate || null,
@@ -346,11 +382,13 @@ export const TasksPage = () => {
           typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
             ? crypto.randomUUID()
             : `task-${Date.now()}-${Math.round(Math.random() * 10000)}`
-        const assignee = payload.assignedToUserId ? users.find((user) => user.id === payload.assignedToUserId) : undefined
+        const assignedUsers = users.filter((user) => payload.assignedToUserIds.includes(user.id))
         const localTask: TaskRecord = {
           ...payload,
           id: localId,
-          assignedToUserName: assignee?.fullName ?? '',
+          assignedToUserName: assignedUsers[0]?.fullName ?? '',
+          assignedToUserNames: assignedUsers.map((user) => user.fullName),
+          unitLabels: formData.unitIds.map((id) => fleetUnitById.get(id)?.internalCode ?? '').filter(Boolean),
           createdByUserId: currentUser?.id ?? '',
           createdByUserName: currentUser?.fullName ?? '',
           events: [],
@@ -399,8 +437,13 @@ export const TasksPage = () => {
       status: task.status,
       priority: task.priority,
       type: task.type ?? 'OTRA',
-      unitId: task.unitId ?? '',
-      assignedToUserId: task.assignedToUserId ?? '',
+      unitIds: task.unitIds && task.unitIds.length > 0 ? task.unitIds : task.unitId ? [task.unitId] : [],
+      assignedToUserIds:
+        task.assignedToUserIds && task.assignedToUserIds.length > 0
+          ? task.assignedToUserIds
+          : task.assignedToUserId
+            ? [task.assignedToUserId]
+            : [],
       assignedToExternalName: task.assignedToExternalName ?? '',
       isInTaskBank: Boolean(task.isInTaskBank),
       startDate: toDateInputValue(task.startDate) || toDateInputValue(task.createdAt),
@@ -512,7 +555,7 @@ export const TasksPage = () => {
   }
 
   const handleOpenTaskDetail = (task: TaskRecord) => {
-    if (!currentUser || task.assignedToUserId !== currentUser.id || task.viewedAt || markingViewedTaskIds.has(task.id)) {
+    if (!currentUser || !getTaskAssigneeIds(task).includes(currentUser.id) || task.viewedAt || markingViewedTaskIds.has(task.id)) {
       return
     }
     setMarkingViewedTaskIds((previous) => new Set(previous).add(task.id))
@@ -535,10 +578,10 @@ export const TasksPage = () => {
       if (typeFilter !== 'ALL' && task.type !== typeFilter) {
         return false
       }
-      if (unitFilter !== 'ALL' && (task.unitId ?? '') !== unitFilter) {
+      if (unitFilter !== 'ALL' && !getTaskUnitIds(task).includes(unitFilter)) {
         return false
       }
-      if (assigneeFilter !== 'ALL' && (task.assignedToUserId ?? '') !== assigneeFilter) {
+      if (assigneeFilter !== 'ALL' && !getTaskAssigneeIds(task).includes(assigneeFilter)) {
         return false
       }
       if (bankFilter === 'BANK' && !task.isInTaskBank) {
@@ -550,19 +593,19 @@ export const TasksPage = () => {
       if (!query) {
         return true
       }
-      const unit = task.unitId ? fleetUnitById.get(task.unitId) : undefined
+      const units = getTaskUnitIds(task).map((id) => fleetUnitById.get(id)).filter((unit): unit is (typeof fleetUnits)[number] => Boolean(unit))
       const haystack = [
         task.title,
         task.description,
         task.createdByUserName,
-        task.assignedToUserName,
+        ...(task.assignedToUserNames ?? [task.assignedToUserName]),
         task.assignedToExternalName,
         statusLabelMap[task.status],
         priorityLabelMap[task.priority],
         taskTypeLabelMap[task.type],
-        unit?.internalCode,
-        unit?.brand,
-        unit?.model,
+        ...units.map((unit) => unit.internalCode),
+        ...units.map((unit) => unit.brand),
+        ...units.map((unit) => unit.model),
       ]
         .join(' ')
         .toLowerCase()
@@ -571,7 +614,7 @@ export const TasksPage = () => {
   }, [tasks, statusFilter, priorityFilter, typeFilter, unitFilter, assigneeFilter, bankFilter, searchTerm, fleetUnitById])
 
   const bankTasks = useMemo(
-    () => filteredTasks.filter((task) => task.isInTaskBank && !task.assignedToUserId),
+    () => filteredTasks.filter((task) => task.isInTaskBank && getTaskAssigneeIds(task).length === 0),
     [filteredTasks],
   )
   const assignedTasks = useMemo(() => filteredTasks.filter((task) => !task.isInTaskBank), [filteredTasks])
@@ -592,12 +635,16 @@ export const TasksPage = () => {
   const currentUserCanTake = currentUser?.role === 'AUDITOR' || currentUser?.role === 'MECANICO'
 
   const renderTaskCard = (task: TaskRecord) => {
-    const canEditThisTask = isManager || (currentUser?.id && task.assignedToUserId === currentUser.id && can('TASKS', 'edit'))
+    const taskAssigneeIds = getTaskAssigneeIds(task)
+    const taskUnitIds = getTaskUnitIds(task)
+    const taskUnits = taskUnitIds.map((id) => fleetUnitById.get(id)).filter((unit): unit is (typeof fleetUnits)[number] => Boolean(unit))
+    const assigneeNames = task.assignedToUserNames && task.assignedToUserNames.length > 0 ? task.assignedToUserNames : task.assignedToUserName ? [task.assignedToUserName] : []
+    const canEditThisTask = isManager || (currentUser?.id && taskAssigneeIds.includes(currentUser.id) && can('TASKS', 'edit'))
     const canCommentOnTask =
       isManager ||
       Boolean(
         currentUser?.id &&
-          (task.assignedToUserId === currentUser.id ||
+          (taskAssigneeIds.includes(currentUser.id) ||
             task.assignedByUserId === currentUser.id ||
             task.createdByUserId === currentUser.id),
       )
@@ -616,11 +663,14 @@ export const TasksPage = () => {
               <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
                 {taskTypeLabelMap[task.type]}
               </span>
-              {task.unitId && fleetUnitById.get(task.unitId) ? (
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                  {fleetUnitById.get(task.unitId)?.internalCode}
+              {taskUnits.map((unit) => (
+                <span
+                  key={unit.id}
+                  className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
+                >
+                  {unit.internalCode}
                 </span>
-              ) : null}
+              ))}
               {overdue ? (
                 <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
                   Vencida
@@ -631,8 +681,11 @@ export const TasksPage = () => {
             <p className="mt-1 text-sm text-slate-600">{task.description}</p>
             <p className="mt-2 text-xs text-slate-500">
               Asignada a{' '}
-              {task.assignedToUserName ||
-                (task.assignedToExternalName ? `${task.assignedToExternalName} (externo)` : 'Sin asignar')}{' '}
+              {assigneeNames.length > 0
+                ? assigneeNames.join(', ')
+                : task.assignedToExternalName
+                  ? `${task.assignedToExternalName} (externo)`
+                  : 'Sin asignar'}{' '}
               | Creada por {task.createdByUserName || task.createdByUserId}
             </p>
             <p className="mt-1 text-xs text-slate-500">
@@ -646,7 +699,7 @@ export const TasksPage = () => {
                   : `En curso desde ${formatDateTime(task.assignedAt)}`}
               </p>
             ) : null}
-            {task.assignedToUserId && isTaskAdmin ? (
+            {taskAssigneeIds.length > 0 && isTaskAdmin ? (
               <p className="mt-1 text-xs">
                 {task.viewedAt ? (
                   <span className="font-semibold text-emerald-700">
@@ -911,45 +964,47 @@ export const TasksPage = () => {
               </div>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
-                Unidad relacionada (opcional)
-                {selectedFormUnit ? (
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    <span>
-                      {selectedFormUnit.internalCode} · {selectedFormUnit.brand} {selectedFormUnit.model}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleFormChange('unitId', '')}
-                      className="font-semibold text-amber-700 hover:underline"
-                    >
-                      Quitar vínculo
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      value={unitSearch}
-                      onChange={(event) => setUnitSearch(event.target.value)}
-                      placeholder="Buscar por dominio, marca o modelo..."
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
-                    />
-                    <div className="max-h-32 space-y-1 overflow-y-auto">
-                      {filteredFormUnits.map((unit) => (
+                Unidades relacionadas (opcional, se pueden elegir varias)
+                {selectedFormUnits.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedFormUnits.map((unit) => (
+                      <span
+                        key={unit.id}
+                        className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800"
+                      >
+                        {unit.internalCode} · {unit.brand} {unit.model}
                         <button
-                          key={unit.id}
                           type="button"
-                          onClick={() => handleFormChange('unitId', unit.id)}
-                          className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                          onClick={() => removeFormUnit(unit.id)}
+                          className="font-semibold text-amber-700 hover:underline"
                         >
-                          {unit.internalCode} · {unit.brand} {unit.model}
+                          Quitar
                         </button>
-                      ))}
-                      {filteredFormUnits.length === 0 ? (
-                        <p className="px-1 text-xs text-slate-400">Sin resultados.</p>
-                      ) : null}
-                    </div>
-                  </>
-                )}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <input
+                  value={unitSearch}
+                  onChange={(event) => setUnitSearch(event.target.value)}
+                  placeholder="Buscar por dominio, marca o modelo..."
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                />
+                <div className="max-h-32 space-y-1 overflow-y-auto">
+                  {filteredFormUnits.map((unit) => (
+                    <button
+                      key={unit.id}
+                      type="button"
+                      onClick={() => addFormUnit(unit.id)}
+                      className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100"
+                    >
+                      {unit.internalCode} · {unit.brand} {unit.model}
+                    </button>
+                  ))}
+                  {filteredFormUnits.length === 0 ? (
+                    <p className="px-1 text-xs text-slate-400">Sin resultados.</p>
+                  ) : null}
+                </div>
               </label>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -984,27 +1039,28 @@ export const TasksPage = () => {
               </label>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
-                Asignar a usuario del sistema (opcional)
-                <select
-                  value={formData.assignedToUserId}
-                  onChange={(event) => {
-                    const value = event.target.value
-                    setFormData((previous) => ({
-                      ...previous,
-                      assignedToUserId: value,
-                      assignedToExternalName: value ? '' : previous.assignedToExternalName,
-                    }))
-                  }}
-                  disabled={formData.isInTaskBank || Boolean(formData.assignedToExternalName)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 disabled:bg-slate-100"
-                >
-                  <option value="">Sin asignar</option>
-                  {assignableUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.fullName}
-                    </option>
-                  ))}
-                </select>
+                Asignar a usuarios del sistema (opcional, se pueden elegir varios)
+                <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  {assignableUsers.map((user) => {
+                    const isSelected = formData.assignedToUserIds.includes(user.id)
+                    return (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => toggleFormAssignee(user.id)}
+                        disabled={formData.isInTaskBank}
+                        className={`block w-full rounded-lg border px-3 py-1.5 text-left text-xs disabled:opacity-50 ${
+                          isSelected
+                            ? 'border-amber-300 bg-amber-50 text-amber-800'
+                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : ''}
+                        {user.fullName}
+                      </button>
+                    )
+                  })}
+                </div>
               </label>
 
               <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
@@ -1016,10 +1072,10 @@ export const TasksPage = () => {
                     setFormData((previous) => ({
                       ...previous,
                       assignedToExternalName: value,
-                      assignedToUserId: value ? '' : previous.assignedToUserId,
+                      assignedToUserIds: value ? [] : previous.assignedToUserIds,
                     }))
                   }}
-                  disabled={formData.isInTaskBank || Boolean(formData.assignedToUserId)}
+                  disabled={formData.isInTaskBank || formData.assignedToUserIds.length > 0}
                   placeholder="Nombre y apellido del contratista/tercero"
                   className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400 disabled:bg-slate-100"
                 />
@@ -1196,11 +1252,17 @@ export const TasksPage = () => {
                         <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
                           {taskTypeLabelMap[task.type]}
                         </span>
-                        {task.unitId && fleetUnitById.get(task.unitId) ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                            {fleetUnitById.get(task.unitId)?.internalCode}
-                          </span>
-                        ) : null}
+                        {getTaskUnitIds(task).map((unitId) => {
+                          const unit = fleetUnitById.get(unitId)
+                          return unit ? (
+                            <span
+                              key={unitId}
+                              className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
+                            >
+                              {unit.internalCode}
+                            </span>
+                          ) : null
+                        })}
                       </div>
                       <p className="mt-2 text-sm font-semibold text-slate-900">{task.title || 'Tarea sin titulo'}</p>
                       <p className="mt-1 text-sm text-slate-600">{task.description}</p>

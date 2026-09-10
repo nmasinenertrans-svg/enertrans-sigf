@@ -30,7 +30,9 @@ const createTaskSchema = z.object({
   priority: z.enum(taskPriorityValues).optional().default('MEDIUM'),
   type: z.enum(taskTypeValues).optional().default('OTRA'),
   unitId: z.string().nullable().optional(),
+  unitIds: z.array(z.string()).optional(),
   assignedToUserId: z.string().uuid().nullable().optional(),
+  assignedToUserIds: z.array(z.string().uuid()).optional(),
   assignedToExternalName: z.string().max(120).optional().default(''),
   isInTaskBank: z.boolean().optional().default(false),
   startDate: z.string().nullable().optional(),
@@ -44,12 +46,28 @@ const updateTaskSchema = z.object({
   priority: z.enum(taskPriorityValues).optional(),
   type: z.enum(taskTypeValues).optional(),
   unitId: z.string().nullable().optional(),
+  unitIds: z.array(z.string()).optional(),
   assignedToUserId: z.string().uuid().nullable().optional(),
+  assignedToUserIds: z.array(z.string().uuid()).optional(),
   assignedToExternalName: z.string().max(120).optional(),
   isInTaskBank: z.boolean().optional(),
   startDate: z.string().nullable().optional(),
   estimatedFinishDate: z.string().nullable().optional(),
 })
+
+// Unifica el campo viejo (singular) con el nuevo (array): si viene el array
+// se usa tal cual, si no se arma un array de 0 o 1 elemento con el singular
+// -- asi conviven tareas viejas (un solo asignado/unidad) con las nuevas
+// (multiples) sin duplicar logica en cada lugar que lee esto.
+const normalizeIdArray = (arrayValue: unknown, singularValue: string | null | undefined): string[] => {
+  if (Array.isArray(arrayValue)) {
+    const cleaned = arrayValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    if (cleaned.length > 0) {
+      return Array.from(new Set(cleaned))
+    }
+  }
+  return singularValue ? [singularValue] : []
+}
 
 const parseOptionalDate = (value: string | null | undefined): Date | null => {
   if (!value) {
@@ -79,10 +97,15 @@ const hasFullTaskVisibility = (username: string) => taskFullVisibilityUsernames.
 
 const canAccessTask = (
   actor: { id: string; role: UserRole },
-  task: { assignedToUserId: string | null; assignedByUserId: string | null; createdByUserId: string },
+  task: {
+    assignedToUserId: string | null
+    assignedToUserIds?: unknown
+    assignedByUserId: string | null
+    createdByUserId: string
+  },
 ): boolean =>
   isManagerRole(actor.role) ||
-  task.assignedToUserId === actor.id ||
+  normalizeIdArray(task.assignedToUserIds, task.assignedToUserId).includes(actor.id) ||
   task.assignedByUserId === actor.id ||
   task.createdByUserId === actor.id
 
@@ -119,7 +142,11 @@ const computeTaskDuration = (events: Array<{ toStatus: string | null; createdAt:
   return { assignedAt, finishedAt, durationMinutes }
 }
 
-const mapTask = (task: any) => {
+const mapTask = (
+  task: any,
+  userNameById: Map<string, string> = new Map(),
+  unitCodeById: Map<string, string> = new Map(),
+) => {
   const events = Array.isArray(task.events)
     ? task.events.map((event: any) => ({
         id: event.id,
@@ -137,6 +164,11 @@ const mapTask = (task: any) => {
     : []
   const { assignedAt, finishedAt, durationMinutes } = computeTaskDuration(events)
 
+  const assignedToUserIds = normalizeIdArray(task.assignedToUserIds, task.assignedToUserId ?? null)
+  const unitIds = normalizeIdArray(task.unitIds, task.unitId ?? null)
+  const assignedToUserNames = assignedToUserIds.map((id) => userNameById.get(id) ?? task.assignedTo?.fullName ?? '')
+  const unitLabels = unitIds.map((id) => unitCodeById.get(id) ?? '')
+
   return {
     id: task.id,
     title: task.title ?? '',
@@ -144,9 +176,13 @@ const mapTask = (task: any) => {
     status: task.status,
     priority: task.priority,
     type: task.type ?? 'OTRA',
-    unitId: task.unitId ?? null,
-    assignedToUserId: task.assignedToUserId ?? null,
-    assignedToUserName: task.assignedTo?.fullName ?? '',
+    unitId: unitIds[0] ?? null,
+    unitIds,
+    unitLabels,
+    assignedToUserId: assignedToUserIds[0] ?? null,
+    assignedToUserIds,
+    assignedToUserName: assignedToUserNames[0] ?? '',
+    assignedToUserNames,
     assignedToExternalName: task.assignedToExternalName ?? '',
     assignedByUserId: task.assignedByUserId ?? null,
     createdByUserId: task.createdByUserId,
@@ -164,6 +200,32 @@ const mapTask = (task: any) => {
     finishedAt,
     durationMinutes,
     events,
+  }
+}
+
+// Trae nombres de usuarios/codigos de unidad para una tanda de tareas de una
+// sola vez (en vez de una consulta por tarea) para armar assignedToUserNames/
+// unitLabels en mapTask.
+const buildTaskLabelMaps = async (tasks: Array<{ assignedToUserIds: unknown; assignedToUserId: string | null; unitIds: unknown; unitId: string | null }>) => {
+  const userIds = new Set<string>()
+  const unitIds = new Set<string>()
+  tasks.forEach((task) => {
+    normalizeIdArray(task.assignedToUserIds, task.assignedToUserId).forEach((id) => userIds.add(id))
+    normalizeIdArray(task.unitIds, task.unitId).forEach((id) => unitIds.add(id))
+  })
+
+  const [users, units] = await Promise.all([
+    userIds.size > 0
+      ? prisma.user.findMany({ where: { id: { in: Array.from(userIds) } }, select: { id: true, fullName: true } })
+      : Promise.resolve([]),
+    unitIds.size > 0
+      ? prisma.fleetUnit.findMany({ where: { id: { in: Array.from(unitIds) } }, select: { id: true, internalCode: true } })
+      : Promise.resolve([]),
+  ])
+
+  return {
+    userNameById: new Map(users.map((user) => [user.id, user.fullName])),
+    unitCodeById: new Map(units.map((unit) => [unit.id, unit.internalCode])),
   }
 }
 
@@ -242,29 +304,51 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
   }
 
   try {
-    // Se marca "vista" automaticamente apenas el asignado consulta su lista de
-    // tareas, no hace falta que abra a mano el detalle/historico.
-    await prisma.task.updateMany({
-      where: { assignedToUserId: actor.id, viewedAt: null },
-      data: { viewedAt: new Date(), viewedByUserId: actor.id },
-    })
-
     const { unitId } = req.query
     const where: Record<string, unknown> = {}
     if (typeof unitId === 'string' && unitId) {
       where.unitId = unitId
     }
-    // Solo un grupo acotado de usuarios ve el listado completo de tareas de todos.
-    // El resto ve unicamente el banco (disponibles para tomar) y lo que se le asigno a el.
-    if (!hasFullTaskVisibility(actor.username)) {
-      where.OR = [{ isInTaskBank: true }, { assignedToUserId: actor.id }]
-    }
-    const items = await prisma.task.findMany({
+
+    // El filtro de "solo lo mio + banco" no se puede expresar bien contra un
+    // array JSON en Prisma/Postgres de forma simple, asi que se trae todo lo
+    // que matchea el resto de los filtros y se filtra en memoria -- el
+    // volumen de tareas de esta empresa no amerita una consulta SQL mas
+    // compleja.
+    const candidates = await prisma.task.findMany({
       where,
       orderBy: [{ isInTaskBank: 'desc' }, { updatedAt: 'desc' }],
       include: includeTaskRelations,
     })
-    return res.json(items.map(mapTask))
+
+    const hasFullVisibility = hasFullTaskVisibility(actor.username)
+    const items = hasFullVisibility
+      ? candidates
+      : candidates.filter(
+          (task) => task.isInTaskBank || normalizeIdArray(task.assignedToUserIds, task.assignedToUserId).includes(actor.id),
+        )
+
+    // Se marca "vista" automaticamente apenas el asignado consulta su lista de
+    // tareas, no hace falta que abra a mano el detalle/historico.
+    const idsToMarkViewed = items
+      .filter((task) => !task.viewedAt && normalizeIdArray(task.assignedToUserIds, task.assignedToUserId).includes(actor.id))
+      .map((task) => task.id)
+    if (idsToMarkViewed.length > 0) {
+      await prisma.task.updateMany({
+        where: { id: { in: idsToMarkViewed } },
+        data: { viewedAt: new Date(), viewedByUserId: actor.id },
+      })
+      idsToMarkViewed.forEach((id) => {
+        const task = items.find((item) => item.id === id)
+        if (task) {
+          task.viewedAt = new Date()
+          task.viewedByUserId = actor.id
+        }
+      })
+    }
+
+    const { userNameById, unitCodeById } = await buildTaskLabelMaps(items)
+    return res.json(items.map((task) => mapTask(task, userNameById, unitCodeById)))
   } catch (error) {
     console.error('Tasks GET error:', error)
     return res.status(500).json({ message: 'No se pudieron cargar las tareas.' })
@@ -293,20 +377,22 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   if (parsed.data.id) {
     const existing = await prisma.task.findUnique({ where: { id: parsed.data.id }, include: includeTaskRelations })
     if (existing) {
-      return res.status(201).json(mapTask(existing))
+      const { userNameById, unitCodeById } = await buildTaskLabelMaps([existing])
+      return res.status(201).json(mapTask(existing, userNameById, unitCodeById))
     }
   }
 
-  const requestedAssignedTo = parsed.data.assignedToUserId ?? null
-  const assignedExists = requestedAssignedTo
-    ? await prisma.user.findUnique({ where: { id: requestedAssignedTo }, select: { id: true } })
-    : null
   const shouldGoToBank = parsed.data.isInTaskBank
-  const assignedToUserId = shouldGoToBank ? null : assignedExists?.id ?? null
+  const requestedAssignedToIds = parsed.data.assignedToUserIds ?? (parsed.data.assignedToUserId ? [parsed.data.assignedToUserId] : [])
+  const validAssignees = requestedAssignedToIds.length > 0
+    ? await prisma.user.findMany({ where: { id: { in: requestedAssignedToIds } }, select: { id: true } })
+    : []
+  const assignedToUserIds = shouldGoToBank ? [] : validAssignees.map((user) => user.id)
+  const requestedUnitIds = parsed.data.unitIds ?? (parsed.data.unitId ? [parsed.data.unitId] : [])
   // La asignacion a un tercero externo solo aplica si no hay usuario del sistema asignado.
   const assignedToExternalName =
-    shouldGoToBank || assignedToUserId ? '' : normalizeExternalName(parsed.data.assignedToExternalName)
-  const isAssigned = Boolean(assignedToUserId) || Boolean(assignedToExternalName)
+    shouldGoToBank || assignedToUserIds.length > 0 ? '' : normalizeExternalName(parsed.data.assignedToExternalName)
+  const isAssigned = assignedToUserIds.length > 0 || Boolean(assignedToExternalName)
   const assignedByUserId = isAssigned ? actor.id : null
   const status =
     shouldGoToBank
@@ -328,8 +414,10 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           status,
           priority: parsed.data.priority as TaskPriority,
           type: parsed.data.type,
-          unitId: parsed.data.unitId || null,
-          assignedToUserId,
+          unitId: requestedUnitIds[0] ?? null,
+          unitIds: requestedUnitIds,
+          assignedToUserId: assignedToUserIds[0] ?? null,
+          assignedToUserIds,
           assignedToExternalName,
           assignedByUserId,
           createdByUserId: actor.id,
@@ -346,7 +434,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           type: TaskEventType.CREATED,
           actorUserId: actor.id,
           toStatus: status,
-          toAssignedToUserId: assignedToUserId,
+          toAssignedToUserId: assignedToUserIds[0] ?? null,
           notes: '',
         },
       })
@@ -357,8 +445,12 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
             taskId: created.id,
             type: TaskEventType.ASSIGNED,
             actorUserId: actor.id,
-            toAssignedToUserId: assignedToUserId,
-            notes: assignedToExternalName ? `Asignado a: ${assignedToExternalName} (externo)` : '',
+            toAssignedToUserId: assignedToUserIds[0] ?? null,
+            notes: assignedToExternalName
+              ? `Asignado a: ${assignedToExternalName} (externo)`
+              : assignedToUserIds.length > 1
+                ? `Asignado a ${assignedToUserIds.length} personas.`
+                : '',
           },
         })
       } else if (shouldGoToBank) {
@@ -377,15 +469,15 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       })
     })
 
-    if (assignedToUserId) {
-      const taskLabel = parsed.data.title.trim() || parsed.data.description.trim()
-      void sendPushToUser(assignedToUserId, {
+    const taskLabel = parsed.data.title.trim() || parsed.data.description.trim()
+    assignedToUserIds.forEach((userId) => {
+      void sendPushToUser(userId, {
         title: 'Te asignaron una tarea',
         body: taskLabel,
         url: '/tasks',
         tag: 'task-assigned',
       }).catch(() => undefined)
-      void pushUserNotifications([assignedToUserId], {
+      void pushUserNotifications([userId], {
         title: 'Te asignaron una tarea',
         description: taskLabel,
         severity: 'info',
@@ -393,9 +485,10 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
         eventType: 'TASK_ASSIGNED',
         actorUserId: actor.id,
       }).catch(() => undefined)
-    }
+    })
 
-    return res.status(201).json(mapTask(task))
+    const { userNameById, unitCodeById } = await buildTaskLabelMaps([task])
+    return res.status(201).json(mapTask(task, userNameById, unitCodeById))
   } catch (error) {
     if (getErrorCode(error) === 'P2003') {
       return res.status(400).json({ message: 'La unidad vinculada no es valida.' })
@@ -434,8 +527,10 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       return res.status(404).json({ message: 'Tarea no encontrada.' })
     }
 
+    const currentAssignedToUserIds = normalizeIdArray(current.assignedToUserIds, current.assignedToUserId)
+    const currentUnitIds = normalizeIdArray(current.unitIds, current.unitId)
     const isManager = isManagerRole(actor.role)
-    const isSelfAssigned = current.assignedToUserId === actor.id
+    const isSelfAssigned = currentAssignedToUserIds.includes(actor.id)
 
     if (!isManager) {
       const onlyStatusPatch = Object.keys(patchData).every((key) => key === 'status')
@@ -446,8 +541,12 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
 
     const nextTitle = patchData.title !== undefined ? patchData.title.trim() : current.title
     const nextDescription = patchData.description !== undefined ? patchData.description.trim() : current.description
-    let nextAssignedToUserId =
-      patchData.assignedToUserId !== undefined ? (patchData.assignedToUserId ?? null) : (current.assignedToUserId ?? null)
+    let nextAssignedToUserIds =
+      patchData.assignedToUserIds !== undefined
+        ? patchData.assignedToUserIds
+        : patchData.assignedToUserId !== undefined
+          ? (patchData.assignedToUserId ? [patchData.assignedToUserId] : [])
+          : currentAssignedToUserIds
     let nextAssignedToExternalName =
       patchData.assignedToExternalName !== undefined
         ? normalizeExternalName(patchData.assignedToExternalName)
@@ -457,7 +556,12 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     let nextStatus = (patchData.status ?? current.status) as TaskStatus
     const nextPriority = (patchData.priority ?? current.priority) as TaskPriority
     const nextType = patchData.type ?? current.type
-    const nextUnitId = patchData.unitId !== undefined ? (patchData.unitId || null) : current.unitId
+    const nextUnitIds =
+      patchData.unitIds !== undefined
+        ? patchData.unitIds
+        : patchData.unitId !== undefined
+          ? (patchData.unitId ? [patchData.unitId] : [])
+          : currentUnitIds
     let nextStartDate =
       patchData.startDate !== undefined ? (parseOptionalDate(patchData.startDate) ?? current.startDate) : current.startDate
     let nextEstimatedFinishDate =
@@ -470,27 +574,30 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       nextEstimatedFinishDate = current.estimatedFinishDate
     }
 
-    if (isManager && nextAssignedToUserId) {
-      const assignedUser = await prisma.user.findUnique({ where: { id: nextAssignedToUserId }, select: { id: true } })
-      nextAssignedToUserId = assignedUser?.id ?? null
+    if (isManager && nextAssignedToUserIds.length > 0) {
+      const validUsers = await prisma.user.findMany({
+        where: { id: { in: nextAssignedToUserIds } },
+        select: { id: true },
+      })
+      nextAssignedToUserIds = validUsers.map((user) => user.id)
     }
 
     if (!isManager) {
-      nextAssignedToUserId = current.assignedToUserId
+      nextAssignedToUserIds = currentAssignedToUserIds
       nextAssignedToExternalName = current.assignedToExternalName ?? ''
       nextIsInTaskBank = current.isInTaskBank
     }
 
     // La asignacion a un usuario del sistema y a un tercero externo son mutuamente excluyentes.
-    if (nextAssignedToUserId) {
+    if (nextAssignedToUserIds.length > 0) {
       nextAssignedToExternalName = ''
     }
 
-    const wasAssigned = Boolean(current.assignedToUserId) || Boolean(current.assignedToExternalName)
-    const willBeAssigned = Boolean(nextAssignedToUserId) || Boolean(nextAssignedToExternalName)
+    const wasAssigned = currentAssignedToUserIds.length > 0 || Boolean(current.assignedToExternalName)
+    const willBeAssigned = nextAssignedToUserIds.length > 0 || Boolean(nextAssignedToExternalName)
 
     if (nextIsInTaskBank) {
-      nextAssignedToUserId = null
+      nextAssignedToUserIds = []
       nextAssignedToExternalName = ''
       nextAssignedByUserId = null
       nextStatus = TaskStatus.UNASSIGNED
@@ -504,17 +611,22 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       nextAssignedByUserId = null
     } else if (
       isManager &&
-      (patchData.assignedToUserId !== undefined || patchData.assignedToExternalName !== undefined)
+      (patchData.assignedToUserId !== undefined ||
+        patchData.assignedToUserIds !== undefined ||
+        patchData.assignedToExternalName !== undefined)
     ) {
       nextAssignedByUserId = willBeAssigned ? actor.id : null
     }
 
     const closedAt = nextStatus === TaskStatus.DONE ? (current.closedAt ?? new Date()) : null
-    // Si se reasigna a otra persona (o se saca la asignacion), el "visto" de la persona
-    // anterior ya no aplica — vuelve a quedar pendiente hasta que la nueva persona la abra.
-    const reassignedToSomeoneElse = nextAssignedToUserId !== current.assignedToUserId
-    const nextViewedAt = reassignedToSomeoneElse ? null : current.viewedAt
-    const nextViewedByUserId = reassignedToSomeoneElse ? null : current.viewedByUserId
+    // Si cambia quien esta asignado (se agrega o saca gente), el "visto" ya
+    // no aplica tal cual — vuelve a quedar pendiente hasta que alguien de la
+    // nueva lista la abra.
+    const assigneeSetChanged =
+      JSON.stringify([...nextAssignedToUserIds].sort()) !== JSON.stringify([...currentAssignedToUserIds].sort())
+    const nextViewedAt = assigneeSetChanged ? null : current.viewedAt
+    const nextViewedByUserId = assigneeSetChanged ? null : current.viewedByUserId
+    const newlyAddedAssigneeIds = nextAssignedToUserIds.filter((id) => !currentAssignedToUserIds.includes(id))
 
     const task = await prisma.$transaction(async (tx) => {
       const updated = await tx.task.update({
@@ -525,8 +637,10 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
           status: nextStatus,
           priority: nextPriority,
           type: nextType,
-          unitId: nextUnitId,
-          assignedToUserId: nextAssignedToUserId,
+          unitId: nextUnitIds[0] ?? null,
+          unitIds: nextUnitIds,
+          assignedToUserId: nextAssignedToUserIds[0] ?? null,
+          assignedToUserIds: nextAssignedToUserIds,
           assignedToExternalName: nextAssignedToExternalName,
           assignedByUserId: nextAssignedByUserId,
           viewedAt: nextViewedAt,
@@ -540,10 +654,10 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
 
       const events = buildTaskEventsFromDiff({
         actorUserId: actor.id,
-        previous: current,
+        previous: { ...current, assignedToUserId: currentAssignedToUserIds[0] ?? null },
         next: {
           status: nextStatus,
-          assignedToUserId: nextAssignedToUserId,
+          assignedToUserId: nextAssignedToUserIds[0] ?? null,
           assignedToExternalName: nextAssignedToExternalName,
           isInTaskBank: nextIsInTaskBank,
         },
@@ -554,7 +668,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
         current.description !== nextDescription ||
         current.priority !== nextPriority ||
         current.type !== nextType ||
-        current.unitId !== nextUnitId
+        JSON.stringify([...currentUnitIds].sort()) !== JSON.stringify([...nextUnitIds].sort())
 
       if (changedTextOrPriority) {
         events.push({
@@ -585,15 +699,15 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
       })
     })
 
-    if (nextAssignedToUserId && nextAssignedToUserId !== current.assignedToUserId) {
-      const taskLabel = nextTitle || nextDescription
-      void sendPushToUser(nextAssignedToUserId, {
+    const taskLabel = nextTitle || nextDescription
+    newlyAddedAssigneeIds.forEach((userId) => {
+      void sendPushToUser(userId, {
         title: 'Te asignaron una tarea',
         body: taskLabel,
         url: '/tasks',
         tag: 'task-assigned',
       }).catch(() => undefined)
-      void pushUserNotifications([nextAssignedToUserId], {
+      void pushUserNotifications([userId], {
         title: 'Te asignaron una tarea',
         description: taskLabel,
         severity: 'info',
@@ -601,9 +715,10 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
         eventType: 'TASK_ASSIGNED',
         actorUserId: actor.id,
       }).catch(() => undefined)
-    }
+    })
 
-    return res.json(mapTask(task))
+    const { userNameById, unitCodeById } = await buildTaskLabelMaps([task])
+    return res.json(mapTask(task, userNameById, unitCodeById))
   } catch (error) {
     if (getErrorCode(error) === 'P2003') {
       return res.status(400).json({ message: 'La unidad vinculada no es valida.' })
@@ -641,7 +756,7 @@ router.post('/:id/take', async (req: AuthenticatedRequest, res) => {
       if (!current) {
         throw new Error('TASK_NOT_FOUND')
       }
-      if (!current.isInTaskBank || current.assignedToUserId) {
+      if (!current.isInTaskBank || normalizeIdArray(current.assignedToUserIds, current.assignedToUserId).length > 0) {
         throw new Error('TASK_NOT_AVAILABLE')
       }
 
@@ -650,6 +765,7 @@ router.post('/:id/take', async (req: AuthenticatedRequest, res) => {
         where: { id: current.id },
         data: {
           assignedToUserId: actor.id,
+          assignedToUserIds: [actor.id],
           assignedByUserId: null,
           isInTaskBank: false,
           status: nextStatus,
@@ -700,7 +816,8 @@ router.post('/:id/take', async (req: AuthenticatedRequest, res) => {
         }).catch(() => undefined)
       })
 
-    return res.json(mapTask(task))
+    const { userNameById, unitCodeById } = await buildTaskLabelMaps([task])
+    return res.json(mapTask(task, userNameById, unitCodeById))
   } catch (error) {
     if ((error as Error).message === 'TASK_NOT_FOUND') {
       return res.status(404).json({ message: 'Tarea no encontrada.' })
@@ -754,29 +871,36 @@ router.post('/:id/comments', async (req: AuthenticatedRequest, res) => {
       })
     })
 
-    // El chat es de ida y vuelta: si escribe el asignado le avisa a quien asigno (o creo)
-    // la tarea; si escribe el que asigna/gerencia, le avisa al asignado.
-    const isActorTheAssignee = current.assignedToUserId === actor.id
-    const notifyUserId = isActorTheAssignee ? current.assignedByUserId ?? current.createdByUserId : current.assignedToUserId
+    // El chat es de ida y vuelta: si escribe alguno de los asignados le avisa a
+    // quien asigno (o creo) la tarea; si escribe el que asigna/gerencia, les
+    // avisa a todos los asignados.
+    const currentAssigneeIds = normalizeIdArray(current.assignedToUserIds, current.assignedToUserId)
+    const isActorAnAssignee = currentAssigneeIds.includes(actor.id)
+    const notifyUserIds = isActorAnAssignee
+      ? [current.assignedByUserId ?? current.createdByUserId].filter((id): id is string => Boolean(id))
+      : currentAssigneeIds
 
-    if (notifyUserId && notifyUserId !== actor.id) {
-      void sendPushToUser(notifyUserId, {
-        title: `Nuevo mensaje de ${actor.fullName}`,
-        body: parsed.data.message.slice(0, 140),
-        url: '/tasks',
-        tag: 'task-comment',
-      }).catch(() => undefined)
-      void pushUserNotifications([notifyUserId], {
-        title: `Nuevo mensaje de ${actor.fullName}`,
-        description: parsed.data.message.slice(0, 140),
-        severity: 'info',
-        target: '/tasks',
-        eventType: 'TASK_COMMENT',
-        actorUserId: actor.id,
-      }).catch(() => undefined)
-    }
+    notifyUserIds
+      .filter((userId) => userId !== actor.id)
+      .forEach((userId) => {
+        void sendPushToUser(userId, {
+          title: `Nuevo mensaje de ${actor.fullName}`,
+          body: parsed.data.message.slice(0, 140),
+          url: '/tasks',
+          tag: 'task-comment',
+        }).catch(() => undefined)
+        void pushUserNotifications([userId], {
+          title: `Nuevo mensaje de ${actor.fullName}`,
+          description: parsed.data.message.slice(0, 140),
+          severity: 'info',
+          target: '/tasks',
+          eventType: 'TASK_COMMENT',
+          actorUserId: actor.id,
+        }).catch(() => undefined)
+      })
 
-    return res.status(201).json(mapTask(task))
+    const { userNameById, unitCodeById } = await buildTaskLabelMaps([task])
+    return res.status(201).json(mapTask(task, userNameById, unitCodeById))
   } catch (error) {
     console.error('Tasks COMMENT error:', error)
     return res.status(500).json({ message: 'No se pudo enviar el mensaje.' })
@@ -800,13 +924,14 @@ router.post('/:id/view', async (req: AuthenticatedRequest, res) => {
     if (!current) {
       return res.status(404).json({ message: 'Tarea no encontrada.' })
     }
-    if (current.assignedToUserId !== actor.id) {
-      return res.status(403).json({ message: 'Solo la persona asignada puede marcar la tarea como vista.' })
+    if (!normalizeIdArray(current.assignedToUserIds, current.assignedToUserId).includes(actor.id)) {
+      return res.status(403).json({ message: 'Solo una persona asignada puede marcar la tarea como vista.' })
     }
 
     if (current.viewedAt) {
       const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId }, include: includeTaskRelations })
-      return res.json(mapTask(task))
+      const { userNameById, unitCodeById } = await buildTaskLabelMaps([task])
+      return res.json(mapTask(task, userNameById, unitCodeById))
     }
 
     const task = await prisma.$transaction(async (tx) => {
@@ -827,7 +952,8 @@ router.post('/:id/view', async (req: AuthenticatedRequest, res) => {
       })
     })
 
-    return res.json(mapTask(task))
+    const { userNameById, unitCodeById } = await buildTaskLabelMaps([task])
+    return res.json(mapTask(task, userNameById, unitCodeById))
   } catch (error) {
     console.error('Tasks VIEW error:', error)
     return res.status(500).json({ message: 'No se pudo marcar la tarea como vista.' })

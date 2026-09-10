@@ -359,6 +359,17 @@ export interface WorkOrder {
   linkedInventorySkuList: string[]
 }
 
+export const clientBillingStatuses = ['CARGADO', 'PASADO_AL_CLIENTE', 'ACEPTADO', 'RECHAZADO', 'FACTURADO', 'COBRADO'] as const
+export type ClientBillingStatus = (typeof clientBillingStatuses)[number]
+
+export interface BillingStatusHistoryEntry {
+  status: ClientBillingStatus
+  notes?: string
+  actorUserId?: string | null
+  actorName?: string
+  at: string
+}
+
 export interface RepairRecord {
   id: string
   unitId: string
@@ -381,6 +392,8 @@ export interface RepairRecord {
   invoiceFileName?: string
   invoiceFileBase64?: string
   invoiceFileUrl?: string
+  clientBillingStatus?: ClientBillingStatus
+  billingStatusHistory?: BillingStatusHistoryEntry[]
 }
 
 export interface RepairPartUsed {
@@ -813,8 +826,12 @@ export interface TaskRecord {
   priority: TaskPriority
   type: TaskType
   unitId?: string | null
+  unitIds?: string[]
+  unitLabels?: string[]
   assignedToUserId?: string | null
+  assignedToUserIds?: string[]
   assignedToUserName?: string
+  assignedToUserNames?: string[]
   assignedToExternalName?: string
   assignedByUserId?: string | null
   createdByUserId: string

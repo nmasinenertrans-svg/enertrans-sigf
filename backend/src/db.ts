@@ -1177,6 +1177,8 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       ['viewedByUserId', 'TEXT'],
       ['type', `TEXT NOT NULL DEFAULT 'OTRA'`],
       ['unitId', 'TEXT'],
+      ['unitIds', `JSONB NOT NULL DEFAULT '[]'::jsonb`],
+      ['assignedToUserIds', `JSONB NOT NULL DEFAULT '[]'::jsonb`],
     ] as const) {
       try {
         await prisma.$executeRawUnsafe(`ALTER TABLE ${taskSchema}."Task" ADD COLUMN IF NOT EXISTS "${col}" ${type}`)
@@ -1188,6 +1190,24 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Task_unitId_idx" ON ${taskSchema}."Task"("unitId")`)
     } catch (err) {
       console.warn('[DB] CREATE INDEX Task_unitId_idx:', err)
+    }
+    // Backfill: tareas viejas solo tenian un unitId/assignedToUserId sueltos.
+    // Se copian una sola vez a los arrays nuevos (multi-unidad/multi-asignado)
+    // para que no "desaparezcan" de las pantallas que ya leen unitIds/
+    // assignedToUserIds. Idempotente: solo toca filas cuyo array sigue vacio.
+    try {
+      await prisma.$executeRawUnsafe(`
+        UPDATE ${taskSchema}."Task"
+        SET "unitIds" = jsonb_build_array("unitId")
+        WHERE "unitId" IS NOT NULL AND "unitIds" = '[]'::jsonb
+      `)
+      await prisma.$executeRawUnsafe(`
+        UPDATE ${taskSchema}."Task"
+        SET "assignedToUserIds" = jsonb_build_array("assignedToUserId")
+        WHERE "assignedToUserId" IS NOT NULL AND "assignedToUserIds" = '[]'::jsonb
+      `)
+    } catch (err) {
+      console.warn('[DB] Backfill Task.unitIds/assignedToUserIds:', err)
     }
   }
   const hasTaskEventTable = await tableExistsInActiveSchema('TaskEvent')
@@ -1281,6 +1301,14 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     await safeExecuteCompatSql(`ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "partsCost" DOUBLE PRECISION NOT NULL DEFAULT 0;`)
     await safeExecuteCompatSql(
       `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "partsUsed" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+    )
+    // Circuito de cobro al cliente: CARGADO -> PASADO_AL_CLIENTE -> ACEPTADO/
+    // RECHAZADO -> FACTURADO -> COBRADO.
+    await safeExecuteCompatSql(
+      `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "clientBillingStatus" TEXT NOT NULL DEFAULT 'CARGADO';`,
+    )
+    await safeExecuteCompatSql(
+      `ALTER TABLE "RepairRecord" ADD COLUMN IF NOT EXISTS "billingStatusHistory" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
     )
   }
 

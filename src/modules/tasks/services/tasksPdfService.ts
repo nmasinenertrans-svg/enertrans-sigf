@@ -106,11 +106,15 @@ export const downloadTaskPdf = async (task: TaskRecord): Promise<void> => {
     }
   }
 
-  const assignedToLabel = safeText(task.assignedToUserName)
-    ? safeText(task.assignedToUserName)
-    : safeText(task.assignedToExternalName)
-      ? `${safeText(task.assignedToExternalName)} (externo)`
-      : 'Sin asignar'
+  const assignedNames = (task.assignedToUserNames ?? []).filter((name) => safeText(name))
+  const assignedToLabel =
+    assignedNames.length > 0
+      ? assignedNames.join(', ')
+      : safeText(task.assignedToUserName)
+        ? safeText(task.assignedToUserName)
+        : safeText(task.assignedToExternalName)
+          ? `${safeText(task.assignedToExternalName)} (externo)`
+          : 'Sin asignar'
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(11)
@@ -208,10 +212,20 @@ export const downloadTaskPdf = async (task: TaskRecord): Promise<void> => {
 const formatDateOnly = (value?: string | null) => {
   if (!value) return '-'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-AR')
+  if (Number.isNaN(date.getTime())) return value
+  // Fechas "solo dia" guardadas en UTC medianoche: toLocaleDateString aplica
+  // el huso horario local (UTC-3 en Argentina) y corre un dia para atras
+  // (mismo bug ya corregido en TasksPage.tsx) -- se lee el dia directo en UTC.
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  return `${day}/${month}/${date.getUTCFullYear()}`
 }
 
 const getResponsibleLabel = (task: TaskRecord): string => {
+  const assignedNames = (task.assignedToUserNames ?? []).filter((name) => safeText(name))
+  if (assignedNames.length > 0) {
+    return assignedNames.join(', ')
+  }
   if (safeText(task.assignedToUserName)) {
     return safeText(task.assignedToUserName)
   }

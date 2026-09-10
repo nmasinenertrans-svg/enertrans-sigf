@@ -364,6 +364,14 @@ model RepairRecord {
   invoiceFileName  String   @default("")
   invoiceFileBase64 String  @default("")
   invoiceFileUrl   String   @default("")
+  // Circuito de cobro al cliente: CARGADO -> PASADO_AL_CLIENTE -> ACEPTADO
+  // (o RECHAZADO, que vuelve a CARGADO para corregir) -> FACTURADO -> COBRADO.
+  // String plano (no enum) a proposito: es una tabla "compat", declarar un
+  // enum nuevo de Prisma sobre una tabla que nunca paso por una migracion
+  // real rompe en runtime (ver DeliveryOperationKind, incidente de esta
+  // misma sesion).
+  clientBillingStatus  String @default("CARGADO")
+  billingStatusHistory Json   @default("[]")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -521,7 +529,9 @@ model Task {
   priority         TaskPriority @default(MEDIUM)
   type             String       @default("OTRA")
   unitId           String?
+  unitIds          Json         @default("[]")
   assignedToUserId String?
+  assignedToUserIds Json        @default("[]")
   assignedToExternalName String @default("")
   assignedByUserId String?
   createdByUserId  String
