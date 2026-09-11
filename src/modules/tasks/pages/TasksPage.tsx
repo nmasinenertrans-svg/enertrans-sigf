@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { BackLink } from '../../../components/shared/BackLink'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { useAppContext } from '../../../core/hooks/useAppContext'
@@ -20,6 +21,7 @@ type TaskFormData = {
   priority: TaskPriority
   type: TaskType
   unitIds: string[]
+  workOrderId: string
   assignedToUserIds: string[]
   assignedToExternalName: string
   isInTaskBank: boolean
@@ -81,6 +83,7 @@ const createEmptyForm = (): TaskFormData => ({
   priority: 'MEDIUM',
   type: 'OTRA',
   unitIds: [],
+  workOrderId: '',
   assignedToUserIds: [],
   assignedToExternalName: '',
   isInTaskBank: true,
@@ -165,9 +168,10 @@ const taskEventTypeLabelMap: Partial<Record<string, string>> = {
 export const TasksPage = () => {
   const { currentUser, can } = usePermissions()
   const {
-    state: { users, fleetUnits },
+    state: { users, fleetUnits, workOrders },
     actions: { setAppError },
   } = useAppContext()
+  const [searchParams] = useSearchParams()
 
   const [tasks, setTasks] = useState<TaskRecord[]>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -180,6 +184,7 @@ export const TasksPage = () => {
   const [typeFilter, setTypeFilter] = useState<'ALL' | TaskType>('ALL')
   const [unitFilter, setUnitFilter] = useState<string>('ALL')
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL')
+  const [workOrderFilter, setWorkOrderFilter] = useState<string>(() => searchParams.get('workOrderId') ?? 'ALL')
   const [bankFilter, setBankFilter] = useState<'ALL' | 'BANK' | 'ASSIGNED'>('ALL')
   const [assignDrafts, setAssignDrafts] = useState<Record<string, { userId: string; externalName: string }>>({})
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
@@ -211,6 +216,7 @@ export const TasksPage = () => {
   )
 
   const fleetUnitById = useMemo(() => new Map(fleetUnits.map((unit) => [unit.id, unit])), [fleetUnits])
+  const workOrderById = useMemo(() => new Map(workOrders.map((order) => [order.id, order])), [workOrders])
 
   const selectedFormUnits = formData.unitIds.map((id) => fleetUnitById.get(id)).filter((unit): unit is (typeof fleetUnits)[number] => Boolean(unit))
 
@@ -365,6 +371,7 @@ export const TasksPage = () => {
         type: formData.type,
         unitId: formData.unitIds[0] ?? null,
         unitIds: formData.unitIds,
+        workOrderId: formData.workOrderId || null,
         assignedToUserId: formData.assignedToUserIds[0] ?? null,
         assignedToUserIds: formData.assignedToUserIds,
         assignedToExternalName: formData.assignedToExternalName.trim(),
@@ -438,6 +445,7 @@ export const TasksPage = () => {
       priority: task.priority,
       type: task.type ?? 'OTRA',
       unitIds: task.unitIds && task.unitIds.length > 0 ? task.unitIds : task.unitId ? [task.unitId] : [],
+      workOrderId: task.workOrderId ?? '',
       assignedToUserIds:
         task.assignedToUserIds && task.assignedToUserIds.length > 0
           ? task.assignedToUserIds
@@ -584,6 +592,9 @@ export const TasksPage = () => {
       if (assigneeFilter !== 'ALL' && !getTaskAssigneeIds(task).includes(assigneeFilter)) {
         return false
       }
+      if (workOrderFilter !== 'ALL' && task.workOrderId !== workOrderFilter) {
+        return false
+      }
       if (bankFilter === 'BANK' && !task.isInTaskBank) {
         return false
       }
@@ -611,7 +622,7 @@ export const TasksPage = () => {
         .toLowerCase()
       return haystack.includes(query)
     })
-  }, [tasks, statusFilter, priorityFilter, typeFilter, unitFilter, assigneeFilter, bankFilter, searchTerm, fleetUnitById])
+  }, [tasks, statusFilter, priorityFilter, typeFilter, unitFilter, assigneeFilter, workOrderFilter, bankFilter, searchTerm, fleetUnitById])
 
   const bankTasks = useMemo(
     () => filteredTasks.filter((task) => task.isInTaskBank && getTaskAssigneeIds(task).length === 0),
@@ -638,6 +649,7 @@ export const TasksPage = () => {
     const taskAssigneeIds = getTaskAssigneeIds(task)
     const taskUnitIds = getTaskUnitIds(task)
     const taskUnits = taskUnitIds.map((id) => fleetUnitById.get(id)).filter((unit): unit is (typeof fleetUnits)[number] => Boolean(unit))
+    const linkedWorkOrder = task.workOrderId ? workOrderById.get(task.workOrderId) : undefined
     const assigneeNames = task.assignedToUserNames && task.assignedToUserNames.length > 0 ? task.assignedToUserNames : task.assignedToUserName ? [task.assignedToUserName] : []
     const canEditThisTask = isManager || (currentUser?.id && taskAssigneeIds.includes(currentUser.id) && can('TASKS', 'edit'))
     const canCommentOnTask =
@@ -671,6 +683,14 @@ export const TasksPage = () => {
                   {unit.internalCode}
                 </span>
               ))}
+              {task.workOrderId ? (
+                <Link
+                  to={`${ROUTE_PATHS.workOrders}?search=${encodeURIComponent(linkedWorkOrder?.code ?? '')}`}
+                  className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                >
+                  OT: {linkedWorkOrder?.code ?? task.workOrderId}
+                </Link>
+              ) : null}
               {overdue ? (
                 <span className="rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
                   Vencida
@@ -1007,6 +1027,22 @@ export const TasksPage = () => {
                 </div>
               </label>
 
+              <label className="mt-4 flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                Orden de trabajo vinculada (opcional)
+                <select
+                  value={formData.workOrderId}
+                  onChange={(event) => handleFormChange('workOrderId', event.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                >
+                  <option value="">Sin OT vinculada</option>
+                  {workOrders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      {order.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
                   Fecha de inicio
@@ -1187,6 +1223,21 @@ export const TasksPage = () => {
                 {fleetUnits.map((unit) => (
                   <option key={unit.id} value={unit.id}>
                     {unit.internalCode}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+              OT vinculada
+              <select
+                value={workOrderFilter}
+                onChange={(event) => setWorkOrderFilter(event.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              >
+                <option value="ALL">Todas</option>
+                {workOrders.map((order) => (
+                  <option key={order.id} value={order.id}>
+                    {order.code}
                   </option>
                 ))}
               </select>

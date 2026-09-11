@@ -254,6 +254,11 @@ export const WorkOrdersPage = () => {
 
     setIncludeInProgress(includeProgressParam === '1')
     setPendingReauditOnly(pendingParam === '1')
+
+    const searchParam = searchParams.get('search')
+    if (searchParam) {
+      setSearchTerm(searchParam)
+    }
   }, [searchParams])
 
   useEffect(() => {
@@ -856,6 +861,12 @@ export const WorkOrdersPage = () => {
                       canEdit={canEdit}
                       canDelete={canDelete}
                     />
+                    <Link
+                      to={`${ROUTE_PATHS.tasks}?workOrderId=${item.id}`}
+                      className="block w-full rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-center text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                    >
+                      Ver tareas vinculadas
+                    </Link>
                     {item.status !== 'CLOSED' ? (
                       <button
                         type="button"

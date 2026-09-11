@@ -530,6 +530,10 @@ model Task {
   type             String       @default("OTRA")
   unitId           String?
   unitIds          Json         @default("[]")
+  // Vinculo simple a una OT (sin relation, mismo criterio que
+  // RepairRecord.workOrderId): la tabla Task no pasa por migraciones reales,
+  // se resuelve del lado de la app en vez de con un @relation de Prisma.
+  workOrderId      String?
   assignedToUserId String?
   assignedToUserIds Json        @default("[]")
   assignedToExternalName String @default("")

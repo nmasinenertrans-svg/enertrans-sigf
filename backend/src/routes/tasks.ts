@@ -31,6 +31,7 @@ const createTaskSchema = z.object({
   type: z.enum(taskTypeValues).optional().default('OTRA'),
   unitId: z.string().nullable().optional(),
   unitIds: z.array(z.string()).optional(),
+  workOrderId: z.string().uuid().nullable().optional(),
   assignedToUserId: z.string().uuid().nullable().optional(),
   assignedToUserIds: z.array(z.string().uuid()).optional(),
   assignedToExternalName: z.string().max(120).optional().default(''),
@@ -47,6 +48,7 @@ const updateTaskSchema = z.object({
   type: z.enum(taskTypeValues).optional(),
   unitId: z.string().nullable().optional(),
   unitIds: z.array(z.string()).optional(),
+  workOrderId: z.string().uuid().nullable().optional(),
   assignedToUserId: z.string().uuid().nullable().optional(),
   assignedToUserIds: z.array(z.string().uuid()).optional(),
   assignedToExternalName: z.string().max(120).optional(),
@@ -179,6 +181,7 @@ const mapTask = (
     unitId: unitIds[0] ?? null,
     unitIds,
     unitLabels,
+    workOrderId: task.workOrderId ?? null,
     assignedToUserId: assignedToUserIds[0] ?? null,
     assignedToUserIds,
     assignedToUserName: assignedToUserNames[0] ?? '',
@@ -416,6 +419,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
           type: parsed.data.type,
           unitId: requestedUnitIds[0] ?? null,
           unitIds: requestedUnitIds,
+          workOrderId: parsed.data.workOrderId ?? null,
           assignedToUserId: assignedToUserIds[0] ?? null,
           assignedToUserIds,
           assignedToExternalName,
@@ -562,6 +566,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
         : patchData.unitId !== undefined
           ? (patchData.unitId ? [patchData.unitId] : [])
           : currentUnitIds
+    const nextWorkOrderId = patchData.workOrderId !== undefined ? patchData.workOrderId : current.workOrderId
     let nextStartDate =
       patchData.startDate !== undefined ? (parseOptionalDate(patchData.startDate) ?? current.startDate) : current.startDate
     let nextEstimatedFinishDate =
@@ -639,6 +644,7 @@ router.patch('/:id', async (req: AuthenticatedRequest, res) => {
           type: nextType,
           unitId: nextUnitIds[0] ?? null,
           unitIds: nextUnitIds,
+          workOrderId: nextWorkOrderId,
           assignedToUserId: nextAssignedToUserIds[0] ?? null,
           assignedToUserIds: nextAssignedToUserIds,
           assignedToExternalName: nextAssignedToExternalName,

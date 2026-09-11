@@ -834,6 +834,7 @@ export interface TaskRecord {
   unitId?: string | null
   unitIds?: string[]
   unitLabels?: string[]
+  workOrderId?: string | null
   assignedToUserId?: string | null
   assignedToUserIds?: string[]
   assignedToUserName?: string

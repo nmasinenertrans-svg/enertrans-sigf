@@ -1179,6 +1179,7 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
       ['unitId', 'TEXT'],
       ['unitIds', `JSONB NOT NULL DEFAULT '[]'::jsonb`],
       ['assignedToUserIds', `JSONB NOT NULL DEFAULT '[]'::jsonb`],
+      ['workOrderId', 'TEXT'],
     ] as const) {
       try {
         await prisma.$executeRawUnsafe(`ALTER TABLE ${taskSchema}."Task" ADD COLUMN IF NOT EXISTS "${col}" ${type}`)
