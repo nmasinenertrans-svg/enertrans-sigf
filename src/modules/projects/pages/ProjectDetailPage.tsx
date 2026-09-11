@@ -30,6 +30,7 @@ import {
   createEmptyItemForm,
   type ItemFormData,
 } from '../types'
+import { formatDateOnly } from '../../../utils/dateOnly'
 
 const formatDate = (iso: string | null | undefined): string => {
   if (!iso) return '—'
@@ -445,7 +446,7 @@ export const ProjectDetailPage = () => {
                 </div>
                 <div>
                   <dt className="text-xs font-semibold text-slate-500">Fecha objetivo</dt>
-                  <dd className="text-slate-700">{formatDate(project.targetDate)}</dd>
+                  <dd className="text-slate-700">{formatDateOnly(project.targetDate)}</dd>
                 </div>
                 <div>
                   <dt className="text-xs font-semibold text-slate-500">Inicio</dt>

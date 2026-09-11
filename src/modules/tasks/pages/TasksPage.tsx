@@ -10,6 +10,7 @@ import { apiRequest } from '../../../services/api/apiClient'
 import { getQueueItems } from '../../../services/offline/queue'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import type { TaskPriority, TaskRecord, TaskStatus, TaskType } from '../../../types/domain'
+import { formatDateOnly } from '../../../utils/dateOnly'
 import { downloadTaskPdf, downloadTasksSummaryPdf } from '../services/tasksPdfService'
 
 const TASKS_PAGE_SIZE = 5
@@ -111,24 +112,6 @@ const formatDurationMinutes = (minutes: number): string => {
   const days = Math.floor(hours / 24)
   const remainingHours = hours % 24
   return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`
-}
-
-const formatDateOnly = (value?: string | null) => {
-  if (!value) {
-    return '-'
-  }
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-  // Estas fechas son "solo dia" (sin hora), guardadas en UTC medianoche.
-  // toLocaleDateString aplica el huso horario local (UTC-3 en Argentina) y
-  // corria un dia para atras -- se lee el dia directo en UTC, igual que
-  // toDateInputValue (asi la tarjeta y el formulario de edicion muestran
-  // siempre la misma fecha).
-  const day = String(date.getUTCDate()).padStart(2, '0')
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-  return `${day}/${month}/${date.getUTCFullYear()}`
 }
 
 // Tareas viejas solo tenian un asignado/unidad sueltos (assignedToUserId/

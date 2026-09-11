@@ -19,6 +19,7 @@ import {
   type TaskRecord,
   type WorkOrder,
 } from '../../../types/domain'
+import { getDateOnlyMonthKey, formatDateOnlyMonthLabel } from '../../../utils/dateOnly'
 
 type ProviderMetrics = {
   providerName: string
@@ -914,12 +915,8 @@ export const ReportsPage = () => {
     const map = new Map<string, InvoiceMonthMetrics>()
     filteredInvoices.forEach((invoice) => {
       const dateValue = invoice.issuedAt ?? invoice.createdAt
-      const date = dateValue ? new Date(dateValue) : null
-      const hasValidDate = date && !Number.isNaN(date.getTime())
-      const monthKey = hasValidDate ? `${date!.getFullYear()}-${String(date!.getMonth() + 1).padStart(2, '0')}` : 'sin-fecha'
-      const monthLabel = hasValidDate
-        ? date!.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-        : 'Sin fecha'
+      const monthKey = getDateOnlyMonthKey(dateValue) ?? 'sin-fecha'
+      const monthLabel = formatDateOnlyMonthLabel(dateValue)
       const current = map.get(monthKey) ?? { monthKey, monthLabel, count: 0, totalARS: 0, totalUSD: 0 }
       current.count += 1
       if (invoice.currency === 'USD') {

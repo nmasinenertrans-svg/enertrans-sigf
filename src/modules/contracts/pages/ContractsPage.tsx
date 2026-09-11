@@ -13,6 +13,7 @@ import {
   validateContractFormData,
 } from '../services/contractsService'
 import type { ContractFormData, ContractFormErrors, ContractFormField } from '../types'
+import { formatDateOnly as formatDate } from '../../../utils/dateOnly'
 
 const statusLabels: Record<RentalContractStatus, string> = {
   ACTIVE: 'Activo',
@@ -25,11 +26,6 @@ const inputClassName =
 
 const formatCurrency = (value: number, currency: 'ARS' | 'USD') =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value)
-
-const formatDate = (value: string) => {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('es-AR')
-}
 
 const expirationBadge = (daysUntilExpiration: number, status: RentalContractStatus) => {
   if (status !== 'ACTIVE') {

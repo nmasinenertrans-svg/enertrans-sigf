@@ -1,6 +1,7 @@
 import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
 import type { TaskRecord } from '../../../types/domain'
+import { formatDateOnly } from '../../../utils/dateOnly'
 
 const statusLabelMap: Record<TaskRecord['status'], string> = {
   UNASSIGNED: 'Sin asignar',
@@ -207,18 +208,6 @@ export const downloadTaskPdf = async (task: TaskRecord): Promise<void> => {
   pdf.text('Cargo: ', rightX, leftY + 15)
 
   pdf.save(`Tarea_${task.id.slice(0, 8).toUpperCase()}.pdf`)
-}
-
-const formatDateOnly = (value?: string | null) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  // Fechas "solo dia" guardadas en UTC medianoche: toLocaleDateString aplica
-  // el huso horario local (UTC-3 en Argentina) y corre un dia para atras
-  // (mismo bug ya corregido en TasksPage.tsx) -- se lee el dia directo en UTC.
-  const day = String(date.getUTCDate()).padStart(2, '0')
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-  return `${day}/${month}/${date.getUTCFullYear()}`
 }
 
 const getResponsibleLabel = (task: TaskRecord): string => {

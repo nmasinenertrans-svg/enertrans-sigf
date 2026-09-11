@@ -1,6 +1,7 @@
 ﻿import { ROUTE_PATHS, buildFleetDetailPath } from '../routing/routePaths'
 import type { AuditRecord, FleetUnit, UserInboxNotification, WorkOrder } from '../../types/domain'
 import { apiRequest, getAuthToken } from '../../services/api/apiClient'
+import { formatDateOnly } from '../../utils/dateOnly'
 
 export type AppNotification = {
   id: string
@@ -210,7 +211,7 @@ export const buildAppNotifications = (params: {
         items.push({
           id: `${unit.id}-${docKey}-overdue`,
           title: `${label} vencido`,
-          description: `${unit.internalCode} - ${formatDate(expiresAt)}`,
+          description: `${unit.internalCode} - ${formatDateOnly(expiresAt)}`,
           severity: 'danger',
           createdAt: expiresAt ?? new Date().toISOString(),
           target: buildFleetDetailPath(unit.id),
@@ -221,7 +222,7 @@ export const buildAppNotifications = (params: {
         items.push({
           id: `${unit.id}-${docKey}-soon`,
           title: `${label} por vencer`,
-          description: `${unit.internalCode} - ${formatDate(expiresAt)}`,
+          description: `${unit.internalCode} - ${formatDateOnly(expiresAt)}`,
           severity: 'warning',
           createdAt: expiresAt ?? new Date().toISOString(),
           target: buildFleetDetailPath(unit.id),

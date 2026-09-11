@@ -2,17 +2,12 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import type { Invoice, RepairRecord } from '../../../types/domain'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
+import { formatDateOnly as formatDate } from '../../../utils/dateOnly'
 
 interface FleetInvoicesPanelProps {
   unitId: string
   invoices: Invoice[]
   repairs: RepairRecord[]
-}
-
-const formatDate = (value?: string | null) => {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-AR')
 }
 
 const formatCurrency = (value: number, currency: 'ARS' | 'USD' = 'ARS') =>

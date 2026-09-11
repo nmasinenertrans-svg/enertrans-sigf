@@ -7,6 +7,7 @@ import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { ApiRequestError, apiRequest } from '../../../services/api/apiClient'
 import { getQueueItems } from '../../../services/offline/queue'
 import { enqueueAndSync } from '../../../services/offline/sync'
+import { formatDateOnly } from '../../../utils/dateOnly'
 
 const getApiErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof ApiRequestError) {
@@ -365,7 +366,7 @@ export const CrmPage = () => {
             <button type="submit" disabled={isActivitySaving || !canEdit} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 md:col-span-12">{isActivitySaving ? 'Guardando actividad...' : 'Agregar actividad'}</button>
           </form>
           <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
-            {selectedActivities.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-500">Sin actividades.</div> : selectedActivities.map((activity) => <article key={activity.id} className={['rounded-lg border p-3', overdue(activity) ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'].join(' ')}><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{activity.summary}</p><p className="text-xs text-slate-500">Tipo: {ACTIVITY_TYPES.find((t) => t.key === activity.type)?.label ?? activity.type} | Vence: {activity.dueAt ? new Date(activity.dueAt).toLocaleDateString('es-AR') : 'Sin fecha'}</p></div><button type="button" className={['rounded-lg border px-3 py-1 text-xs font-semibold', activity.status === 'DONE' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'].join(' ')} disabled={!canEdit} onClick={() => void toggleActivity(activity)}>{activity.status === 'DONE' ? 'Marcar pendiente' : 'Marcar realizada'}</button></div></article>)}
+            {selectedActivities.length === 0 ? <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-500">Sin actividades.</div> : selectedActivities.map((activity) => <article key={activity.id} className={['rounded-lg border p-3', overdue(activity) ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'].join(' ')}><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-slate-900">{activity.summary}</p><p className="text-xs text-slate-500">Tipo: {ACTIVITY_TYPES.find((t) => t.key === activity.type)?.label ?? activity.type} | Vence: {activity.dueAt ? formatDateOnly(activity.dueAt) : 'Sin fecha'}</p></div><button type="button" className={['rounded-lg border px-3 py-1 text-xs font-semibold', activity.status === 'DONE' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-amber-300 bg-amber-50 text-amber-700'].join(' ')} disabled={!canEdit} onClick={() => void toggleActivity(activity)}>{activity.status === 'DONE' ? 'Marcar pendiente' : 'Marcar realizada'}</button></div></article>)}
           </div>
         </>}
       </section>

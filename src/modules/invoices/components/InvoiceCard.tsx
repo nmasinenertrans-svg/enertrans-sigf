@@ -1,4 +1,5 @@
 import type { InvoiceViewItem } from '../services/invoicesService'
+import { formatDateOnly } from '../../../utils/dateOnly'
 
 interface InvoiceCardProps {
   invoice: InvoiceViewItem
@@ -6,12 +7,6 @@ interface InvoiceCardProps {
   onEdit?: (invoice: InvoiceViewItem) => void
   canDelete?: boolean
   canEdit?: boolean
-}
-
-const formatDate = (value?: string | null) => {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-AR')
 }
 
 export const InvoiceCard = ({ invoice, onDelete, onEdit, canDelete = true, canEdit = false }: InvoiceCardProps) => {
@@ -31,7 +26,7 @@ export const InvoiceCard = ({ invoice, onDelete, onEdit, canDelete = true, canEd
         </span>
       </div>
 
-      <p className="mt-2 text-xs text-slate-500">Emitida: {formatDate(invoice.issuedAt)}</p>
+      <p className="mt-2 text-xs text-slate-500">Emitida: {formatDateOnly(invoice.issuedAt)}</p>
 
       {invoice.unitLabel ? (
         <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">

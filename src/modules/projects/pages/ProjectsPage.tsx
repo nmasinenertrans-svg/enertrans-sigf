@@ -16,11 +16,7 @@ import {
   PRIORITY_LABELS,
   PRIORITY_COLORS,
 } from '../types'
-
-const formatDate = (iso: string | null): string => {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+import { formatDateOnly as formatDate } from '../../../utils/dateOnly'
 
 const itemsProgress = (project: FleetProject): string => {
   const total = project.items.length

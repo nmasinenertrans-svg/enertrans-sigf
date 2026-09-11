@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
 import type { TaskPriority, TaskRecord, TaskStatus, TaskType } from '../../../types/domain'
+import { formatDateOnly as formatDate } from '../../../utils/dateOnly'
 
 interface FleetTasksPanelProps {
   unitId: string
@@ -33,12 +34,6 @@ const taskTypeLabelMap: Record<TaskType, string> = {
   MANTENIMIENTO: 'Mantenimiento',
   ADMINISTRATIVA: 'Administrativa',
   OTRA: 'Otra',
-}
-
-const formatDate = (value?: string | null) => {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('es-AR')
 }
 
 export const FleetTasksPanel = ({ unitId }: FleetTasksPanelProps) => {

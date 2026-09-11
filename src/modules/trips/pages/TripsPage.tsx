@@ -17,14 +17,10 @@ import {
   validateTripFormData,
 } from '../services/tripsService'
 import type { TripFormData, TripLegFormData, TripLegFormErrors } from '../types'
+import { formatDateOnly } from '../../../utils/dateOnly'
 
 const inputClassName =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors focus:border-amber-400'
-
-const formatDateOnly = (value: string) => {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('es-AR')
-}
 
 export const TripsPage = () => {
   const {
