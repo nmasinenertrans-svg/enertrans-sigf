@@ -1,5 +1,6 @@
-const CACHE_VERSION = 'enertrans-sigf-v3'
+const CACHE_VERSION = 'enertrans-sigf-v4'
 const APP_SHELL_CACHE = `${CACHE_VERSION}-app-shell`
+const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
 const APP_SHELL_URLS = ['/index.html']
 
@@ -13,7 +14,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== APP_SHELL_CACHE).map((key) => caches.delete(key))),
+      Promise.all(
+        keys.filter((key) => key !== APP_SHELL_CACHE && key !== ASSET_CACHE).map((key) => caches.delete(key)),
+      ),
     ),
   )
   self.clients.claim()
@@ -24,6 +27,16 @@ const isNavigationRequest = (request) => request.mode === 'navigate'
 // Estrategia "network-first" para todo: nunca sirve un bundle/HTML viejo mientras
 // haya conexion. El cache solo actua como respaldo offline (ver incidente que
 // forzo a deshabilitar el SW por completo en src/main.tsx, commit 5fa7bb2).
+//
+// IMPORTANTE: la rama de assets de aca abajo tiene que ESCRIBIR en el cache
+// cada vez que una descarga online tiene exito (cache.put), no solo leerlo
+// como respaldo. Sin ese cache.put, la app quedaba con index.html cacheado
+// pero ningun .js/.css real guardado en ningun lado -- entonces al abrir
+// offline, index.html cargaba desde el cache pero pedia los bundles (con
+// nombre con hash, ej. index-XXXX.js) y esos SIEMPRE fallaban por no estar
+// cacheados en ningun lado, dejando la pantalla en blanco para siempre
+// (React nunca llegaba a montarse). Bug reportado por Nicolas: "en offline
+// queda la pantalla en blanco, nunca entra a la app".
 self.addEventListener('fetch', (event) => {
   const { request } = event
 
@@ -49,7 +62,17 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  event.respondWith(fetch(request).catch(async () => (await caches.match(request)) || Response.error()))
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response.ok) {
+          const clone = response.clone()
+          caches.open(ASSET_CACHE).then((cache) => cache.put(request, clone)).catch(() => null)
+        }
+        return response
+      })
+      .catch(async () => (await caches.match(request)) || Response.error()),
+  )
 })
 
 self.addEventListener('push', (event) => {
