@@ -585,6 +585,17 @@ export interface InventoryItem {
   linkedWorkOrderIds: string[]
 }
 
+export const reinspectionChecklistStatuses = ['PENDING', 'OK', 'BAD'] as const
+export type ReinspectionChecklistStatus = (typeof reinspectionChecklistStatuses)[number]
+
+export interface ExternalRequestChecklistItem {
+  id: string
+  label: string
+  status: ReinspectionChecklistStatus
+  note?: string
+  checkedAt?: string | null
+}
+
 export interface ExternalRequest {
   id: string
   code: string
@@ -604,6 +615,10 @@ export interface ExternalRequest {
   providerFileUrl?: string
   ocCode?: string | null
   ocGeneratedAt?: string | null
+  // Check de re-inspeccion (solo se genera para NDP a "Enermet", ver
+  // externalRequestsService.ts) -- vive dentro de la NDP, no es un
+  // AuditRecord real del modulo de Inspecciones.
+  reinspectionChecklist?: ExternalRequestChecklistItem[]
 }
 
 export interface ExternalRequestPartItem {

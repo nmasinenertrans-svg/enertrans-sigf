@@ -1,5 +1,28 @@
-import type { ExternalRequest, ExternalRequestPartItem, FleetUnit } from '../../../types/domain'
+import type { ExternalRequest, ExternalRequestChecklistItem, ExternalRequestPartItem, FleetUnit } from '../../../types/domain'
 import { getNextSequenceCode, normalizeUnitCode } from '../../../services/sequence'
+
+// El check de re-inspeccion solo se genera automaticamente cuando la empresa
+// proveedora de la NDP es Enermet (pedido puntual de Nicolas, 2026-09).
+const REINSPECTION_CHECKLIST_PROVIDER = 'enermet'
+
+const createChecklistItemId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `check-${Date.now()}-${Math.round(Math.random() * 10000)}`
+}
+
+export const shouldGenerateReinspectionChecklist = (companyName: string): boolean =>
+  companyName.trim().toLowerCase() === REINSPECTION_CHECKLIST_PROVIDER
+
+export const buildReinspectionChecklist = (tasks: string[]): ExternalRequestChecklistItem[] =>
+  tasks.map((task) => ({
+    id: createChecklistItemId(),
+    label: task,
+    status: 'PENDING',
+    note: '',
+    checkedAt: null,
+  }))
 
 const createId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -38,6 +61,7 @@ export interface ExternalRequestViewItem extends ExternalRequest {
   currency: 'ARS' | 'USD'
   eligibilityStatus: 'PENDING_ATTACHMENT' | 'READY_FOR_REPAIR'
   linkedRepairId: string | null
+  reinspectionChecklist: import('../../../types/domain').ExternalRequestChecklistItem[]
 }
 
 const parseTasks = (raw: string): string[] =>
@@ -145,13 +169,14 @@ export const toExternalRequest = (formData: ExternalRequestFormData, unitCode: s
   const partsTotal = Number(partsItems.reduce((total, item) => total + item.lineTotal, 0).toFixed(2))
   const hasAttachment = Boolean(formData.providerFileUrl?.trim())
   const existingCodes = existingRequests?.map((r) => r.code).filter(Boolean) as string[] | undefined
+  const tasks = parseTasks(formData.tasksInput)
 
   return {
     id: createId(),
     unitId: formData.unitId,
     companyName: formData.companyName.trim(),
     description: formData.description.trim(),
-    tasks: parseTasks(formData.tasksInput),
+    tasks,
     createdAt: new Date().toISOString(),
     code: getNextSequenceCode('externalRequest', 'NDP', normalizeUnitCode(unitCode), existingCodes),
     currency: formData.currency,
@@ -163,6 +188,7 @@ export const toExternalRequest = (formData: ExternalRequestFormData, unitCode: s
     providerFileName: formData.providerFileName || undefined,
     providerFileBase64: formData.providerFileBase64 || undefined,
     providerFileUrl: formData.providerFileUrl || undefined,
+    reinspectionChecklist: shouldGenerateReinspectionChecklist(formData.companyName) ? buildReinspectionChecklist(tasks) : [],
   }
 }
 
@@ -205,5 +231,6 @@ export const buildExternalRequestView = (
       currency: request.currency === 'USD' ? 'USD' : 'ARS',
       eligibilityStatus: request.eligibilityStatus === 'READY_FOR_REPAIR' ? 'READY_FOR_REPAIR' : 'PENDING_ATTACHMENT',
       linkedRepairId: request.linkedRepairId ?? null,
+      reinspectionChecklist: Array.isArray(request.reinspectionChecklist) ? request.reinspectionChecklist : [],
     }
   })

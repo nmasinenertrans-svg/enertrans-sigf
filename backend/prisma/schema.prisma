@@ -468,6 +468,10 @@ model ExternalRequest {
   providerFileUrl  String   @default("")
   ocCode           String?
   ocGeneratedAt    DateTime?
+  // Check de re-inspeccion (solo para NDP a "Enermet", ver
+  // externalRequestsService.ts): items {id,label,status,note,checkedAt}
+  // derivados de "tasks", no es un AuditRecord real.
+  reinspectionChecklist Json @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

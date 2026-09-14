@@ -18,6 +18,16 @@ const externalRequestPartItemSchema = z.object({
   lineTotal: z.number().min(0).optional(),
 })
 
+const REINSPECTION_STATUS_VALUES = ['PENDING', 'OK', 'BAD'] as const
+
+const reinspectionChecklistItemSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  status: z.enum(REINSPECTION_STATUS_VALUES).optional().default('PENDING'),
+  note: z.string().optional().default(''),
+  checkedAt: z.string().nullable().optional(),
+})
+
 const externalRequestSchema = z.object({
   id: z.string().min(1).optional(),
   code: z.string().min(1),
@@ -33,6 +43,7 @@ const externalRequestSchema = z.object({
   serviceOrderId: z.string().optional().nullable(),
   providerFileName: z.string().optional(),
   providerFileUrl: z.string().optional(),
+  reinspectionChecklist: z.array(reinspectionChecklistItemSchema).optional(),
   createdAt: z.string().optional(),
 })
 
@@ -61,6 +72,7 @@ type RecoveryExternalRequestRow = {
   serviceOrderId: string | null
   providerFileName: string | null
   providerFileUrl: string | null
+  reinspectionChecklist: unknown
   createdAt: Date | string
   updatedAt: Date | string
 }
@@ -99,6 +111,18 @@ const normalizePartItems = (rawItems: unknown): ExternalRequestPartItem[] => {
       }
     })
     .filter((item): item is ExternalRequestPartItem => Boolean(item))
+}
+
+const normalizeReinspectionChecklist = (rawItems: unknown): z.infer<typeof reinspectionChecklistItemSchema>[] => {
+  if (!Array.isArray(rawItems)) {
+    return []
+  }
+  return rawItems
+    .map((raw) => {
+      const parsed = reinspectionChecklistItemSchema.safeParse(raw)
+      return parsed.success ? parsed.data : null
+    })
+    .filter((item): item is z.infer<typeof reinspectionChecklistItemSchema> => Boolean(item))
 }
 
 const calculatePartsTotal = (items: ExternalRequestPartItem[]): number =>
@@ -176,6 +200,7 @@ const mapRecoveryExternalRequestToPublicShape = (row: RecoveryExternalRequestRow
   serviceOrderId: row.serviceOrderId ?? null,
   providerFileName: row.providerFileName ?? '',
   providerFileUrl: row.providerFileUrl ?? '',
+  reinspectionChecklist: normalizeReinspectionChecklist(parseJsonUnknown(row.reinspectionChecklist)),
   createdAt: asIsoString(row.createdAt),
   updatedAt: asIsoString(row.updatedAt),
 })
@@ -275,6 +300,9 @@ const listExternalRequestsFromRecoverySchemas = async () => {
       const serviceOrderSelect = textSelectOrDefault(['serviceOrderId'], 'serviceOrderId', 'NULL::text')
       const providerFileNameSelect = textSelectOrDefault(['providerFileName'], 'providerFileName')
       const providerFileUrlSelect = textSelectOrDefault(['providerFileUrl'], 'providerFileUrl')
+      const reinspectionChecklistSelect = findColumn(['reinspectionChecklist'])
+        ? `${quoteColumn('reinspectionChecklist')} AS "reinspectionChecklist"`
+        : `'[]'::jsonb AS "reinspectionChecklist"`
       const createdAtSelect = `${quoteColumn(createdAtColumn)} AS "createdAt"`
       const updatedAtSelect = updatedAtColumn
         ? `${quoteColumn(updatedAtColumn)} AS "updatedAt"`
@@ -296,6 +324,7 @@ const listExternalRequestsFromRecoverySchemas = async () => {
           ${serviceOrderSelect},
           ${providerFileNameSelect},
           ${providerFileUrlSelect},
+          ${reinspectionChecklistSelect},
           ${createdAtSelect},
           ${updatedAtSelect}
         FROM "${schema}"."ExternalRequest"
@@ -335,6 +364,7 @@ const toCreateData = async (input: ExternalRequestInput) => {
     serviceOrderId: input.serviceOrderId?.trim() || null,
     providerFileName: (input.providerFileName ?? '').trim(),
     providerFileUrl,
+    reinspectionChecklist: normalizeReinspectionChecklist(input.reinspectionChecklist) as any,
     ocCode,
     ocGeneratedAt,
     createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
@@ -398,6 +428,9 @@ const toUpdateData = async (input: ExternalRequestUpdateInput, existing: any): P
   }
   if (input.serviceOrderId !== undefined) {
     data.serviceOrderId = input.serviceOrderId?.trim() || null
+  }
+  if (input.reinspectionChecklist !== undefined) {
+    data.reinspectionChecklist = normalizeReinspectionChecklist(input.reinspectionChecklist) as any
   }
   if (input.createdAt !== undefined && input.createdAt) {
     data.createdAt = new Date(input.createdAt)
