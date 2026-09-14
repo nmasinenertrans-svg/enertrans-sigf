@@ -951,6 +951,8 @@ model ServiceOrder {
   assignedToName        String             @default("")
   sparePartsUsed        String             @default("")
   photoUrls             Json               @default("[]")
+  pdfFileUrl            String             @default("")
+  pdfFileName           String             @default("")
   createdByUserId       String
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt

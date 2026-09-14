@@ -5,6 +5,7 @@ import { useAppContext } from '../../../core/hooks/useAppContext'
 import { usePermissions } from '../../../core/auth/usePermissions'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import type { ServiceOrder, ServiceOrderStatus } from '../../../types/domain'
+import { generateServiceOrderPdf } from '../services/serviceOrderPdfService'
 
 const STATUS_LABELS: Record<ServiceOrderStatus, string> = {
   OPEN: 'Abierta',
@@ -68,7 +69,7 @@ export const ServiceOrderDetailPage = () => {
   const navigate = useNavigate()
   const { can } = usePermissions()
   const {
-    state: { serviceOrders, externalRequests },
+    state: { serviceOrders, externalRequests, fleetUnits },
     actions: { setServiceOrders },
   } = useAppContext()
 
@@ -77,6 +78,7 @@ export const ServiceOrderDetailPage = () => {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [copySuccess, setCopySuccess] = useState(false)
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [closeResolution, setCloseResolution] = useState('')
@@ -180,6 +182,25 @@ export const ServiceOrderDetailPage = () => {
     }
   }
 
+  const handleGeneratePdf = async () => {
+    if (!os) return
+    setIsGeneratingPdf(true)
+    setError('')
+    try {
+      const unit = os.unitId ? (fleetUnits.find((u) => u.id === os.unitId) ?? null) : null
+      const { dataUrl, fileName } = await generateServiceOrderPdf({ os, unit })
+      const uploaded = await apiRequest<{ url: string }>('/files/upload', {
+        method: 'POST',
+        body: { fileName, contentType: 'application/pdf', dataUrl, folder: 'service-orders' },
+      })
+      await updateOs({ pdfFileUrl: uploaded.url, pdfFileName: fileName })
+    } catch {
+      setError('No se pudo generar el PDF.')
+    } finally {
+      setIsGeneratingPdf(false)
+    }
+  }
+
   if (isLoading) {
     return <div className="flex items-center justify-center py-24 text-slate-400">Cargando...</div>
   }
@@ -230,6 +251,24 @@ export const ServiceOrderDetailPage = () => {
           >
             {copySuccess ? '✓ Copiado' : 'Copiar texto para cliente'}
           </button>
+          <button
+            type="button"
+            onClick={() => void handleGeneratePdf()}
+            disabled={isGeneratingPdf}
+            className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+          >
+            {isGeneratingPdf ? 'Generando...' : 'Generar PDF'}
+          </button>
+          {os.pdfFileUrl ? (
+            <a
+              href={os.pdfFileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-amber-500/60 px-3 py-2 text-sm text-amber-400 hover:bg-slate-700"
+            >
+              Ver PDF
+            </a>
+          ) : null}
           {canEdit && os.status !== 'CLOSED' && (
             <button
               type="button"

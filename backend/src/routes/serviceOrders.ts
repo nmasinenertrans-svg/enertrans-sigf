@@ -32,6 +32,8 @@ const serviceOrderUpdateSchema = z.object({
   resolutionDetail: z.string().optional(),
   photoUrls: z.array(z.string()).optional(),
   closedAt: z.string().datetime().nullable().optional(),
+  pdfFileUrl: z.string().optional(),
+  pdfFileName: z.string().optional(),
 })
 
 const OPEN_STATUSES = ['OPEN', 'IN_PROGRESS', 'WAITING_PARTS']
@@ -266,6 +268,8 @@ router.patch('/:id', async (req, res) => {
     if (data.sparePartsUsed !== undefined) updateData.sparePartsUsed = data.sparePartsUsed
     if (data.resolutionDetail !== undefined) updateData.resolutionDetail = data.resolutionDetail
     if (data.photoUrls !== undefined) updateData.photoUrls = data.photoUrls
+    if (data.pdfFileUrl !== undefined) updateData.pdfFileUrl = data.pdfFileUrl
+    if (data.pdfFileName !== undefined) updateData.pdfFileName = data.pdfFileName
     if (data.status === 'CLOSED' && !data.closedAt) updateData.closedAt = new Date()
     if (data.closedAt !== undefined) updateData.closedAt = data.closedAt ? new Date(data.closedAt) : null
 

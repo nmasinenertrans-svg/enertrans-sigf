@@ -941,6 +941,8 @@ export interface ServiceOrder {
   assignedToName: string
   sparePartsUsed: string
   photoUrls: string[]
+  pdfFileUrl?: string
+  pdfFileName?: string
   createdByUserId: string
   createdAt: string
   updatedAt: string

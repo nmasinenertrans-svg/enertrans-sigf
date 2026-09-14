@@ -385,6 +385,11 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "ServiceOrder_status_createdAt_idx" ON "ServiceOrder"("status","createdAt");`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "ServiceOrder_clientId_idx" ON "ServiceOrder"("clientId");`)
     await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "ServiceOrder_assignedToUserId_idx" ON "ServiceOrder"("assignedToUserId");`)
+    // PDF generado (camion, cliente, ubicacion, que se solicito, quien lo
+    // realiza) que se guarda subido a Supabase, igual que invoiceFileUrl en
+    // RepairRecord/Invoice.
+    await safeExecuteCompatSql(`ALTER TABLE "ServiceOrder" ADD COLUMN IF NOT EXISTS "pdfFileUrl" TEXT NOT NULL DEFAULT '';`)
+    await safeExecuteCompatSql(`ALTER TABLE "ServiceOrder" ADD COLUMN IF NOT EXISTS "pdfFileName" TEXT NOT NULL DEFAULT '';`)
 
     // WorkOrder y AuditRecord: schema-qualified directo para evitar problemas de qualifyCompatSql
     const sq = quoteIdentifier(getNormalizedActiveSchema())
