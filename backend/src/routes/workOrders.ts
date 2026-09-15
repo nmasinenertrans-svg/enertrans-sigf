@@ -141,8 +141,19 @@ router.patch('/:id', async (req, res) => {
 })
 
 router.delete('/:id', async (req, res) => {
-  await prisma.workOrder.delete({ where: { id: req.params.id } })
-  return res.status(204).send()
+  try {
+    await prisma.workOrder.delete({ where: { id: req.params.id } })
+    return res.status(204).send()
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'P2025') {
+      // Ya no existe (por ejemplo, un reintento de la cola offline despues de
+      // que el borrado anterior si haya llegado a buen puerto) -- no es un
+      // error real, la OT igual termino borrada.
+      return res.status(204).send()
+    }
+    console.error('WorkOrder DELETE error:', error)
+    return res.status(500).json({ message: 'No se pudo eliminar la OT.' })
+  }
 })
 
 export default router

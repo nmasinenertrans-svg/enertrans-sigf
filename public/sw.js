@@ -341,6 +341,10 @@ const SW_SYNC_HANDLERS = {
     swApiFetch(baseUrl, token, '/maintenance', { method: 'POST', body: payload }),
   'workOrder.create': (baseUrl, token, payload) =>
     swApiFetch(baseUrl, token, '/work-orders', { method: 'POST', body: payload }),
+  'workOrder.delete': (baseUrl, token, payload) => {
+    if (!payload?.id) return Promise.resolve()
+    return swApiFetch(baseUrl, token, `/work-orders/${payload.id}`, { method: 'DELETE' })
+  },
   'repair.create': async (baseUrl, token, payload) => {
     let invoiceFileUrl = payload.invoiceFileUrl || ''
     let invoiceFileBase64 = payload.invoiceFileBase64 || ''

@@ -20,6 +20,7 @@ import {
 } from '../services/workOrdersService'
 import type { WorkOrderFormData, WorkOrderFormErrors, WorkOrderFormField } from '../types'
 import { enqueueAndSync } from '../../../services/offline/sync'
+import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
 import { apiRequest } from '../../../services/api/apiClient'
 import { exportWorkOrderPdf } from '../services/workOrderPdfService'
 import type { WorkOrder, WorkOrderDeviation, WorkOrderDeviationStatus, WorkOrderStatus } from '../../../types/domain'
@@ -437,27 +438,60 @@ export const WorkOrdersPage = () => {
     setFormData(toWorkOrderFormData(selectedWorkOrder))
   }
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!canDelete) {
       return
     }
 
-    if (!workOrderIdPendingDelete) {
+    const workOrderId = workOrderIdPendingDelete
+    if (!workOrderId) {
       return
     }
 
-    setWorkOrders(workOrders.filter((workOrder) => workOrder.id !== workOrderIdPendingDelete))
-    setInventoryItems(removeWorkOrderFromInventoryLinks(inventoryItems, workOrderIdPendingDelete))
+    const previousWorkOrders = workOrders
+    const previousInventoryItems = inventoryItems
 
-    if (editingWorkOrderId === workOrderIdPendingDelete) {
+    setWorkOrders(workOrders.filter((workOrder) => workOrder.id !== workOrderId))
+    setInventoryItems(removeWorkOrderFromInventoryLinks(inventoryItems, workOrderId))
+    setWorkOrderIdPendingDelete(null)
+
+    if (editingWorkOrderId === workOrderId) {
       resetForm()
     }
 
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      apiRequest(`/work-orders/${workOrderIdPendingDelete}`, { method: 'DELETE' }).catch(() => null)
-    }
+    try {
+      const queueItems = await getQueueItems()
+      const queuedCreate = queueItems.find((item) => {
+        if (item.type !== 'workOrder.create') {
+          return false
+        }
+        const payload = item.payload as { id?: string }
+        return payload?.id === workOrderId
+      })
 
-    setWorkOrderIdPendingDelete(null)
+      if (queuedCreate) {
+        await removeQueueItem(queuedCreate.id)
+        setAppError('OT eliminada de la cola local.')
+        return
+      }
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await enqueueAndSync({
+          id: `workOrder.delete.${workOrderId}`,
+          type: 'workOrder.delete',
+          payload: { id: workOrderId },
+          createdAt: new Date().toISOString(),
+        })
+        setAppError('OT eliminada localmente. Se sincronizara al recuperar conexion.')
+        return
+      }
+
+      await apiRequest<void>(`/work-orders/${workOrderId}`, { method: 'DELETE' })
+    } catch {
+      setWorkOrders(previousWorkOrders)
+      setInventoryItems(previousInventoryItems)
+      setAppError('No se pudo eliminar la OT. Se restauro en la lista, intenta de nuevo.')
+    }
   }
 
   const handleExportPdf = async (workOrderId: string) => {
@@ -888,7 +922,7 @@ export const WorkOrdersPage = () => {
           title="Eliminar orden de trabajo"
           message="Deseas eliminar esta OT? Esta accion no se puede deshacer."
           onCancel={() => setWorkOrderIdPendingDelete(null)}
-          onConfirm={handleConfirmDelete}
+          onConfirm={() => void handleConfirmDelete()}
         />
       ) : null}
 

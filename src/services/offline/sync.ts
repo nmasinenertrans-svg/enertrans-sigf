@@ -238,6 +238,14 @@ const syncItem = async (item: OfflineQueueItem) => {
     case 'workOrder.create':
       await apiRequest('/work-orders', { method: 'POST', body: item.payload })
       return
+    case 'workOrder.delete': {
+      const payload = item.payload as { id?: string }
+      if (!payload?.id) {
+        return
+      }
+      await apiRequest(`/work-orders/${payload.id}`, { method: 'DELETE' })
+      return
+    }
     case 'repair.create': {
       const payload = item.payload as RepairPayload
       let invoiceFileUrl = payload.invoiceFileUrl || ''
