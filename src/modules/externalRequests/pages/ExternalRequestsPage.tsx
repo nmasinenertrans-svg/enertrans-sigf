@@ -18,7 +18,6 @@ import {
   validateExternalRequestFormData,
   type ExternalRequestFormData,
   type ExternalRequestFormErrors,
-  type ExternalRequestViewItem,
 } from '../services/externalRequestsService'
 import type { ExternalRequest } from '../../../types/domain'
 
@@ -334,27 +333,6 @@ export const ExternalRequestsPage = () => {
       setAppError('No se pudo adjuntar el presupuesto a la NDP.')
     } finally {
       setUploadingAttachmentId(null)
-    }
-  }
-
-  const handleToggleChecklistItem = async (request: ExternalRequestViewItem, itemId: string, nextStatus: 'PENDING' | 'OK' | 'BAD') => {
-    const nextChecklist = request.reinspectionChecklist.map((item) =>
-      item.id === itemId
-        ? { ...item, status: nextStatus, checkedAt: nextStatus === 'PENDING' ? null : new Date().toISOString() }
-        : item,
-    )
-    const optimisticRequests = externalRequests.map((item) =>
-      item.id === request.id ? { ...item, reinspectionChecklist: nextChecklist } : item,
-    )
-    setExternalRequests(optimisticRequests)
-    try {
-      const updated = await apiRequest<ExternalRequest>(`/external-requests/${request.id}`, {
-        method: 'PATCH',
-        body: { reinspectionChecklist: nextChecklist },
-      })
-      setExternalRequests(optimisticRequests.map((item) => (item.id === request.id ? updated : item)))
-    } catch {
-      setAppError('No se pudo actualizar el check de re-inspeccion.')
     }
   }
 
@@ -746,54 +724,6 @@ export const ExternalRequestsPage = () => {
                           <li key={`${request.id}-${task}`}>{task}</li>
                         ))}
                       </ul>
-
-                      {request.reinspectionChecklist.length > 0 ? (
-                        <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
-                            Check de re-inspeccion
-                          </p>
-                          <ul className="mt-2 space-y-2">
-                            {request.reinspectionChecklist.map((item) => {
-                              const statusLabel =
-                                item.status === 'OK' ? 'OK' : item.status === 'BAD' ? 'MAL' : 'PENDIENTE'
-                              const statusClass =
-                                item.status === 'OK'
-                                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                                  : item.status === 'BAD'
-                                    ? 'border-rose-300 bg-rose-50 text-rose-700'
-                                    : 'border-slate-300 bg-white text-slate-600'
-                              return (
-                                <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                  <span className="text-slate-700">{item.label}</span>
-                                  <span className="flex items-center gap-1">
-                                    <span className={`rounded-full border px-2 py-0.5 font-semibold ${statusClass}`}>
-                                      {statusLabel}
-                                    </span>
-                                    {canEdit ? (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => void handleToggleChecklistItem(request, item.id, 'OK')}
-                                          className="rounded-lg border border-emerald-300 bg-white px-2 py-1 font-semibold text-emerald-700 hover:bg-emerald-50"
-                                        >
-                                          OK
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => void handleToggleChecklistItem(request, item.id, 'BAD')}
-                                          className="rounded-lg border border-rose-300 bg-white px-2 py-1 font-semibold text-rose-700 hover:bg-rose-50"
-                                        >
-                                          Mal
-                                        </button>
-                                      </>
-                                    ) : null}
-                                  </span>
-                                </li>
-                              )
-                            })}
-                          </ul>
-                        </div>
-                      ) : null}
 
                       <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
                         <p className="text-xs font-semibold text-slate-700">Repuestos ({request.partsItems.length} items)</p>
