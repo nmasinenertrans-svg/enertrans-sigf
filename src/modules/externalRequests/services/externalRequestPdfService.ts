@@ -1,6 +1,6 @@
 ﻿import type { jsPDF } from 'jspdf'
 import enertransLogoUrl from '../../../assets/enertrans-logo.png'
-import type { ExternalRequest, FleetUnit } from '../../../types/domain'
+import type { ExternalRequest, ExternalRequestChecklistItem, FleetUnit } from '../../../types/domain'
 
 interface ExternalRequestPdfPayload {
   request: ExternalRequest
@@ -384,4 +384,170 @@ export const exportPurchaseOrderPdf = async ({ request, unit }: ExternalRequestP
   pdf.text('ENERTRANS • Orden de compra', 14, pdf.internal.pageSize.getHeight() - 8)
 
   pdf.save(`OrdenCompra_${request.ocCode ?? request.code}_${unit?.internalCode ?? 'unidad'}.pdf`)
+}
+
+// Check de re-inspeccion de una NDP (por ahora solo se genera para Enermet,
+// ver externalRequestsService.ts) -- mismo criterio B/O/NA que el checklist
+// real de Inspecciones. Es un PDF para imprimir y dejar como registro en
+// papel (firmado a mano), no queda subido/guardado en ningun lado -- si ya
+// tiene marcas cargadas se imprimen tal cual, si no, las casillas quedan en
+// blanco para completar a mano.
+export const exportReinspectionChecklistPdf = async ({ request, unit }: ExternalRequestPdfPayload): Promise<void> => {
+  const { jsPDF: JsPDF } = await import('jspdf')
+  const pdf = new JsPDF({ unit: 'mm', format: 'a4' })
+  let logoDataUrl: string | null = null
+  try {
+    logoDataUrl = await fetchImageAsDataUrl(enertransLogoUrl)
+  } catch {
+    logoDataUrl = null
+  }
+
+  const pageWidth = pdf.internal.pageSize.getWidth()
+
+  const drawChecklistHeader = () => {
+    pdf.setFillColor(79, 70, 229)
+    pdf.rect(0, 0, pageWidth, 22, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(13)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text('ENERTRANS S.R.L.', 14, 9)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.text('Check de re-inspeccion', 14, 15)
+    if (logoDataUrl) {
+      try {
+        pdf.addImage(logoDataUrl, 'PNG', pageWidth - 34, 4, 20, 14)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  addWatermark(pdf, logoDataUrl)
+  drawChecklistHeader()
+
+  let cursorY = 30
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(12)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text('CHECK DE RE-INSPECCION', pageWidth / 2, cursorY, { align: 'center' })
+
+  cursorY += 8
+  const infoBoxTop = cursorY
+  pdf.setDrawColor(217, 217, 217)
+  pdf.setFillColor(255, 255, 255)
+  pdf.roundedRect(12, infoBoxTop - 5, pageWidth - 24, 18, 3, 3, 'FD')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(75, 85, 99)
+  pdf.text('Dominio', 18, infoBoxTop + 2)
+  pdf.text('NDP', 80, infoBoxTop + 2)
+  pdf.text('Proveedor', 140, infoBoxTop + 2)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setTextColor(17, 24, 39)
+  pdf.text(unit?.internalCode ?? 'N/D', 18, infoBoxTop + 8)
+  pdf.text(request.code, 80, infoBoxTop + 8)
+  pdf.text(request.companyName || '-', 140, infoBoxTop + 8)
+
+  cursorY = infoBoxTop + 22
+
+  const items: ExternalRequestChecklistItem[] =
+    Array.isArray(request.reinspectionChecklist) && request.reinspectionChecklist.length > 0
+      ? request.reinspectionChecklist
+      : request.tasks.map((task, index) => ({ id: `blank-${index}`, label: task, status: '', note: '' }))
+
+  const tableLeft = 12
+  const tableWidth = pageWidth - 24
+  const colNum = 10
+  const colBox = 12
+  const colObs = 46
+  const colLabel = tableWidth - colNum - colBox * 3 - colObs
+  const headerH = 8
+
+  const drawTableHeader = (y: number) => {
+    pdf.setFillColor(79, 70, 229)
+    pdf.rect(tableLeft, y, tableWidth, headerH, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(8)
+    pdf.setTextColor(255, 255, 255)
+    let x = tableLeft
+    pdf.text('#', x + 2, y + 5.5)
+    x += colNum
+    pdf.text('Item / tarea', x + 2, y + 5.5)
+    x += colLabel
+    pdf.text('B', x + colBox / 2, y + 5.5, { align: 'center' })
+    x += colBox
+    pdf.text('O', x + colBox / 2, y + 5.5, { align: 'center' })
+    x += colBox
+    pdf.text('NA', x + colBox / 2, y + 5.5, { align: 'center' })
+    x += colBox
+    pdf.text('Observacion', x + 2, y + 5.5)
+  }
+
+  drawTableHeader(cursorY)
+  let rowY = cursorY + headerH
+  pdf.setFont('helvetica', 'normal')
+  pdf.setTextColor(31, 41, 55)
+
+  items.forEach((item, index) => {
+    const labelLines = pdf.splitTextToSize(item.label || '-', colLabel - 4)
+    const obsLines = pdf.splitTextToSize(item.note || '', colObs - 4)
+    const blockHeight = Math.max(8, Math.max(labelLines.length, obsLines.length) * 4 + 3)
+
+    if (rowY + blockHeight > 250) {
+      pdf.addPage()
+      addWatermark(pdf, logoDataUrl)
+      drawChecklistHeader()
+      rowY = 30
+      drawTableHeader(rowY)
+      rowY += headerH
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(31, 41, 55)
+    }
+
+    let x = tableLeft
+    pdf.setDrawColor(217, 217, 217)
+    pdf.rect(x, rowY, colNum, blockHeight)
+    pdf.text(String(index + 1), x + 2, rowY + 5)
+    x += colNum
+    pdf.rect(x, rowY, colLabel, blockHeight)
+    pdf.text(labelLines, x + 2, rowY + 5)
+    x += colLabel
+    ;(['B', 'O', 'NA'] as const).forEach((statusValue) => {
+      pdf.rect(x, rowY, colBox, blockHeight)
+      if (item.status === statusValue) {
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('X', x + colBox / 2, rowY + blockHeight / 2 + 1.5, { align: 'center' })
+        pdf.setFont('helvetica', 'normal')
+      }
+      x += colBox
+    })
+    pdf.rect(x, rowY, colObs, blockHeight)
+    pdf.text(obsLines, x + 2, rowY + 5)
+
+    rowY += blockHeight
+  })
+
+  cursorY = rowY + 4
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(7)
+  pdf.setTextColor(107, 114, 128)
+  pdf.text('B = Bien   O = Observacion   NA = No aplica', tableLeft, cursorY)
+
+  const signatureY = Math.max(cursorY + 20, 250)
+  pdf.setDrawColor(60, 60, 60)
+  pdf.line(20, signatureY, 90, signatureY)
+  pdf.line(pageWidth - 90, signatureY, pageWidth - 20, signatureY)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.setTextColor(17, 24, 39)
+  pdf.text('REVISO', 45, signatureY + 6)
+  pdf.text('FECHA', pageWidth - 65, signatureY + 6)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(107, 114, 128)
+  pdf.text('ENERTRANS • Check de re-inspeccion', 14, pdf.internal.pageSize.getHeight() - 8)
+
+  pdf.save(`Check_${request.code}_${unit?.internalCode ?? 'unidad'}.pdf`)
 }

@@ -585,6 +585,20 @@ export interface InventoryItem {
   linkedWorkOrderIds: string[]
 }
 
+// Mismo criterio B/O/NA (Bien/Observacion/No aplica) que el checklist real
+// de Inspecciones (ver StatusPicker en AuditsPage.tsx) -- '' = todavia sin
+// marcar.
+export const reinspectionChecklistStatuses = ['', 'B', 'O', 'NA'] as const
+export type ReinspectionChecklistStatus = (typeof reinspectionChecklistStatuses)[number]
+
+export interface ExternalRequestChecklistItem {
+  id: string
+  label: string
+  status: ReinspectionChecklistStatus
+  note?: string
+  checkedAt?: string | null
+}
+
 export interface ExternalRequest {
   id: string
   code: string
@@ -604,6 +618,10 @@ export interface ExternalRequest {
   providerFileUrl?: string
   ocCode?: string | null
   ocGeneratedAt?: string | null
+  // Check de re-inspeccion (solo se genera para NDP a "Enermet", ver
+  // externalRequestsService.ts) -- vive dentro de la NDP, no es un
+  // AuditRecord real del modulo de Inspecciones.
+  reinspectionChecklist?: ExternalRequestChecklistItem[]
 }
 
 export interface ExternalRequestPartItem {

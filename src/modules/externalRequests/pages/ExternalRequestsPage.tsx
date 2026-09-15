@@ -7,7 +7,7 @@ import { apiRequest } from '../../../services/api/apiClient'
 import { enqueueAndSync } from '../../../services/offline/sync'
 import { getQueueItems, removeQueueItem } from '../../../services/offline/queue'
 import { BackLink } from '../../../components/shared/BackLink'
-import { exportExternalRequestPdf, exportPurchaseOrderPdf } from '../services/externalRequestPdfService'
+import { exportExternalRequestPdf, exportPurchaseOrderPdf, exportReinspectionChecklistPdf } from '../services/externalRequestPdfService'
 import {
   buildExternalRequestView,
   calculatePartsTotal,
@@ -18,8 +18,9 @@ import {
   validateExternalRequestFormData,
   type ExternalRequestFormData,
   type ExternalRequestFormErrors,
+  type ExternalRequestViewItem,
 } from '../services/externalRequestsService'
-import type { ExternalRequest } from '../../../types/domain'
+import type { ExternalRequest, ReinspectionChecklistStatus } from '../../../types/domain'
 
 export const ExternalRequestsPage = () => {
   const { can } = usePermissions()
@@ -333,6 +334,38 @@ export const ExternalRequestsPage = () => {
       setAppError('No se pudo adjuntar el presupuesto a la NDP.')
     } finally {
       setUploadingAttachmentId(null)
+    }
+  }
+
+  const handleToggleChecklistItem = async (request: ExternalRequestViewItem, itemId: string, nextStatus: ReinspectionChecklistStatus) => {
+    const nextChecklist = request.reinspectionChecklist.map((item) =>
+      item.id === itemId
+        ? { ...item, status: nextStatus, checkedAt: nextStatus ? new Date().toISOString() : null }
+        : item,
+    )
+    const optimisticRequests = externalRequests.map((item) =>
+      item.id === request.id ? { ...item, reinspectionChecklist: nextChecklist } : item,
+    )
+    setExternalRequests(optimisticRequests)
+    try {
+      const updated = await apiRequest<ExternalRequest>(`/external-requests/${request.id}`, {
+        method: 'PATCH',
+        body: { reinspectionChecklist: nextChecklist },
+      })
+      setExternalRequests(optimisticRequests.map((item) => (item.id === request.id ? updated : item)))
+    } catch {
+      setAppError('No se pudo actualizar el check de re-inspeccion.')
+    }
+  }
+
+  const handleExportChecklist = async (requestId: string) => {
+    const request = externalRequests.find((item) => item.id === requestId)
+    if (!request) return
+    const unit = fleetUnits.find((item) => item.id === request.unitId)
+    try {
+      await exportReinspectionChecklistPdf({ request, unit })
+    } catch {
+      setAppError('No se pudo generar el check de re-inspeccion.')
     }
   }
 
@@ -724,6 +757,66 @@ export const ExternalRequestsPage = () => {
                           <li key={`${request.id}-${task}`}>{task}</li>
                         ))}
                       </ul>
+
+                      {request.reinspectionChecklist.length > 0 ? (
+                        <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                              Check de re-inspeccion
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void handleExportChecklist(request.id)}
+                              className="rounded-lg border border-indigo-300 bg-white px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                            >
+                              Imprimir check
+                            </button>
+                          </div>
+                          <ul className="mt-2 space-y-2">
+                            {request.reinspectionChecklist.map((item) => (
+                              <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <span className="text-slate-700">{item.label}</span>
+                                {canEdit ? (
+                                  <span className="flex items-center gap-1">
+                                    {(['B', 'O', 'NA'] as const).map((statusValue) => {
+                                      const isActive = item.status === statusValue
+                                      const activeColor =
+                                        statusValue === 'B'
+                                          ? 'bg-emerald-500 text-white'
+                                          : statusValue === 'O'
+                                            ? 'bg-sky-500 text-white'
+                                            : 'bg-slate-400 text-white'
+                                      return (
+                                        <button
+                                          key={statusValue}
+                                          type="button"
+                                          title={statusValue === 'B' ? 'Bien' : statusValue === 'O' ? 'Observacion' : 'No aplica'}
+                                          onClick={() =>
+                                            void handleToggleChecklistItem(
+                                              request,
+                                              item.id,
+                                              isActive ? '' : statusValue,
+                                            )
+                                          }
+                                          className={`rounded px-2 py-0.5 text-[10px] font-bold transition-opacity ${activeColor} ${
+                                            isActive ? 'opacity-100 ring-2 ring-offset-1 ring-slate-400' : 'opacity-40 hover:opacity-80'
+                                          }`}
+                                        >
+                                          {statusValue}
+                                        </button>
+                                      )
+                                    })}
+                                  </span>
+                                ) : item.status ? (
+                                  <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 font-semibold text-slate-600">
+                                    {item.status}
+                                  </span>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
 
                       <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
                         <p className="text-xs font-semibold text-slate-700">Repuestos ({request.partsItems.length} items)</p>

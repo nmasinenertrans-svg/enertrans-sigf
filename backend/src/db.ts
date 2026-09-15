@@ -1288,6 +1288,13 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "serviceOrderId" TEXT;`)
     await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "ocCode" TEXT;`)
     await safeExecuteCompatSql(`ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "ocGeneratedAt" TIMESTAMP(3);`)
+    // Check de re-inspeccion: solo se genera cuando companyName es "Enermet"
+    // (ver toExternalRequest en externalRequestsService.ts). Cada tarea de la
+    // NDP queda como item {id,label,status,note,checkedAt} con status B/O/NA,
+    // igual que el checklist real de Inspecciones.
+    await safeExecuteCompatSql(
+      `ALTER TABLE "ExternalRequest" ADD COLUMN IF NOT EXISTS "reinspectionChecklist" JSONB NOT NULL DEFAULT '[]'::jsonb;`,
+    )
     await safeExecuteCompatSql(
       `CREATE INDEX IF NOT EXISTS "ExternalRequest_linkedRepairId_idx" ON "ExternalRequest"("linkedRepairId");`,
     )
