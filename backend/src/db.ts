@@ -396,6 +396,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
     for (const [tbl, col, type] of [
       ['WorkOrder', 'externalVehicle', 'TEXT'] as const,
       ['AuditRecord', 'externalVehicle', 'TEXT'] as const,
+      // Inspeccion por entrega (auditKind='ENTREGA'): se puede vincular a un
+      // remito (FleetMovement). No genera OT ni cambia el estado operativo
+      // de la unidad -- ver backend/src/routes/audits.ts.
+      ['AuditRecord', 'movementId', 'TEXT'] as const,
     ]) {
       try {
         await prisma.$executeRawUnsafe(`ALTER TABLE ${sq}."${tbl}" ADD COLUMN IF NOT EXISTS "${col}" ${type}`)

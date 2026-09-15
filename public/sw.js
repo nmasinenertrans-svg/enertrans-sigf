@@ -310,6 +310,7 @@ const swSyncAudit = async (baseUrl, token, payload) => {
     unitKilometers: payload.unitKilometers ?? 0,
     engineHours: payload.engineHours ?? 0,
     hydroHours: payload.hydroHours ?? 0,
+    movementId: payload.movementId ?? null,
   }
 
   await swApiFetch(baseUrl, token, '/audits', { method: 'POST', body })

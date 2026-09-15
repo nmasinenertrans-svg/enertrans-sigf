@@ -43,7 +43,7 @@ export const AuditsPage = () => {
   const { can } = usePermissions()
   const [searchParams] = useSearchParams()
   const {
-    state: { currentUser, fleetUnits, audits, workOrders, externalRequests, featureFlags },
+    state: { currentUser, fleetUnits, audits, workOrders, externalRequests, movements, featureFlags },
     actions: { setAudits, setGlobalLoading, setAppError, setWorkOrders, setFleetUnits },
   } = useAppContext()
   const manualAuditMode = featureFlags.manualAuditMode
@@ -439,6 +439,7 @@ export const AuditsPage = () => {
       ...previousFormData,
       auditMode: 'INDEPENDENT',
       externalRequestId: '',
+      movementId: '',
     }))
   }, [manualAuditMode])
 
@@ -495,6 +496,7 @@ export const AuditsPage = () => {
       unitId: pendingWorkOrder.unitId,
       auditMode: 'INDEPENDENT',
       externalRequestId: '',
+      movementId: '',
       checklistSections: createChecklistFromDeviations(pendingWorkOrder.taskList ?? []),
     }))
     setUnitFilter(pendingWorkOrder.unitId ?? '')
@@ -750,6 +752,7 @@ export const AuditsPage = () => {
     unitKilometers: audit.unitKilometers ?? 0,
     engineHours: audit.engineHours ?? 0,
     hydroHours: audit.hydroHours ?? 0,
+    movementId: audit.movementId ?? null,
     syncState: 'SYNCED' as const,
   })
 
@@ -979,6 +982,7 @@ export const AuditsPage = () => {
         unitKilometers: createdAudit.unitKilometers,
         engineHours: createdAudit.engineHours,
         hydroHours: createdAudit.hydroHours,
+        movementId: createdAudit.movementId ?? null,
         ...workOrderPayload,
       }
 
@@ -1009,7 +1013,7 @@ export const AuditsPage = () => {
       }
     }
 
-    if (!manualAuditMode && createdAudit.result === 'REJECTED') {
+    if (!manualAuditMode && createdAudit.auditKind !== 'ENTREGA' && createdAudit.result === 'REJECTED') {
       const createdWorkOrder = createWorkOrderFromAudit(createdAudit, unitCode)
       setWorkOrders([createdWorkOrder, ...workOrders])
       setFleetUnits(
@@ -1071,7 +1075,7 @@ export const AuditsPage = () => {
         (order) => order.unitId === createdAudit.unitId && order.status !== 'CLOSED',
       )
 
-      if (!hasOpenWorkOrders) {
+      if (createdAudit.auditKind !== 'ENTREGA' && !hasOpenWorkOrders) {
         setFleetUnits(
           updatedFleetUnits.map((unit) =>
             unit.id === createdAudit.unitId ? { ...unit, operationalStatus: 'OPERATIONAL' } : unit,
@@ -1366,6 +1370,7 @@ export const AuditsPage = () => {
                             unitId: event.target.value,
                             auditMode: 'INDEPENDENT',
                             externalRequestId: '',
+                            movementId: '',
                           }))
                           setErrors((previousErrors) => ({ ...previousErrors, unitId: undefined }))
                         }}
@@ -1408,15 +1413,43 @@ export const AuditsPage = () => {
                             ...previousFormData,
                             auditMode: nextMode,
                             externalRequestId: nextMode === 'EXTERNAL_REQUEST' ? previousFormData.externalRequestId : '',
+                            movementId: nextMode === 'DELIVERY' ? previousFormData.movementId : '',
                           }))
                           setErrors((previousErrors) => ({ ...previousErrors, auditMode: undefined, externalRequestId: undefined }))
                         }}
                       >
                         <option value="INDEPENDENT">Inspeccion independiente</option>
                         <option value="EXTERNAL_REQUEST">Nota de pedido externo</option>
+                        <option value="DELIVERY">Inspeccion por entrega (remito)</option>
                       </select>
                     </label>
-                    {formData.auditMode === 'INDEPENDENT' && (
+                    {formData.auditMode === 'DELIVERY' ? (
+                      <label className="mt-4 flex flex-col gap-2">
+                        <span className="text-sm font-semibold text-slate-700">Remito vinculado</span>
+                        <select
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-400"
+                          value={formData.movementId}
+                          onChange={(event) => {
+                            setFormData((previousFormData) => ({ ...previousFormData, movementId: event.target.value }))
+                            setErrors((previousErrors) => ({ ...previousErrors, movementId: undefined }))
+                          }}
+                        >
+                          <option value="">Seleccionar remito</option>
+                          {movements
+                            .filter((movement) => movement.unitIds.includes(formData.unitId ?? ''))
+                            .map((movement) => (
+                              <option key={movement.id} value={movement.id}>
+                                {movement.remitoNumber ? `Remito ${movement.remitoNumber}` : movement.id.slice(0, 8)}
+                              </option>
+                            ))}
+                        </select>
+                        <p className="text-[11px] text-slate-500">
+                          Esta inspeccion no genera OT ni cambia el estado operativo de la unidad -- solo queda
+                          registrada y vinculada al remito.
+                        </p>
+                      </label>
+                    ) : null}
+                    {(formData.auditMode === 'INDEPENDENT' || formData.auditMode === 'DELIVERY') && (
                       <div className="mt-4">
                         <span className="text-sm font-semibold text-slate-700">Tipo de vehículo</span>
                         <div className="mt-2 flex gap-2">
@@ -1707,7 +1740,10 @@ export const AuditsPage = () => {
         </div>
 
         <div className="space-y-4 xl:col-span-2">
-          {canCreate && isFormOpen && formData.auditMode === 'INDEPENDENT' && !manualAuditMode ? (
+          {canCreate &&
+          isFormOpen &&
+          (formData.auditMode === 'INDEPENDENT' || formData.auditMode === 'DELIVERY') &&
+          !manualAuditMode ? (
             <>
               {formData.checklistType ? (
                 <NewChecklistTable

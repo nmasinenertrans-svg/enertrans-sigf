@@ -354,6 +354,7 @@ export const createEmptyAuditFormData = (unitId: string): AuditFormData => ({
   auditMode: 'INDEPENDENT',
   manualResult: 'APPROVED',
   externalRequestId: '',
+  movementId: '',
   observations: '',
   checklistSections: createStandardChecklist(),
   photoBase64List: [],
@@ -419,6 +420,10 @@ export const validateAuditFormData = (formData: AuditFormData, unitList: FleetUn
 
   if (formData.auditMode === 'EXTERNAL_REQUEST' && !formData.externalRequestId) {
     validationErrors.externalRequestId = 'Selecciona la nota de pedido vinculada.'
+  }
+
+  if (formData.auditMode === 'DELIVERY' && !formData.movementId) {
+    validationErrors.movementId = 'Selecciona el remito vinculado.'
   }
 
   if (formData.unitKilometers < 0) {
@@ -548,14 +553,18 @@ const resolveAuditKind = (unitId: string, workOrders: WorkOrder[]): 'AUDIT' | 'R
   return hasPendingReaudit ? 'REAUDIT' : 'AUDIT'
 }
 
-const buildAuditCode = (kind: 'AUDIT' | 'REAUDIT', unitCode: string, sequenceOverride?: number | null) => {
-  const prefix = kind === 'REAUDIT' ? 'RINS' : 'INS'
+const buildAuditCode = (kind: 'AUDIT' | 'REAUDIT' | 'ENTREGA', unitCode: string, sequenceOverride?: number | null) => {
+  const prefix = kind === 'REAUDIT' ? 'RINS' : kind === 'ENTREGA' ? 'ENT' : 'INS'
   if (sequenceOverride && Number.isFinite(sequenceOverride)) {
     return formatSequenceCode(prefix, sequenceOverride, unitCode)
   }
-  return kind === 'REAUDIT'
-    ? getNextSequenceCode('reaudit', 'RINS', unitCode)
-    : getNextSequenceCode('audit', 'INS', unitCode)
+  if (kind === 'REAUDIT') {
+    return getNextSequenceCode('reaudit', 'RINS', unitCode)
+  }
+  if (kind === 'ENTREGA') {
+    return getNextSequenceCode('entrega', 'ENT', unitCode)
+  }
+  return getNextSequenceCode('audit', 'INS', unitCode)
 }
 
 export const toAuditRecord = (
@@ -590,13 +599,22 @@ export const toAuditRecord = (
   }
 
   const isExternalVehicle = formData.vehicleMode === 'external'
-  const auditKind = manualAuditMode || isExternalVehicle ? 'AUDIT' : resolveAuditKind(formData.unitId ?? '', workOrders)
-  const pendingOrder = manualAuditMode || isExternalVehicle
+  // ENTREGA (inspeccion por entrega, se vincula a un remito) es una eleccion
+  // explicita del formulario -- nunca se resuelve por AUDIT/REAUDIT, y no
+  // genera OT ni cambia el estado operativo de la unidad (ver
+  // backend/src/routes/audits.ts).
+  const auditKind: 'AUDIT' | 'REAUDIT' | 'ENTREGA' =
+    formData.auditMode === 'DELIVERY'
+      ? 'ENTREGA'
+      : manualAuditMode || isExternalVehicle
+        ? 'AUDIT'
+        : resolveAuditKind(formData.unitId ?? '', workOrders)
+  const pendingOrder = manualAuditMode || isExternalVehicle || formData.auditMode === 'DELIVERY'
     ? undefined
     : workOrders.find((order) => order.unitId === formData.unitId && order.pendingReaudit)
 
   // Convertir nuevo checklist al formato legacy si aplica
-  if (formData.checklistType && formData.auditMode === 'INDEPENDENT' && !manualAuditMode) {
+  if (formData.checklistType && (formData.auditMode === 'INDEPENDENT' || formData.auditMode === 'DELIVERY') && !manualAuditMode) {
     checklistSections = buildChecklistSectionsFromNew(formData.checklistType, formData.newChecklistItems)
     // Notas de una planilla de papel leida por IA que no matchearon con
     // confianza ningun item del catalogo — se agregan igual, en su propia
@@ -661,6 +679,7 @@ export const toAuditRecord = (
     unitKilometers: formData.unitKilometers,
     engineHours: formData.engineHours,
     hydroHours: formData.hydroHours,
+    movementId: formData.auditMode === 'DELIVERY' ? formData.movementId || null : null,
   }
 }
 

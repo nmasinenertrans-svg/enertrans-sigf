@@ -30,9 +30,11 @@ export interface AuditFormData {
   certNro: string
   certVenc: string
   certCapacidad: string
-  auditMode: 'INDEPENDENT' | 'EXTERNAL_REQUEST'
+  auditMode: 'INDEPENDENT' | 'EXTERNAL_REQUEST' | 'DELIVERY'
   manualResult: 'APPROVED' | 'REJECTED'
   externalRequestId: string
+  // Solo para auditMode='DELIVERY': a que remito corresponde esta inspeccion.
+  movementId: string
   observations: string
   checklistSections: AuditChecklistSectionDraft[]
   photoBase64List: string[]
@@ -53,6 +55,7 @@ export type AuditFormErrors = {
   unitId?: string
   auditMode?: string
   externalRequestId?: string
+  movementId?: string
   checklistSections?: string
   observations?: string
   unitKilometers?: string
@@ -63,7 +66,7 @@ export type AuditFormErrors = {
 
 export interface AuditHistoryViewItem {
   code: string
-  auditKind: 'AUDIT' | 'REAUDIT'
+  auditKind: 'AUDIT' | 'REAUDIT' | 'ENTREGA'
   id: string
   unitId: string | null
   unitLabel: string

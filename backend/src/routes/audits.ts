@@ -14,7 +14,7 @@ const AUDIT_DUPLICATE_WINDOW_MS = 10 * 60 * 1000
 const auditSchema = z.object({
   id: z.string().uuid().optional(),
   code: z.string().optional(),
-  auditKind: z.enum(['AUDIT', 'REAUDIT']).optional(),
+  auditKind: z.enum(['AUDIT', 'REAUDIT', 'ENTREGA']).optional(),
   unitId: z.string().nullable().optional(),
   externalVehicle: z.string().nullable().optional(),
   auditorUserId: z.string().min(1),
@@ -29,6 +29,9 @@ const auditSchema = z.object({
   hydroHours: z.coerce.number().int().nonnegative().optional().default(0),
   workOrderId: z.string().uuid().optional(),
   workOrderCode: z.string().optional(),
+  // Solo para auditKind='ENTREGA': a que remito (FleetMovement) corresponde
+  // esta inspeccion de entrega.
+  movementId: z.string().nullable().optional(),
 })
 
 const forensicSearchSchema = z.object({
@@ -333,7 +336,15 @@ router.post('/', async (req, res) => {
 
   const manualAuditMode = await isManualAuditModeEnabled()
   const isExternalVehicle = !parsed.data.unitId
-  const auditKind = manualAuditMode || isExternalVehicle ? 'AUDIT' : parsed.data.auditKind ?? (await resolveAuditKind(parsed.data.unitId!))
+  // ENTREGA (inspeccion por entrega, se vincula a un remito) es una eleccion
+  // explicita del que la carga -- a diferencia de AUDIT/REAUDIT, nunca se
+  // pisa por modo manual ni por ser vehiculo externo.
+  const auditKind =
+    parsed.data.auditKind === 'ENTREGA'
+      ? 'ENTREGA'
+      : manualAuditMode || isExternalVehicle
+        ? 'AUDIT'
+        : parsed.data.auditKind ?? (await resolveAuditKind(parsed.data.unitId!))
   const performedAtDate = new Date(parsed.data.performedAt)
 
   if (Number.isNaN(performedAtDate.getTime())) {
@@ -380,7 +391,8 @@ router.post('/', async (req, res) => {
   const unitCode = unit?.internalCode ?? ''
   // Server must be the source of truth for audit codes.
   // Frontend/local sequence can drift (PWA/offline/cache/reset) and cause collisions.
-  const code = formatCode(auditKind === 'REAUDIT' ? 'RINS' : 'INS', await getNextSequence(auditKind), unitCode)
+  const codePrefix = auditKind === 'REAUDIT' ? 'RINS' : auditKind === 'ENTREGA' ? 'ENT' : 'INS'
+  const code = formatCode(codePrefix, await getNextSequence(auditKind), unitCode)
 
   const data = {
     id: parsed.data.id,
@@ -402,6 +414,7 @@ router.post('/', async (req, res) => {
     engineHours: parsed.data.engineHours,
     hydroHours: parsed.data.hydroHours,
     workOrderId: parsed.data.workOrderId,
+    movementId: parsed.data.movementId ?? null,
   }
 
   try {
@@ -421,6 +434,15 @@ router.post('/', async (req, res) => {
         engineHours: parsed.data.engineHours,
         hydroHours: parsed.data.hydroHours,
       })
+    }
+
+    // Inspeccion por entrega (auditKind='ENTREGA'): solo queda registrado el
+    // check, sin ningun efecto secundario -- no genera OT, no cambia el
+    // estado operativo de la unidad, no manda avisos. Pedido explicito de
+    // Nicolas (2026-09). Se salta todo el bloque de abajo (tanto el caso
+    // rechazado como el aprobado).
+    if (auditKind === 'ENTREGA') {
+      return res.status(201).json(item)
     }
 
     if (item.result === 'REJECTED') {

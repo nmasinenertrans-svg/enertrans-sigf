@@ -310,7 +310,7 @@ export interface AuditChecklistSection {
 
 export interface AuditRecord {
   code: string
-  auditKind: 'AUDIT' | 'REAUDIT'
+  auditKind: 'AUDIT' | 'REAUDIT' | 'ENTREGA'
   id: string
   unitId: string | null
   externalVehicle?: string | null
@@ -329,6 +329,9 @@ export interface AuditRecord {
   hydroHours: number
   syncState?: 'SYNCED' | 'PENDING' | 'LOCAL_ONLY' | 'ERROR'
   syncError?: string
+  // Solo cuando auditKind='ENTREGA': a que remito (FleetMovement) corresponde
+  // esta inspeccion de entrega.
+  movementId?: string | null
 }
 
 export type WorkOrderDeviationStatus = 'PENDING' | 'RESOLVED' | 'POSTERGADA'

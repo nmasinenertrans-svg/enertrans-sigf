@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { BackLink } from '../../../components/shared/BackLink'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
@@ -34,7 +35,7 @@ const readFileAsDataUrl = (file: File): Promise<string> =>
 
 export const MovementsPage = () => {
   const {
-    state: { fleetUnits, movements, featureFlags, currentUser, clients },
+    state: { fleetUnits, movements, audits, featureFlags, currentUser, clients },
     actions: { setMovements, setAppError },
   } = useAppContext()
   const [formData, setFormData] = useState<MovementFormData>(createEmptyMovementFormData())
@@ -749,12 +750,14 @@ export const MovementsPage = () => {
                   <th className="px-3 py-2">Detalle</th>
                   <th className="px-3 py-2">PDF app</th>
                   <th className="px-3 py-2">PDF</th>
+                  <th className="px-3 py-2">Inspeccion</th>
                   {canManageMovements ? <th className="px-3 py-2">Acciones</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {movements.map((movement) => {
                   const unit = fleetUnits.find((item) => movement.unitIds.includes(item.id))
+                  const linkedAudit = audits.find((audit) => audit.movementId === movement.id)
                   return (
                     <tr key={movement.id} className="border-t border-slate-200">
                       <td className="px-3 py-2">{formatMovementDateForView(movement.remitoDate ?? movement.createdAt)}</td>
@@ -806,6 +809,15 @@ export const MovementsPage = () => {
                           </a>
                         ) : (
                           'Sin adjunto'
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {linkedAudit ? (
+                          <Link to={ROUTE_PATHS.audits} className="text-violet-700 hover:underline">
+                            Ver inspeccion ({linkedAudit.code})
+                          </Link>
+                        ) : (
+                          'Sin inspeccion'
                         )}
                       </td>
                       {canManageMovements ? (

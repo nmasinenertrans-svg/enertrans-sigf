@@ -76,6 +76,7 @@ type AuditPayload = {
   unitKilometers?: number
   engineHours?: number
   hydroHours?: number
+  movementId?: string | null
 }
 
 const parseDataUrl = (dataUrl: string) => {
@@ -187,6 +188,7 @@ const syncAudit = async (payload: AuditPayload) => {
     unitKilometers: payload.unitKilometers ?? 0,
     engineHours: payload.engineHours ?? 0,
     hydroHours: payload.hydroHours ?? 0,
+    movementId: payload.movementId ?? null,
   }
 
   await apiRequest('/audits', { method: 'POST', body })

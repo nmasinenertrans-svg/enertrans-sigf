@@ -310,6 +310,12 @@ model AuditRecord {
   auditorUserId   String
   auditorName    String
   workOrderId    String?
+  // Solo se usa cuando auditKind = 'ENTREGA' (inspeccion por entrega, no
+  // genera OT ni cambia el estado operativo de la unidad): vincula esta
+  // inspeccion a un remito (FleetMovement). Plain field, sin @relation,
+  // mismo criterio que RepairRecord.workOrderId (AuditRecord es tabla
+  // compat, no migrada de verdad).
+  movementId     String?
   performedAt    DateTime
   result         AuditResult
   observations   String
