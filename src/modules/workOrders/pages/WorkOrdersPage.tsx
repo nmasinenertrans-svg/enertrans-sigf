@@ -40,10 +40,9 @@ export const WorkOrdersPage = () => {
   const [searchParams] = useSearchParams()
   const { can } = usePermissions()
   const {
-    state: { currentUser, fleetUnits, inventoryItems, workOrders, featureFlags, invoices },
+    state: { currentUser, fleetUnits, inventoryItems, workOrders, invoices },
     actions: { setWorkOrders, setInventoryItems, setFleetUnits, setAppError },
   } = useAppContext()
-  const manualAuditMode = featureFlags.manualAuditMode
 
   const canCreate = can('WORK_ORDERS', 'create')
   const canEdit = can('WORK_ORDERS', 'edit')
@@ -668,7 +667,10 @@ export const WorkOrdersPage = () => {
     const updatedWorkOrder: WorkOrder = {
       ...workOrder,
       status: 'CLOSED' as WorkOrderStatus,
-      pendingReaudit: manualAuditMode ? false : true,
+      // Circuito de re-inspeccion pendiente eliminado a pedido de Nicolas
+      // (2026-09): cerrar una OT ya no deja marcada la unidad esperando
+      // una re-auditoria.
+      pendingReaudit: false,
       taskList: finalTasks,
     }
     setWorkOrders(workOrders.map((order) => (order.id === workOrderId ? updatedWorkOrder : order)))
@@ -694,11 +696,7 @@ export const WorkOrdersPage = () => {
       }
     }
 
-    setAppError(
-      manualAuditMode
-        ? 'OT cerrada en modo manual. No se genero re-inspeccion automatica.'
-        : 'OT cerrada. Se genero una re-inspeccion pendiente para el inspector.',
-    )
+    setAppError('OT cerrada.')
   }
 
   const handleBulkCloseWorkOrders = async () => {
@@ -715,7 +713,7 @@ export const WorkOrdersPage = () => {
       return {
         ...order,
         status: 'CLOSED' as WorkOrderStatus,
-        pendingReaudit: manualAuditMode ? false : true,
+        pendingReaudit: false,
         taskList: normalizedTasks,
       }
     })
@@ -873,7 +871,7 @@ export const WorkOrdersPage = () => {
                         onClick={() => handleCloseWorkOrder(item.id)}
                         className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
                       >
-                        {manualAuditMode ? 'Cerrar OT (sin re-inspeccion automatica)' : 'Cerrar OT y solicitar re-inspeccion'}
+                        Cerrar OT
                       </button>
                     ) : null}
                   </div>

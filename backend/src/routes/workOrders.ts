@@ -8,15 +8,6 @@ import { sendPushToAllUsers } from '../services/webPush.js'
 const router = Router()
 const WORK_ORDER_DUPLICATE_WINDOW_MS = 15 * 60 * 1000
 
-const isManualAuditModeEnabled = async (): Promise<boolean> => {
-  const settings = await prisma.appSettings.findUnique({ where: { id: 'app' } })
-  const featureFlags =
-    settings?.featureFlags && typeof settings.featureFlags === 'object' && !Array.isArray(settings.featureFlags)
-      ? (settings.featureFlags as Record<string, unknown>)
-      : {}
-  return featureFlags.manualAuditMode === true
-}
-
 const workOrderSchema = z.object({
   id: z.string().uuid().optional(),
   code: z.string().optional(),
@@ -100,6 +91,10 @@ router.post('/', async (req, res) => {
         externalVehicle: parsed.data.externalVehicle ?? null,
         status: 'OPEN',
         code,
+        // Circuito de re-inspeccion pendiente eliminado a pedido de Nicolas
+        // (2026-09): cerrar una OT ya no deja marcada la unidad esperando
+        // una re-auditoria.
+        pendingReaudit: false,
       },
     })
     void sendPushToAllUsers({
@@ -123,19 +118,15 @@ router.patch('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Datos invalidos.' })
   }
 
-  const manualAuditMode = await isManualAuditModeEnabled()
-  const pendingReaudit = manualAuditMode
-    ? false
-    : parsed.data.status === 'CLOSED'
-      ? true
-      : parsed.data.pendingReaudit
-
   try {
     const item = await prisma.workOrder.update({
       where: { id: req.params.id },
       data: {
         ...parsed.data,
-        pendingReaudit,
+        // Circuito de re-inspeccion pendiente eliminado a pedido de Nicolas
+        // (2026-09): cerrar una OT ya no deja marcada la unidad esperando
+        // una re-auditoria.
+        pendingReaudit: false,
       },
     })
 
