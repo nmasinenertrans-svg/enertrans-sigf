@@ -4,6 +4,7 @@ import enertransLogoUrl from '../../assets/enertrans-logo.png'
 import { setAuthToken } from '../../services/api/apiClient'
 import { getQueueItems, removeQueueItem, type OfflineQueueItem } from '../../services/offline/queue'
 import { syncQueue, syncQueueItem } from '../../services/offline/sync'
+import { unsubscribeFromPush } from '../../services/push/pushClient'
 import { readSyncTelemetry, resetSyncTelemetry, type SyncTelemetrySnapshot } from '../../services/offline/telemetry'
 import { useAppContext } from '../hooks/useAppContext'
 import { ROUTE_PATHS } from '../routing/routePaths'
@@ -367,7 +368,14 @@ export const TopHeader = ({ onToggleSidebar, syncStatus, notifications }: TopHea
               ) : null}
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
+                  // Si no se desuscribe aca, el dispositivo se queda anotado
+                  // para siempre en el server -- alguien que cambia de celular
+                  // y solo cierra sesion sigue recibiendo push en el telefono
+                  // viejo, aunque haya borrado la app (bug real reportado por
+                  // Nicolas, 2026-09). Best-effort: si falla, igual cerramos
+                  // sesion.
+                  await unsubscribeFromPush().catch(() => undefined)
                   setAuthToken(null)
                   setCurrentUser(null)
                 }}
