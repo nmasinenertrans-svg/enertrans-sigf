@@ -3,6 +3,7 @@ export interface TireFormData {
   position: string
   brand: string
   model: string
+  wearType: string
   installedAt: string
   installedKmInput: string
   costBaseInput: string

@@ -199,6 +199,7 @@ export interface FleetUnit {
   filters: FleetUnitFilters
   documents: FleetUnitDocuments
   profilePhotoUrl?: string | null
+  tireWheelLayout?: string
   crmDealLink?: {
     dealId: string
     dealTitle: string
@@ -473,6 +474,7 @@ export interface Tire {
   position: string
   brand: string
   model: string
+  wearType: string
   installedAt?: string | null
   installedKm: number
   lastRotationKm?: number | null

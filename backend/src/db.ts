@@ -1049,6 +1049,10 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   `)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_unitId_idx" ON "Tire"("unitId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_isActive_idx" ON "Tire"("isActive");`)
+  // Tipo de desgaste (parejo/bordes/centro/irregular) y layout de ruedas para
+  // el diagrama interactivo por unidad.
+  await safeExecuteCompatSql(`ALTER TABLE "Tire" ADD COLUMN IF NOT EXISTS "wearType" TEXT NOT NULL DEFAULT '';`)
+  await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "tireWheelLayout" TEXT NOT NULL DEFAULT '';`)
 
   // Baterias (modulo en prueba, DEV-only). Se rastrea por fecha (no km/horas):
   // vida util aprox en "lifespanMonths" (18 por defecto) desde "installedAt".

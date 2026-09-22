@@ -25,6 +25,7 @@ const tireCreateSchema = z.object({
   position: z.string().min(1),
   brand: z.string().optional().default(''),
   model: z.string().optional().default(''),
+  wearType: z.string().optional().default(''),
   installedAt: z.string().datetime().nullable().optional(),
   installedKm: z.number().int().min(0).optional().default(0),
   lastRotationKm: z.number().int().min(0).nullable().optional(),
@@ -71,6 +72,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
         position: parsed.data.position.trim(),
         brand: parsed.data.brand.trim(),
         model: parsed.data.model.trim(),
+        wearType: parsed.data.wearType.trim(),
         installedAt: parsed.data.installedAt ? new Date(parsed.data.installedAt) : null,
         installedKm: parsed.data.installedKm,
         lastRotationKm: parsed.data.lastRotationKm ?? null,
@@ -104,6 +106,7 @@ router.patch('/:id', async (req, res) => {
   if (parsed.data.position !== undefined) data.position = parsed.data.position.trim()
   if (parsed.data.brand !== undefined) data.brand = parsed.data.brand.trim()
   if (parsed.data.model !== undefined) data.model = parsed.data.model.trim()
+  if (parsed.data.wearType !== undefined) data.wearType = parsed.data.wearType.trim()
   if (parsed.data.installedAt !== undefined) data.installedAt = parsed.data.installedAt ? new Date(parsed.data.installedAt) : null
   if (parsed.data.installedKm !== undefined) data.installedKm = parsed.data.installedKm
   if (parsed.data.lastRotationKm !== undefined) data.lastRotationKm = parsed.data.lastRotationKm

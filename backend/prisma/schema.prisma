@@ -226,6 +226,7 @@ model FleetUnit {
   currentHydroHours        Int      @default(0)
   engineCylinders          Int?
   profilePhotoUrl          String?
+  tireWheelLayout          String   @default("")
   lubricants               Json
   filters                  Json
   documents                Json
@@ -696,6 +697,7 @@ model Tire {
   position          String
   brand             String    @default("")
   model             String    @default("")
+  wearType          String    @default("")
   installedAt       DateTime?
   installedKm       Int       @default(0)
   lastRotationKm    Int?

@@ -4,11 +4,14 @@ import { ConfirmModal } from '../../../components/shared/ConfirmModal'
 import { useAppContext } from '../../../core/hooks/useAppContext'
 import { ROUTE_PATHS } from '../../../core/routing/routePaths'
 import { apiRequest } from '../../../services/api/apiClient'
+import { TireDiagramSection } from '../components/TireDiagramSection'
 import {
   buildTireView,
   createEmptyTireFormData,
   toTirePayload,
   validateTireFormData,
+  wearTypeLabels,
+  wearTypeValues,
 } from '../services/tiresService'
 import type { TireFormData, TireFormErrors, TireFormField } from '../types'
 
@@ -132,6 +135,8 @@ export const TiresPage = () => {
         </p>
       </header>
 
+      <TireDiagramSection />
+
       <div className="grid gap-4 xl:grid-cols-3">
         <article className="xl:col-span-1 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="text-lg font-bold text-slate-900">Nueva cubierta</h3>
@@ -199,6 +204,21 @@ export const TiresPage = () => {
                 <label className="text-sm font-semibold text-slate-700">Modelo</label>
                 <input className={`${inputClassName} mt-1`} value={formData.model} onChange={(event) => handleFieldChange('model', event.target.value)} />
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Tipo de desgaste</label>
+              <select
+                className={`${inputClassName} mt-1`}
+                value={formData.wearType}
+                onChange={(event) => handleFieldChange('wearType', event.target.value)}
+              >
+                {wearTypeValues.map((value) => (
+                  <option key={value} value={value}>
+                    {wearTypeLabels[value]}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -301,6 +321,7 @@ export const TiresPage = () => {
                   <p>Km instalación: {tire.installedKm.toLocaleString('es-AR')}</p>
                   <p>Costo: {formatCurrency(tire.costBase, tire.currency)}</p>
                   <p>Últ. rotación: {tire.lastRotationKm != null ? `${tire.lastRotationKm.toLocaleString('es-AR')} km` : '-'}</p>
+                  <p>Desgaste: {tire.wearType ? wearTypeLabels[tire.wearType as keyof typeof wearTypeLabels] ?? tire.wearType : '-'}</p>
                 </div>
 
                 {tire.notes ? <p className="mt-2 text-xs text-slate-600">{tire.notes}</p> : null}
