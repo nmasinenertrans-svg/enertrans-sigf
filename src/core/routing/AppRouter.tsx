@@ -66,6 +66,7 @@ const HandoverChecklistsPage = lazyPage(
   'HandoverChecklistsPage',
 )
 const TiresPage = lazyPage(() => import('../../modules/tires/pages/TiresPage'), 'TiresPage')
+const BatteriesPage = lazyPage(() => import('../../modules/batteries/pages/BatteriesPage'), 'BatteriesPage')
 const TripsPage = lazyPage(() => import('../../modules/trips/pages/TripsPage'), 'TripsPage')
 const ProfilePage = lazyPage(() => import('../../modules/users/pages/ProfilePage'), 'ProfilePage')
 const MaintenanceModePage = lazyPage(
@@ -410,6 +411,14 @@ export const AppRouter = () => (
           element={
             <RequireDevOnly>
               <TiresPage />
+            </RequireDevOnly>
+          }
+        />
+        <Route
+          path={ROUTE_PATHS.batteries}
+          element={
+            <RequireDevOnly>
+              <BatteriesPage />
             </RequireDevOnly>
           }
         />

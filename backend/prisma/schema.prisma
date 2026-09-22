@@ -169,6 +169,7 @@ model User {
   rentalContractsCreated    RentalContract[]   @relation("RentalContractCreatedBy")
   handoverChecklistsCreated HandoverChecklist[] @relation("HandoverChecklistCreatedBy")
   tiresCreated              Tire[]              @relation("TireCreatedBy")
+  batteriesCreated          Battery[]           @relation("BatteryCreatedBy")
   tripsAsDriver             Trip[]              @relation("TripDriver")
   tripsCreated              Trip[]              @relation("TripCreatedBy")
 }
@@ -252,6 +253,7 @@ model FleetUnit {
   rentalContracts          RentalContract[]
   handoverChecklists       HandoverChecklist[]
   tires                    Tire[]
+  batteries                Battery[]
   tasks                    Task[]              @relation("TaskUnit")
   tripLegs                 TripLeg[]           @relation("TripLegUnit")
 
@@ -709,6 +711,30 @@ model Tire {
 
   unit      FleetUnit @relation(fields: [unitId], references: [id])
   createdBy User      @relation("TireCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([unitId])
+  @@index([isActive])
+}
+
+model Battery {
+  id                     String    @id @default(uuid())
+  unitId                 String
+  position               String
+  brand                  String    @default("")
+  model                  String    @default("")
+  serialNumber           String    @default("")
+  installedAt            DateTime?
+  lifespanMonths         Int       @default(18)
+  notes                  String    @default("")
+  isActive               Boolean   @default(true)
+  removedAt              DateTime?
+  expirationAlertSentAt  DateTime?
+  createdByUserId        String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  unit      FleetUnit @relation(fields: [unitId], references: [id])
+  createdBy User      @relation("BatteryCreatedBy", fields: [createdByUserId], references: [id])
 
   @@index([unitId])
   @@index([isActive])

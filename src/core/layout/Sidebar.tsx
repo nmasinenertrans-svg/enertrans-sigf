@@ -29,6 +29,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { path: ROUTE_PATHS.maintenance, label: 'Plan de Mantenimiento', module: 'MAINTENANCE', flagKey: 'showMaintenanceModule' },
       { path: ROUTE_PATHS.tires, label: 'Cubiertas (prueba)', module: 'MAINTENANCE', devOnly: true },
+      { path: ROUTE_PATHS.batteries, label: 'Baterías (prueba)', module: 'MAINTENANCE', devOnly: true },
       { path: ROUTE_PATHS.audits, label: 'Inspecciones', module: 'AUDITS', flagKey: 'showAuditsModule' },
       { path: ROUTE_PATHS.tasks, label: 'Tareas', module: 'TASKS', flagKey: 'showTasksModule' },
       { path: ROUTE_PATHS.workOrders, label: 'Órdenes de Trabajo', module: 'WORK_ORDERS', flagKey: 'showWorkOrdersModule' },

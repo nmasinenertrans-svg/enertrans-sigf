@@ -177,6 +177,7 @@ const COMPAT_TABLE_NAMES = [
   'RentalContract',
   'HandoverChecklist',
   'Tire',
+  'Battery',
   'Trip',
   'TripLeg',
   'UserNotification',
@@ -1048,6 +1049,31 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   `)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_unitId_idx" ON "Tire"("unitId");`)
   await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Tire_isActive_idx" ON "Tire"("isActive");`)
+
+  // Baterias (modulo en prueba, DEV-only). Se rastrea por fecha (no km/horas):
+  // vida util aprox en "lifespanMonths" (18 por defecto) desde "installedAt".
+  await safeExecuteCompatSql(`
+    CREATE TABLE IF NOT EXISTS "Battery" (
+      "id" TEXT NOT NULL DEFAULT md5(random()::text || clock_timestamp()::text),
+      "unitId" TEXT NOT NULL,
+      "position" TEXT NOT NULL,
+      "brand" TEXT NOT NULL DEFAULT '',
+      "model" TEXT NOT NULL DEFAULT '',
+      "serialNumber" TEXT NOT NULL DEFAULT '',
+      "installedAt" TIMESTAMP(3),
+      "lifespanMonths" INTEGER NOT NULL DEFAULT 18,
+      "notes" TEXT NOT NULL DEFAULT '',
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "removedAt" TIMESTAMP(3),
+      "expirationAlertSentAt" TIMESTAMP(3),
+      "createdByUserId" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Battery_pkey" PRIMARY KEY ("id")
+    );
+  `)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Battery_unitId_idx" ON "Battery"("unitId");`)
+  await safeExecuteCompatSql(`CREATE INDEX IF NOT EXISTS "Battery_isActive_idx" ON "Battery"("isActive");`)
 
   // Viajes/traslados de choferes (modulo en prueba, DEV-only). Sin enums nativos,
   // misma razon que HandoverChecklist.type.

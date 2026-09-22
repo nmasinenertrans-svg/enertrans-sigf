@@ -165,6 +165,13 @@ export const AppProvider = ({ children }: AppProviderProps) => {
           return nextState
         })
       },
+      setBatteries: (batteries) => {
+        setState((previousState) => {
+          const nextState = { ...previousState, batteries }
+          persistAppState(nextState)
+          return nextState
+        })
+      },
       setTrips: (trips) => {
         setState((previousState) => {
           const nextState = { ...previousState, trips }

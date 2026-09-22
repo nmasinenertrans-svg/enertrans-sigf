@@ -8,6 +8,7 @@ import { getQueueItems } from '../../services/offline/queue'
 import type {
   AppUser,
   AuditRecord,
+  Battery,
   ClientAccount,
   DeliveryOperation,
   ExternalRequest,
@@ -146,6 +147,7 @@ export const AppLayout = () => {
       setContracts,
       setHandoverChecklists,
       setTires,
+      setBatteries,
       setTrips,
     },
   } = useAppContext()
@@ -357,6 +359,7 @@ export const AppLayout = () => {
           contractsResponse,
           handoverChecklistsResponse,
           tiresResponse,
+          batteriesResponse,
           tripsResponse,
         ] = await Promise.all([
           // Datos de negocio: 3 intentos con timeout creciente para sobrevivir un "cold start"
@@ -413,6 +416,9 @@ export const AppLayout = () => {
             : Promise.resolve(null),
           currentUserRef.current?.role === 'DEV'
             ? safeRequest<Tire[]>('/tires', { maxAttempts: 3, timeoutMs: 20000 })
+            : Promise.resolve(null),
+          currentUserRef.current?.role === 'DEV'
+            ? safeRequest<Battery[]>('/batteries', { maxAttempts: 3, timeoutMs: 20000 })
             : Promise.resolve(null),
           canUser(currentUserRef.current ?? null, 'TRIPS', 'view')
             ? safeRequest<TripRecord[]>('/trips', { maxAttempts: 3, timeoutMs: 20000 })
@@ -571,6 +577,9 @@ export const AppLayout = () => {
         if (tiresResponse) {
           setTires(tiresResponse)
         }
+        if (batteriesResponse) {
+          setBatteries(batteriesResponse)
+        }
         if (tripsResponse) {
           setTrips(
             mergeByIdWithLocal(tripsResponse, tripsRef.current, getQueuedPayloads('trip.create')) ?? tripsResponse,
@@ -604,6 +613,7 @@ export const AppLayout = () => {
     setContracts,
     setHandoverChecklists,
     setTires,
+    setBatteries,
     setTrips,
   ])
 

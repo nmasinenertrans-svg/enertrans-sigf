@@ -486,6 +486,23 @@ export interface Tire {
   updatedAt?: string
 }
 
+export interface Battery {
+  id: string
+  unitId: string
+  position: string
+  brand: string
+  model: string
+  serialNumber: string
+  installedAt?: string | null
+  lifespanMonths: number
+  notes: string
+  isActive: boolean
+  removedAt?: string | null
+  createdByUserId: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export type TripDistanceSource = 'ROUTE' | 'STRAIGHT_LINE'
 
 export interface TripLegRecord {

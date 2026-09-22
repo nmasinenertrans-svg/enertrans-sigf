@@ -31,6 +31,7 @@ import integrationsRoutes from './routes/integrations.js'
 import contractsRoutes from './routes/contracts.js'
 import handoverChecklistsRoutes from './routes/handoverChecklists.js'
 import tiresRoutes from './routes/tires.js'
+import batteriesRoutes from './routes/batteries.js'
 import tripsRoutes from './routes/trips.js'
 import inspectionScanRoutes from './routes/inspectionScan.js'
 import { hashPassword } from './utils/password.js'
@@ -41,6 +42,7 @@ import { basicViewModeGuard } from './middleware/basicViewMode.js'
 import { getCrmAutomationIntervalMinutes, isCrmAutomationEnabled, runCrmAutomations } from './services/crmAutomations.js'
 import { runContractExpirationAutomations } from './services/contractAutomations.js'
 import { runTireWearAutomations } from './services/tireAutomations.js'
+import { runBatteryExpirationAutomations } from './services/batteryAutomations.js'
 
 const sentryDsn = process.env.SENTRY_DSN || ''
 const sentryEnvironment = process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development'
@@ -93,6 +95,7 @@ app.use('/invoices', requireAuth, requirePermission('INVOICES', 'view'), invoice
 app.use('/contracts', requireAuth, contractsRoutes)
 app.use('/handover-checklists', requireAuth, handoverChecklistsRoutes)
 app.use('/tires', requireAuth, tiresRoutes)
+app.use('/batteries', requireAuth, batteriesRoutes)
 app.use('/trips', requireAuth, tripsRoutes)
 app.use('/inspection-scan', requireAuth, inspectionScanRoutes)
 app.use('/push', requireAuth, pushRoutes)
@@ -171,6 +174,20 @@ const startTireAutomationScheduler = () => {
   }, TIRE_AUTOMATION_INTERVAL_MS)
 }
 
+const BATTERY_AUTOMATION_INTERVAL_MS = 60 * 60 * 1000
+
+const startBatteryAutomationScheduler = () => {
+  void runBatteryExpirationAutomations().catch((error) => {
+    console.error('[Baterías] fallo aviso de vencimiento inicial:', error)
+  })
+
+  setInterval(() => {
+    void runBatteryExpirationAutomations().catch((error) => {
+      console.error('[Baterías] fallo aviso de vencimiento programado:', error)
+    })
+  }, BATTERY_AUTOMATION_INTERVAL_MS)
+}
+
 ensureBestPrismaSchema()
   .then(() => {
     console.log(`[DB] runtime schema seleccionado: ${getActiveDbSchema()}`)
@@ -188,6 +205,7 @@ ensureBestPrismaSchema()
     startCrmAutomationScheduler()
     startContractAutomationScheduler()
     startTireAutomationScheduler()
+    startBatteryAutomationScheduler()
 
     setInterval(async () => {
       try {
