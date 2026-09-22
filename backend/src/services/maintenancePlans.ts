@@ -11,7 +11,6 @@ export const maintenanceTypeValues = [
   'CLUTCH',
   'BRAKES',
   'HYDRO_CRANE',
-  'BATTERY',
 ] as const
 
 export type MaintenanceTypeValue = (typeof maintenanceTypeValues)[number]
@@ -26,7 +25,6 @@ export const maintenanceTypeLabels: Record<MaintenanceTypeValue, string> = {
   CLUTCH: 'Embrague',
   BRAKES: 'Frenos',
   HYDRO_CRANE: 'Hidrogrúa',
-  BATTERY: 'Batería',
 }
 
 const HOUR_BASED_UNIT_TYPES = new Set(['CHASSIS', 'CHASSIS_WITH_HYDROCRANE', 'TRACTOR', 'TRACTOR_WITH_HYDROCRANE'])

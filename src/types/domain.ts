@@ -272,7 +272,6 @@ export const maintenanceTypes = [
   'CLUTCH',
   'BRAKES',
   'HYDRO_CRANE',
-  'BATTERY',
 ] as const
 export type MaintenanceType = (typeof maintenanceTypes)[number]
 
