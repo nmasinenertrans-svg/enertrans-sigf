@@ -41,6 +41,7 @@ export const maintenanceTypeLabels: Record<MaintenanceType, string> = {
   CLUTCH: 'Embrague',
   BRAKES: 'Frenos',
   HYDRO_CRANE: 'Hidrogrúa',
+  BATTERY: 'Batería',
 }
 
 const HOUR_BASED_UNIT_TYPES = new Set<FleetUnit['unitType']>([
