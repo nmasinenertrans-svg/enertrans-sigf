@@ -1053,6 +1053,8 @@ export const ensureRuntimeSchemaCompatibility = async (): Promise<void> => {
   // el diagrama interactivo por unidad.
   await safeExecuteCompatSql(`ALTER TABLE "Tire" ADD COLUMN IF NOT EXISTS "wearType" TEXT NOT NULL DEFAULT '';`)
   await safeExecuteCompatSql(`ALTER TABLE "FleetUnit" ADD COLUMN IF NOT EXISTS "tireWheelLayout" TEXT NOT NULL DEFAULT '';`)
+  // Restriccion de notificaciones por usuario (ej. Barce -> solo Viajes).
+  await safeExecuteCompatSql(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "notificationScope" TEXT NOT NULL DEFAULT '';`)
 
   // Baterias (modulo en prueba, DEV-only). Se rastrea por fecha (no km/horas):
   // vida util aprox en "lifespanMonths" (18 por defecto) desde "installedAt".

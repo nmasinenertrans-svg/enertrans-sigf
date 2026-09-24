@@ -61,8 +61,13 @@ export const sendPushToAllUsers = async (payload: PushPayload, excludeUserId?: s
   if (!isConfigured) {
     return
   }
+  // Los usuarios con notificationScope restringido (ej. Barce -> "TRIPS") no
+  // tienen que recibir el push masivo de todo lo demas, solo lo de su modulo.
   const subscriptions = await prisma.pushSubscription.findMany({
-    where: excludeUserId ? { userId: { not: excludeUserId } } : undefined,
+    where: {
+      userId: excludeUserId ? { not: excludeUserId } : undefined,
+      user: { notificationScope: '' },
+    },
   })
   await Promise.all(subscriptions.map((subscription) => deliverToSubscription(subscription, payload)))
 }

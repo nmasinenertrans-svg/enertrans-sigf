@@ -27,9 +27,13 @@ const resolveTargetUsernames = (): string[] => {
 }
 
 export const resolveOperationalNotificationRecipients = async (actorUserId?: string): Promise<string[]> => {
-  const users = await prisma.user.findMany({
-    select: { id: true, username: true, role: true },
+  const allUsers = await prisma.user.findMany({
+    select: { id: true, username: true, role: true, notificationScope: true },
   })
+  // Un usuario con notificationScope restringido (ej. Barce -> "TRIPS") queda
+  // afuera de estos avisos generales, sin importar si es GERENTE/COORDINADOR
+  // o esta en la lista de usernames destino.
+  const users = allUsers.filter((user) => !user.notificationScope)
 
   const targetUsernames = resolveTargetUsernames()
   const directTargets = users
@@ -42,6 +46,16 @@ export const resolveOperationalNotificationRecipients = async (actorUserId?: str
 
   const resolved = (directTargets.length > 0 ? directTargets : fallbackTargets).filter((id) => id !== actorUserId)
   return Array.from(new Set(resolved))
+}
+
+// Usuarios restringidos a un solo modulo (notificationScope), ej. Barce con
+// "TRIPS" para que solo le lleguen avisos de Viajes/Traslados.
+export const resolveScopedNotificationRecipients = async (scope: string, actorUserId?: string): Promise<string[]> => {
+  const users = await prisma.user.findMany({
+    where: { notificationScope: scope },
+    select: { id: true },
+  })
+  return users.map((user) => user.id).filter((id) => id !== actorUserId)
 }
 
 // Antes esto se guardaba como un blob JSON compartido (un solo registro

@@ -145,6 +145,12 @@ model User {
   avatarUrl           String   @default("")
   permissions         Json?
   permissionOverrides Json?
+  // Vacio = recibe notificaciones normalmente. Si tiene un valor (ej.
+  // "TRIPS"), el usuario queda excluido de todos los avisos generales
+  // (push masivo, avisos a GERENTE/COORDINADOR) y solo recibe los del
+  // modulo indicado. Pensado para casos puntuales como Barce, que solo
+  // tiene que enterarse de lo que se carga en Viajes/Traslados.
+  notificationScope   String   @default("")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

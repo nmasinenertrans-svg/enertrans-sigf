@@ -6,6 +6,8 @@ import { formatCode, getNextSequence } from '../utils/sequence.js'
 import { calculateRouteDistanceKm } from '../services/routing.js'
 import type { AuthenticatedRequest } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { sendPushToUser } from '../services/webPush.js'
+import { pushUserNotifications, resolveScopedNotificationRecipients } from '../services/userNotifications.js'
 
 const router = Router()
 
@@ -191,6 +193,34 @@ router.post('/', requirePermission('TRIPS', 'create'), async (req: Authenticated
       },
       include: includeRelations,
     })
+
+    const driverLabel = item.driver?.fullName || item.driverExternalName || 'sin chofer'
+    const firstLeg = item.legs[0]
+    const routeLabel = firstLeg ? `${firstLeg.originLabel || 'origen'} -> ${firstLeg.destinationLabel || 'destino'}` : ''
+    const tripSummary = `${item.code} - ${driverLabel}${routeLabel ? ` (${routeLabel})` : ''}`
+
+    void resolveScopedNotificationRecipients('TRIPS', req.userId)
+      .then(async (recipients) => {
+        if (recipients.length === 0) return
+        await pushUserNotifications(recipients, {
+          title: 'Nuevo viaje cargado',
+          description: tripSummary,
+          severity: 'info',
+          target: '/trips',
+          eventType: 'TRIP_CREATED',
+          actorUserId: req.userId,
+        })
+        recipients.forEach((userId) => {
+          void sendPushToUser(userId, {
+            title: 'Nuevo viaje cargado',
+            body: tripSummary,
+            url: '/trips',
+            tag: 'trip-created',
+          }).catch(() => undefined)
+        })
+      })
+      .catch((error) => console.warn('Trips notify error:', error))
+
     return res.status(201).json(mapTrip(item))
   } catch (error) {
     if (getErrorCode(error) === 'P2003') {
